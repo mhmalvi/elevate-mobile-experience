@@ -9,6 +9,7 @@ import { PremiumCard } from '@/components/ui/premium-card';
 import { QuickContact } from '@/components/ui/quick-contact';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { FAB } from '@/components/ui/fab';
 import { Users, MapPin } from 'lucide-react';
 
 export default function Clients() {
@@ -48,10 +49,6 @@ export default function Clients() {
       <PageHeader 
         title="Clients"
         subtitle={`${clients.length} total`}
-        action={{
-          label: "Add Client",
-          onClick: () => navigate('/clients/new'),
-        }}
       />
       
       <div className="p-4 space-y-4 animate-fade-in">
@@ -114,6 +111,8 @@ export default function Clients() {
           </div>
         )}
       </div>
+
+      <FAB onClick={() => navigate('/clients/new')} label="Add Client" />
     </MobileLayout>
   );
 }
