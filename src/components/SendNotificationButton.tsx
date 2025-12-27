@@ -66,17 +66,25 @@ export function SendNotificationButton({
 
       if (error) throw error;
 
-      // Open the mailto: or sms: link
-      if (method === 'email' && data.mailto) {
+      // Handle response - check if SMS was sent directly via Twilio
+      if (method === 'sms' && data.directSend) {
+        toast({ 
+          title: 'SMS Sent!', 
+          description: 'Your SMS has been delivered successfully.'
+        });
+      } else if (method === 'email' && data.mailto) {
         window.location.href = data.mailto;
+        toast({ 
+          title: 'Ready to send!', 
+          description: 'Your email app will open now.'
+        });
       } else if (method === 'sms' && data.smsUrl) {
         window.location.href = data.smsUrl;
+        toast({ 
+          title: 'Ready to send!', 
+          description: 'Your SMS app will open now.'
+        });
       }
-
-      toast({ 
-        title: 'Ready to send!', 
-        description: `Your ${method === 'email' ? 'email' : 'SMS'} app will open now.`
-      });
 
       onSent?.();
     } catch (error: any) {
