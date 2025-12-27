@@ -22,11 +22,19 @@ export function StatCard({
   className 
 }: StatCardProps) {
   const variantStyles = {
-    default: 'bg-card',
-    primary: 'bg-primary/10 border-primary/20',
-    success: 'bg-success/10 border-success/20',
-    warning: 'bg-warning/10 border-warning/20',
-    destructive: 'bg-destructive/10 border-destructive/20',
+    default: 'bg-card border-border',
+    primary: 'bg-primary/10 border-primary/25',
+    success: 'bg-success/10 border-success/25',
+    warning: 'bg-warning/10 border-warning/25',
+    destructive: 'bg-destructive/10 border-destructive/25',
+  };
+
+  const iconContainerStyles = {
+    default: 'bg-muted',
+    primary: 'bg-primary/20',
+    success: 'bg-success/20',
+    warning: 'bg-warning/20',
+    destructive: 'bg-destructive/20',
   };
 
   const iconStyles = {
@@ -39,29 +47,37 @@ export function StatCard({
 
   return (
     <div className={cn(
-      "rounded-xl border p-4 transition-smooth hover:shadow-premium",
+      "rounded-xl border p-4 transition-all duration-300",
+      "hover:shadow-premium hover:-translate-y-0.5",
+      "active:scale-[0.98]",
       variantStyles[variant],
       className
     )}>
       <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <p className="text-2xl font-bold tracking-tight">{value}</p>
+        <div className="space-y-1.5 min-w-0 flex-1">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+          <p className="text-2xl font-bold tracking-tight truncate">{value}</p>
           {trend && (
             <p className={cn(
-              "text-xs font-medium",
+              "text-xs font-semibold flex items-center gap-1",
               trend.isPositive ? "text-success" : "text-destructive"
             )}>
-              {trend.isPositive ? '↑' : '↓'} {Math.abs(trend.value)}%
+              <span className={cn(
+                "inline-block transition-transform",
+                trend.isPositive ? "rotate-0" : "rotate-180"
+              )}>↑</span>
+              {Math.abs(trend.value)}% this month
             </p>
           )}
         </div>
         {icon && (
           <div className={cn(
-            "p-2 rounded-lg bg-background/50",
-            iconStyles[variant]
+            "p-2.5 rounded-xl shrink-0",
+            iconContainerStyles[variant]
           )}>
-            {icon}
+            <div className={iconStyles[variant]}>
+              {icon}
+            </div>
           </div>
         )}
       </div>
