@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Drawer,
@@ -12,7 +12,9 @@ import {
 } from '@/components/ui/drawer';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, Loader2, Download, X } from 'lucide-react';
+import { Eye, Loader2, Download, X, Printer } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 interface PDFPreviewModalProps {
   type: 'quote' | 'invoice';
@@ -23,8 +25,10 @@ interface PDFPreviewModalProps {
 export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [html, setHtml] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const loadPreview = async () => {
     setLoading(true);
@@ -61,6 +65,60 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
     }
   };
 
+  const handleDownloadPDF = async () => {
+    if (!html) return;
+    setDownloading(true);
+    
+    try {
+      // Create a temporary container for rendering
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '794px'; // A4 width in pixels at 96 DPI
+      container.innerHTML = html;
+      document.body.appendChild(container);
+
+      // Wait for content to render
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      document.body.removeChild(container);
+
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save(`${documentNumber}.pdf`);
+      toast({ title: 'PDF downloaded', description: `${documentNumber}.pdf saved successfully` });
+    } catch (error) {
+      console.error('PDF download error:', error);
+      toast({ title: 'Download failed', description: 'Please try printing instead.', variant: 'destructive' });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <Drawer open={open} onOpenChange={handleOpenChange}>
       <DrawerTrigger asChild>
@@ -94,6 +152,7 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
           ) : html ? (
             <div className="bg-background rounded-lg shadow-lg overflow-hidden">
               <iframe
+                ref={iframeRef}
                 srcDoc={html}
                 className="w-full h-[500px] border-0"
                 title={`Preview ${documentNumber}`}
@@ -107,10 +166,16 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
         </div>
 
         <DrawerFooter className="border-t">
-          <Button onClick={handlePrint} disabled={!html || loading}>
-            <Download className="w-4 h-4 mr-2" />
-            Download / Print
-          </Button>
+          <div className="flex gap-2 w-full">
+            <Button onClick={handleDownloadPDF} disabled={!html || loading || downloading} className="flex-1">
+              {downloading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+              Download PDF
+            </Button>
+            <Button variant="outline" onClick={handlePrint} disabled={!html || loading}>
+              <Printer className="w-4 h-4 mr-2" />
+              Print
+            </Button>
+          </div>
           <DrawerClose asChild>
             <Button variant="outline">Close</Button>
           </DrawerClose>
