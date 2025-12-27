@@ -4,6 +4,7 @@ import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
+import { SendNotificationButton } from '@/components/SendNotificationButton';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -360,6 +361,20 @@ export default function InvoiceDetail() {
             <Share2 className="w-4 h-4 mr-2" />
             Copy Share Link
           </Button>
+
+          {/* Send to Client */}
+          {client && (
+            <SendNotificationButton
+              type="invoice"
+              id={id!}
+              recipient={{
+                email: client.email,
+                phone: client.phone,
+                name: client.name,
+              }}
+              onSent={fetchInvoice}
+            />
+          )}
         </div>
 
         {/* Status Actions */}
