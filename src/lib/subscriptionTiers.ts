@@ -81,9 +81,7 @@ export const SUBSCRIPTION_TIERS: TierConfig[] = [
       'Everything in Crew',
       'Unlimited SMS',
       'Priority support',
-      'Custom branding',
       'API access',
-      'Team features (coming soon)',
     ],
   },
 ];
