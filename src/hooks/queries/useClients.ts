@@ -47,6 +47,7 @@ export function useClient(id: string) {
         .from('clients')
         .select('*')
         .eq('id', id)
+        .is('deleted_at', null)
         .single();
 
       if (error) throw error;

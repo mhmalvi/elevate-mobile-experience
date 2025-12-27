@@ -9,8 +9,9 @@ import { PDFPreviewModal } from '@/components/PDFPreviewModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2, Eye, Bell } from 'lucide-react';
+import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2, Eye, Bell, RefreshCw } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
+import { RecurringInvoiceHistory } from '@/components/invoices/RecurringInvoiceHistory';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -219,6 +220,38 @@ export default function InvoiceDetail() {
             </div>
           </div>
         </div>
+
+        {/* Recurring Invoice Info */}
+        {invoice.is_recurring && (
+          <div className="p-4 bg-gradient-to-br from-primary/10 via-primary/5 to-background rounded-xl border border-primary/30">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+                <RefreshCw className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Recurring Invoice</h3>
+                <p className="text-xs text-muted-foreground">Auto-generated and sent on schedule</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-muted-foreground">Frequency</span>
+                <p className="font-medium capitalize">{invoice.recurring_interval}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Next Invoice</span>
+                <p className="font-medium">
+                  {invoice.next_due_date ? format(new Date(invoice.next_due_date), 'dd MMM yyyy') : 'N/A'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Recurring Invoice History */}
+        {invoice.is_recurring && invoice.id && (
+          <RecurringInvoiceHistory parentInvoiceId={invoice.id} />
+        )}
 
         {/* Client Info */}
         {client && (
