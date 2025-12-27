@@ -7,6 +7,14 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { SearchInput } from '@/components/ui/search-input';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { PremiumCard } from '@/components/ui/premium-card';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious
+} from '@/components/ui/pagination';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { FAB } from '@/components/ui/fab';
@@ -14,27 +22,45 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { FileText, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 
+const PAGE_SIZE = 20;
+
 export default function Quotes() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [quotes, setQuotes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchQuotes = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    setLoading(true);
+
+    // Calculate range for pagination
+    const from = (currentPage - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, count } = await supabase
       .from('quotes')
-      .select('*, clients(name)')
+      .select('*, clients(name)', { count: 'exact' })
       .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
     setQuotes(data || []);
+    setTotalCount(count || 0);
     setLoading(false);
-  }, [user]);
+  }, [user, currentPage]);
 
   useEffect(() => {
     if (user) fetchQuotes();
   }, [user, fetchQuotes]);
+
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    if (search) setCurrentPage(1);
+  }, [search]);
 
   const { containerProps, RefreshIndicator } = usePullToRefresh({
     onRefresh: fetchQuotes,
@@ -43,18 +69,21 @@ export default function Quotes() {
   const filteredQuotes = useMemo(() => {
     if (!search.trim()) return quotes;
     const term = search.toLowerCase();
-    return quotes.filter(quote => 
+    return quotes.filter(quote =>
       quote.title?.toLowerCase().includes(term) ||
       quote.clients?.name?.toLowerCase().includes(term) ||
       quote.quote_number?.toLowerCase().includes(term)
     );
   }, [quotes, search]);
 
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const showPagination = totalPages > 1 && !search;
+
   return (
     <MobileLayout>
-      <PageHeader 
+      <PageHeader
         title="Quotes"
-        subtitle={`${quotes.length} total`}
+        subtitle={`${totalCount} total`}
         showSettings
       />
       
@@ -119,6 +148,65 @@ export default function Quotes() {
               </PremiumCard>
             ))}
           </div>
+        )}
+
+        {showPagination && (
+          <Pagination className="mt-6">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+
+              {[...Array(totalPages)].map((_, i) => {
+                const page = i + 1;
+                // Show first page, last page, current page, and pages around current
+                const showPage = page === 1 ||
+                                page === totalPages ||
+                                (page >= currentPage - 1 && page <= currentPage + 1);
+
+                if (!showPage) {
+                  // Show ellipsis once before and after current range
+                  if (page === 2 && currentPage > 3) {
+                    return (
+                      <PaginationItem key={page}>
+                        <span className="px-2">...</span>
+                      </PaginationItem>
+                    );
+                  }
+                  if (page === totalPages - 1 && currentPage < totalPages - 2) {
+                    return (
+                      <PaginationItem key={page}>
+                        <span className="px-2">...</span>
+                      </PaginationItem>
+                    );
+                  }
+                  return null;
+                }
+
+                return (
+                  <PaginationItem key={page}>
+                    <PaginationLink
+                      onClick={() => setCurrentPage(page)}
+                      isActive={currentPage === page}
+                      className="cursor-pointer"
+                    >
+                      {page}
+                    </PaginationLink>
+                  </PaginationItem>
+                );
+              })}
+
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         )}
       </div>
 
