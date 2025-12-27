@@ -9,30 +9,35 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { supabase } from '@/integrations/supabase/client';
-import { DollarSign, FileText, Briefcase, TrendingUp, Plus } from 'lucide-react';
+import { DollarSign, FileText, Briefcase, TrendingUp, Plus, AlertTriangle, Bell, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { profile } = useProfile();
+  const { toast } = useToast();
   const [stats, setStats] = useState({
     monthlyRevenue: 0,
     outstandingInvoices: 0,
     activeJobs: 0,
     pendingQuotes: 0,
   });
+  const [overdueStats, setOverdueStats] = useState({ count: 0, total: 0 });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [sendingReminders, setSendingReminders] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    await Promise.all([fetchStats(), fetchRecentActivity()]);
+    await Promise.all([fetchStats(), fetchRecentActivity(), fetchOverdueInvoices()]);
   }, [user]);
 
   useEffect(() => {
     if (user) {
       fetchStats();
       fetchRecentActivity();
+      fetchOverdueInvoices();
     }
   }, [user]);
 
@@ -41,33 +46,28 @@ export default function Dashboard() {
   });
 
   const fetchStats = async () => {
-    // Get start of current month
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
     const [jobsRes, quotesRes, outstandingRes, paidRes] = await Promise.all([
-      // Active jobs count
       supabase
         .from('jobs')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user?.id)
         .in('status', ['approved', 'scheduled', 'in_progress']),
       
-      // Pending quotes count
       supabase
         .from('quotes')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user?.id)
         .in('status', ['sent', 'viewed']),
       
-      // Outstanding invoices (unpaid amounts)
       supabase
         .from('invoices')
         .select('total, amount_paid')
         .eq('user_id', user?.id)
         .in('status', ['sent', 'viewed', 'partially_paid', 'overdue']),
       
-      // Monthly revenue (paid invoices this month)
       supabase
         .from('invoices')
         .select('amount_paid, paid_at')
@@ -90,6 +90,24 @@ export default function Dashboard() {
     });
   };
 
+  const fetchOverdueInvoices = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const { data: overdue } = await supabase
+      .from('invoices')
+      .select('id, total, amount_paid')
+      .eq('user_id', user?.id)
+      .lt('due_date', today)
+      .not('status', 'eq', 'paid')
+      .not('status', 'eq', 'cancelled');
+
+    if (overdue) {
+      const total = overdue.reduce((sum, inv) => 
+        sum + (Number(inv.total) - Number(inv.amount_paid || 0)), 0);
+      setOverdueStats({ count: overdue.length, total });
+    }
+  };
+
   const fetchRecentActivity = async () => {
     const { data: quotes } = await supabase
       .from('quotes')
@@ -99,6 +117,33 @@ export default function Dashboard() {
       .limit(5);
 
     setRecentActivity(quotes || []);
+  };
+
+  const handleSendReminders = async () => {
+    setSendingReminders(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('payment-reminder', {
+        body: { user_id: user?.id }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Reminders sent!',
+        description: `Payment reminders sent to ${data?.sent || 0} clients`,
+      });
+      
+      fetchOverdueInvoices();
+    } catch (error: any) {
+      console.error('Error sending reminders:', error);
+      toast({
+        title: 'Failed to send reminders',
+        description: error.message || 'Please try again',
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingReminders(false);
+    }
   };
 
   const greeting = () => {
@@ -118,6 +163,50 @@ export default function Dashboard() {
       
       <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-6">
         <RefreshIndicator />
+
+        {/* Overdue Invoices Alert */}
+        {overdueStats.count > 0 && (
+          <div className="animate-fade-in bg-gradient-to-r from-destructive/20 via-destructive/10 to-destructive/5 border border-destructive/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full bg-destructive/20">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-destructive">
+                  {overdueStats.count} Overdue Invoice{overdueStats.count !== 1 ? 's' : ''}
+                </h3>
+                <p className="text-2xl font-bold mt-1">
+                  ${overdueStats.total.toLocaleString()}
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Outstanding payments past due date
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                size="sm" 
+                variant="destructive"
+                onClick={handleSendReminders}
+                disabled={sendingReminders}
+                className="flex-1"
+              >
+                <Bell className="w-4 h-4 mr-1" />
+                {sendingReminders ? 'Sending...' : 'Send Reminders'}
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => navigate('/invoices')}
+                className="flex-1"
+              >
+                View All
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Quick Actions */}
         <div className="flex gap-3 animate-fade-in">
           <Button 
