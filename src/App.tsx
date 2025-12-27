@@ -11,15 +11,23 @@ import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import ClientForm from "./pages/ClientForm";
 import ClientDetail from "./pages/ClientDetail";
+import ClientEdit from "./pages/ClientEdit";
 import Quotes from "./pages/Quotes";
 import QuoteForm from "./pages/QuoteForm";
 import QuoteDetail from "./pages/QuoteDetail";
+import QuoteEdit from "./pages/QuoteEdit";
 import Jobs from "./pages/Jobs";
 import JobForm from "./pages/JobForm";
 import JobDetail from "./pages/JobDetail";
+import JobEdit from "./pages/JobEdit";
 import Invoices from "./pages/Invoices";
 import InvoiceForm from "./pages/InvoiceForm";
+import InvoiceDetail from "./pages/InvoiceDetail";
+import InvoiceEdit from "./pages/InvoiceEdit";
 import Settings from "./pages/Settings";
+import ProfileSettings from "./pages/settings/ProfileSettings";
+import BusinessSettings from "./pages/settings/BusinessSettings";
+import PaymentSettings from "./pages/settings/PaymentSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -61,15 +69,23 @@ function AppRoutes() {
       <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
       <Route path="/clients/new" element={<ProtectedRoute><ClientForm /></ProtectedRoute>} />
       <Route path="/clients/:id" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
+      <Route path="/clients/:id/edit" element={<ProtectedRoute><ClientEdit /></ProtectedRoute>} />
       <Route path="/quotes" element={<ProtectedRoute><Quotes /></ProtectedRoute>} />
       <Route path="/quotes/new" element={<ProtectedRoute><QuoteForm /></ProtectedRoute>} />
       <Route path="/quotes/:id" element={<ProtectedRoute><QuoteDetail /></ProtectedRoute>} />
+      <Route path="/quotes/:id/edit" element={<ProtectedRoute><QuoteEdit /></ProtectedRoute>} />
       <Route path="/jobs" element={<ProtectedRoute><Jobs /></ProtectedRoute>} />
       <Route path="/jobs/new" element={<ProtectedRoute><JobForm /></ProtectedRoute>} />
       <Route path="/jobs/:id" element={<ProtectedRoute><JobDetail /></ProtectedRoute>} />
+      <Route path="/jobs/:id/edit" element={<ProtectedRoute><JobEdit /></ProtectedRoute>} />
       <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
       <Route path="/invoices/new" element={<ProtectedRoute><InvoiceForm /></ProtectedRoute>} />
+      <Route path="/invoices/:id" element={<ProtectedRoute><InvoiceDetail /></ProtectedRoute>} />
+      <Route path="/invoices/:id/edit" element={<ProtectedRoute><InvoiceEdit /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/settings/profile" element={<ProtectedRoute><ProfileSettings /></ProtectedRoute>} />
+      <Route path="/settings/business" element={<ProtectedRoute><BusinessSettings /></ProtectedRoute>} />
+      <Route path="/settings/payment" element={<ProtectedRoute><PaymentSettings /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
