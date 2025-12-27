@@ -16,7 +16,7 @@ import {
   PaginationPrevious
 } from '@/components/ui/pagination';
 import { FAB } from '@/components/ui/fab';
-import { Receipt, Calendar, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Receipt, Calendar, AlertTriangle } from 'lucide-react';
 import { format, isPast, parseISO } from 'date-fns';
 import { useInvoices } from '@/hooks/queries/useInvoices';
 
@@ -120,9 +120,6 @@ export default function Invoices() {
                         <h3 className="font-semibold truncate text-foreground">{invoice.title}</h3>
                         {overdue && (
                           <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
-                        )}
-                        {invoice.is_recurring && (
-                          <RefreshCw className="w-3.5 h-3.5 text-primary shrink-0" />
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">
