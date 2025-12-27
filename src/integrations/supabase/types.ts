@@ -430,6 +430,7 @@ export type Database = {
           notes: string | null
           quote_number: string
           sent_at: string | null
+          signature_data: string | null
           status: Database["public"]["Enums"]["quote_status"] | null
           subtotal: number | null
           terms: string | null
@@ -451,6 +452,7 @@ export type Database = {
           notes?: string | null
           quote_number: string
           sent_at?: string | null
+          signature_data?: string | null
           status?: Database["public"]["Enums"]["quote_status"] | null
           subtotal?: number | null
           terms?: string | null
@@ -472,6 +474,7 @@ export type Database = {
           notes?: string | null
           quote_number?: string
           sent_at?: string | null
+          signature_data?: string | null
           status?: Database["public"]["Enums"]["quote_status"] | null
           subtotal?: number | null
           terms?: string | null
