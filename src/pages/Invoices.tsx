@@ -9,6 +9,7 @@ import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { PremiumCard } from '@/components/ui/premium-card';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { FAB } from '@/components/ui/fab';
 import { Receipt, Calendar, AlertTriangle } from 'lucide-react';
 import { format, isPast, parseISO } from 'date-fns';
 
@@ -54,10 +55,6 @@ export default function Invoices() {
       <PageHeader 
         title="Invoices"
         subtitle={`${invoices.length} total`}
-        action={{
-          label: "New Invoice",
-          onClick: () => navigate('/invoices/new'),
-        }}
       />
       
       <div className="p-4 space-y-4 animate-fade-in">
@@ -130,6 +127,8 @@ export default function Invoices() {
           </div>
         )}
       </div>
+
+      <FAB onClick={() => navigate('/invoices/new')} label="New Invoice" />
     </MobileLayout>
   );
 }
