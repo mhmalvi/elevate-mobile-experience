@@ -1,14 +1,8 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Send, Mail, MessageSquare, Loader2, ChevronDown } from 'lucide-react';
+import { Mail, MessageSquare, Loader2 } from 'lucide-react';
 
 interface SendNotificationButtonProps {
   type: 'quote' | 'invoice';
@@ -28,7 +22,8 @@ export function SendNotificationButton({
   onSent 
 }: SendNotificationButtonProps) {
   const { toast } = useToast();
-  const [sending, setSending] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [sendingSms, setSendingSms] = useState(false);
 
   const handleSend = async (method: 'email' | 'sms') => {
     if (method === 'email' && !recipient.email) {
@@ -49,7 +44,11 @@ export function SendNotificationButton({
       return;
     }
 
-    setSending(true);
+    if (method === 'email') {
+      setSendingEmail(true);
+    } else {
+      setSendingSms(true);
+    }
 
     try {
       const { data, error } = await supabase.functions.invoke('send-notification', {
@@ -75,8 +74,8 @@ export function SendNotificationButton({
       }
 
       toast({ 
-        title: 'Sent! 📨', 
-        description: `${type === 'quote' ? 'Quote' : 'Invoice'} sent via ${method.toUpperCase()}.`
+        title: 'Ready to send!', 
+        description: `Your ${method === 'email' ? 'email' : 'SMS'} app will open now.`
       });
 
       onSent?.();
@@ -88,7 +87,8 @@ export function SendNotificationButton({
         variant: 'destructive' 
       });
     } finally {
-      setSending(false);
+      setSendingEmail(false);
+      setSendingSms(false);
     }
   };
 
@@ -97,40 +97,47 @@ export function SendNotificationButton({
 
   if (!hasEmail && !hasPhone) {
     return (
-      <Button variant="outline" className="w-full" disabled>
-        <Send className="w-4 h-4 mr-2" />
-        No contact info
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="outline" className="flex-1" disabled>
+          <Mail className="w-4 h-4 mr-2" />
+          No Email
+        </Button>
+        <Button variant="outline" className="flex-1" disabled>
+          <MessageSquare className="w-4 h-4 mr-2" />
+          No Phone
+        </Button>
+      </div>
     );
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="w-full" disabled={sending}>
-          {sending ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Send className="w-4 h-4 mr-2" />
-          )}
-          Send to Client
-          <ChevronDown className="w-4 h-4 ml-2" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="center" className="w-48">
-        {hasEmail && (
-          <DropdownMenuItem onClick={() => handleSend('email')}>
-            <Mail className="w-4 h-4 mr-2" />
-            Send via Email
-          </DropdownMenuItem>
+    <div className="flex gap-2">
+      <Button 
+        variant={hasEmail ? "default" : "outline"}
+        className="flex-1" 
+        disabled={sendingEmail || !hasEmail}
+        onClick={() => handleSend('email')}
+      >
+        {sendingEmail ? (
+          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+        ) : (
+          <Mail className="w-4 h-4 mr-2" />
         )}
-        {hasPhone && (
-          <DropdownMenuItem onClick={() => handleSend('sms')}>
-            <MessageSquare className="w-4 h-4 mr-2" />
-            Send via SMS
-          </DropdownMenuItem>
+        Email
+      </Button>
+      <Button 
+        variant={hasPhone ? "default" : "outline"}
+        className="flex-1" 
+        disabled={sendingSms || !hasPhone}
+        onClick={() => handleSend('sms')}
+      >
+        {sendingSms ? (
+          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+        ) : (
+          <MessageSquare className="w-4 h-4 mr-2" />
         )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        SMS
+      </Button>
+    </div>
   );
 }

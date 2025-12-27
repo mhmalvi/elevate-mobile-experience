@@ -9,6 +9,7 @@ import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { PremiumCard } from '@/components/ui/premium-card';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { FAB } from '@/components/ui/fab';
 import { FileText, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -48,10 +49,6 @@ export default function Quotes() {
       <PageHeader 
         title="Quotes"
         subtitle={`${quotes.length} total`}
-        action={{
-          label: "New Quote",
-          onClick: () => navigate('/quotes/new'),
-        }}
       />
       
       <div className="p-4 space-y-4 animate-fade-in">
@@ -116,6 +113,8 @@ export default function Quotes() {
           </div>
         )}
       </div>
+
+      <FAB onClick={() => navigate('/quotes/new')} label="New Quote" />
     </MobileLayout>
   );
 }

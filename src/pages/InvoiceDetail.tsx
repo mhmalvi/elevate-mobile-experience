@@ -316,11 +316,28 @@ export default function InvoiceDetail() {
           </div>
         )}
 
-        {/* Share & Download Actions */}
-        <div className="space-y-2">
+        {/* Primary Actions - Send to Client */}
+        {client && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-muted-foreground">Send to Client</p>
+            <SendNotificationButton
+              type="invoice"
+              id={id!}
+              recipient={{
+                email: client.email,
+                phone: client.phone,
+                name: client.name,
+              }}
+              onSent={fetchInvoice}
+            />
+          </div>
+        )}
+
+        {/* PDF & Share Actions */}
+        <div className="flex gap-2">
           <Button 
             variant="outline" 
-            className="w-full"
+            className="flex-1"
             disabled={downloadingPDF}
             onClick={async () => {
               setDownloadingPDF(true);
@@ -346,12 +363,12 @@ export default function InvoiceDetail() {
             }}
           >
             {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-            Download PDF
+            PDF
           </Button>
           
           <Button 
             variant="outline" 
-            className="w-full"
+            className="flex-1"
             onClick={() => {
               const url = `${window.location.origin}/i/${id}`;
               navigator.clipboard.writeText(url);
@@ -359,34 +376,20 @@ export default function InvoiceDetail() {
             }}
           >
             <Share2 className="w-4 h-4 mr-2" />
-            Copy Share Link
+            Share
           </Button>
-
-          {/* Send to Client */}
-          {client && (
-            <SendNotificationButton
-              type="invoice"
-              id={id!}
-              recipient={{
-                email: client.email,
-                phone: client.phone,
-                name: client.name,
-              }}
-              onSent={fetchInvoice}
-            />
-          )}
         </div>
 
-        {/* Status Actions */}
+        {/* Status Actions - Secondary */}
         {invoice.status !== 'paid' && (
           <div className="space-y-2">
             {invoice.status === 'draft' && (
-              <Button className="w-full" onClick={() => updateStatus('sent')}>
+              <Button variant="outline" className="w-full" onClick={() => updateStatus('sent')}>
                 Mark as Sent
               </Button>
             )}
             {invoice.status === 'sent' && (
-              <Button className="w-full" onClick={() => updateStatus('viewed')}>
+              <Button variant="outline" className="w-full" onClick={() => updateStatus('viewed')}>
                 Mark as Viewed
               </Button>
             )}
