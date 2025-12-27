@@ -64,16 +64,19 @@ export default function Onboarding() {
     try {
       const { error } = await supabase
         .from('profiles')
-        .upsert({
-          user_id: user.id,
+        .update({
           trade_type: formData.trade_type || null,
           business_name: formData.business_name || null,
           abn: formData.abn || null,
           phone: formData.phone || null,
           onboarding_completed: true,
-        });
+        })
+        .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Onboarding error:', error);
+        throw error;
+      }
 
       toast({
         title: "You're all set, mate! 🎉",
@@ -82,6 +85,7 @@ export default function Onboarding() {
       
       navigate('/dashboard');
     } catch (error) {
+      console.error('Onboarding error:', error);
       toast({
         title: "Something went wrong",
         description: "No worries, give it another go.",
@@ -99,13 +103,14 @@ export default function Onboarding() {
     try {
       await supabase
         .from('profiles')
-        .upsert({
-          user_id: user.id,
+        .update({
           onboarding_completed: true,
-        });
+        })
+        .eq('user_id', user.id);
       
       navigate('/dashboard');
     } catch (error) {
+      console.error('Skip onboarding error:', error);
       navigate('/dashboard');
     } finally {
       setLoading(false);
