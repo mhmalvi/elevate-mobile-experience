@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -10,8 +10,10 @@ import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/integrations/supabase/client';
 import { SUBSCRIPTION_TIERS, getTierById } from '@/lib/subscriptionTiers';
 import { getPlatform, getPaymentProvider, isNativeApp } from '@/lib/platformPayments';
+import { purchasePackage, restorePurchases, REVENUECAT_PRODUCTS } from '@/lib/purchases';
 import { formatLimit, SubscriptionTier } from '@/lib/tierLimits';
 import { toast } from 'sonner';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Crown, 
   FileText, 
@@ -23,7 +25,8 @@ import {
   Check,
   Sparkles,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  RotateCcw
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -46,16 +49,38 @@ const usageLabels = {
 };
 
 export default function SubscriptionSettings() {
-  const { profile } = useProfile();
+  const { profile, refetch: refetchProfile } = useProfile();
   const usage = useAllUsageLimits();
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [searchParams] = useSearchParams();
 
   const currentTier = (profile?.subscription_tier as SubscriptionTier) || 'free';
   const currentTierConfig = getTierById(currentTier);
 
+  // Check for success/cancel from Stripe checkout
+  useEffect(() => {
+    if (searchParams.get('success') === 'true') {
+      toast.success('Subscription activated! Welcome aboard.');
+      // Refresh subscription status
+      checkSubscriptionStatus();
+    } else if (searchParams.get('canceled') === 'true') {
+      toast.info('Checkout was cancelled.');
+    }
+  }, [searchParams]);
+
+  const checkSubscriptionStatus = async () => {
+    try {
+      await supabase.functions.invoke('check-subscription');
+      refetchProfile?.();
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+    }
+  };
+
   const handleUpgrade = async (tierId: string) => {
     const tier = getTierById(tierId);
-    if (!tier || !tier.stripePriceId) {
+    if (!tier) {
       toast.error('This plan is not available yet');
       return;
     }
@@ -68,6 +93,11 @@ export default function SubscriptionSettings() {
 
       if (provider === 'stripe') {
         // Use Stripe for web users
+        if (!tier.stripePriceId) {
+          toast.error('Stripe is not configured for this plan');
+          return;
+        }
+        
         const { data, error } = await supabase.functions.invoke('create-subscription-checkout', {
           body: { priceId: tier.stripePriceId, tierId: tier.id }
         });
@@ -77,8 +107,21 @@ export default function SubscriptionSettings() {
           window.open(data.url, '_blank');
         }
       } else {
-        // Native app - show message about in-app purchases
-        toast.info('Please use the in-app purchase option in the mobile app to upgrade.');
+        // Use RevenueCat for native apps
+        const productConfig = REVENUECAT_PRODUCTS[tierId as keyof typeof REVENUECAT_PRODUCTS];
+        if (!productConfig) {
+          toast.error('This plan is not available for in-app purchase');
+          return;
+        }
+
+        const result = await purchasePackage(productConfig.identifier);
+        
+        if (result.success) {
+          toast.success('Subscription activated! Welcome aboard.');
+          refetchProfile?.();
+        } else if (result.error) {
+          toast.error(result.error);
+        }
       }
     } catch (error) {
       console.error('Error creating checkout:', error);
@@ -88,7 +131,38 @@ export default function SubscriptionSettings() {
     }
   };
 
+  const handleRestorePurchases = async () => {
+    setIsRestoring(true);
+    try {
+      const result = await restorePurchases();
+      if (result.success) {
+        toast.success('Purchases restored successfully!');
+        refetchProfile?.();
+      } else if (result.error) {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      console.error('Error restoring purchases:', error);
+      toast.error('Failed to restore purchases. Please try again.');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
   const handleManageSubscription = async () => {
+    const platform = getPlatform();
+    
+    if (isNativeApp()) {
+      // For native apps, direct users to their app store subscription settings
+      if (platform === 'android') {
+        window.open('https://play.google.com/store/account/subscriptions', '_blank');
+      } else if (platform === 'ios') {
+        window.open('https://apps.apple.com/account/subscriptions', '_blank');
+      }
+      return;
+    }
+
+    // For web, use Stripe customer portal
     try {
       const { data, error } = await supabase.functions.invoke('customer-portal');
       if (error) throw error;
@@ -214,11 +288,27 @@ export default function SubscriptionSettings() {
           <h4 className="font-semibold text-lg">Upgrade Your Plan</h4>
           
           {isNativeApp() && (
-            <Card className="p-4 bg-muted/50 border-dashed">
-              <p className="text-sm text-muted-foreground text-center">
-                Subscriptions are managed through the app store on mobile devices.
-              </p>
-            </Card>
+            <div className="space-y-2">
+              <Card className="p-4 bg-muted/50 border-dashed">
+                <p className="text-sm text-muted-foreground text-center">
+                  Subscriptions are managed through the app store on mobile devices.
+                </p>
+              </Card>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={handleRestorePurchases}
+                disabled={isRestoring}
+              >
+                {isRestoring ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                )}
+                Restore Purchases
+              </Button>
+            </div>
           )}
 
           <div className="grid gap-3">
