@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -12,6 +12,7 @@ import { JobCalendarView } from '@/components/jobs/JobCalendarView';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { FAB } from '@/components/ui/fab';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { Briefcase, Calendar, MapPin, List, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -26,11 +27,8 @@ export default function Jobs() {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
-  useEffect(() => {
-    if (user) fetchJobs();
-  }, [user]);
-
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
+    if (!user) return;
     const { data } = await supabase
       .from('jobs')
       .select('*, clients(name)')
@@ -38,7 +36,15 @@ export default function Jobs() {
       .order('created_at', { ascending: false });
     setJobs(data || []);
     setLoading(false);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) fetchJobs();
+  }, [user, fetchJobs]);
+
+  const { containerProps, RefreshIndicator } = usePullToRefresh({
+    onRefresh: fetchJobs,
+  });
 
   const filteredJobs = useMemo(() => {
     if (!search.trim()) return jobs;
@@ -57,7 +63,8 @@ export default function Jobs() {
         subtitle={`${jobs.length} total`}
       />
       
-      <div className="p-4 space-y-4 animate-fade-in">
+      <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+        <RefreshIndicator />
         {/* View Toggle */}
         <div className="flex gap-2">
           <Button
