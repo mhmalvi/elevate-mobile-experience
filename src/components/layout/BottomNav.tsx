@@ -3,7 +3,7 @@ import {
   LayoutDashboard, 
   Briefcase, 
   FileText, 
-  Users, 
+  Settings, 
   Receipt
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ const navItems = [
   { path: '/quotes', label: 'Quotes', icon: FileText },
   { path: '/jobs', label: 'Jobs', icon: Briefcase },
   { path: '/invoices', label: 'Invoices', icon: Receipt },
-  { path: '/clients', label: 'Clients', icon: Users },
+  { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function BottomNav() {

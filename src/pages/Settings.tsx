@@ -3,13 +3,16 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
-import { LogOut, User, Building2, CreditCard, ChevronRight, Sparkles } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { LogOut, User, Building2, CreditCard, ChevronRight, Sparkles, Sun, Moon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from 'next-themes';
 
 export default function Settings() {
   const navigate = useNavigate();
   const { signOut } = useAuth();
   const { profile } = useProfile();
+  const { theme, setTheme } = useTheme();
 
   const handleSignOut = async () => {
     await signOut();
@@ -61,8 +64,33 @@ export default function Settings() {
           ))}
         </div>
 
+        {/* Theme Toggle */}
+        <div className="p-4 bg-card rounded-xl border animate-fade-in stagger-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                {theme === 'dark' ? (
+                  <Moon className="w-5 h-5 text-primary" />
+                ) : (
+                  <Sun className="w-5 h-5 text-primary" />
+                )}
+              </div>
+              <div>
+                <p className="font-semibold">Appearance</p>
+                <p className="text-sm text-muted-foreground">
+                  {theme === 'dark' ? 'Dark mode' : 'Light mode'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={theme === 'dark'}
+              onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
+            />
+          </div>
+        </div>
+
         {/* Sign Out */}
-        <div className="pt-4 animate-fade-in stagger-4">
+        <div className="pt-4 animate-fade-in stagger-5">
           <Button
             variant="outline"
             className="w-full h-12 text-destructive hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30"
