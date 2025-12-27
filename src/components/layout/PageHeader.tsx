@@ -29,25 +29,25 @@ export function PageHeader({
 
   return (
     <header className={cn(
-      "sticky top-0 z-40 glass px-4 py-4 safe-top",
+      "header-premium animate-slide-down",
       className
     )}>
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           {showBack && (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => backPath ? navigate(backPath) : navigate(-1)}
-              className="shrink-0 -ml-2"
+              className="shrink-0 -ml-2 hover:bg-primary/10 active:scale-95 transition-all duration-200"
             >
               <ArrowLeft className="w-5 h-5" />
             </Button>
           )}
-          <div>
-            <h1 className="text-xl font-bold text-foreground">{title}</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-foreground truncate">{title}</h1>
             {subtitle && (
-              <p className="text-sm text-muted-foreground">{subtitle}</p>
+              <p className="text-sm text-muted-foreground truncate">{subtitle}</p>
             )}
           </div>
         </div>
@@ -56,7 +56,7 @@ export function PageHeader({
           <Button 
             onClick={action.onClick}
             size="sm"
-            className="shrink-0 gap-1.5"
+            className="shrink-0 gap-1.5 shadow-glow-sm hover:shadow-glow transition-all duration-300 btn-press"
           >
             {action.icon || <Plus className="w-4 h-4" />}
             <span className="hidden sm:inline">{action.label}</span>
