@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { JobCalendarView } from '@/components/jobs/JobCalendarView';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { FAB } from '@/components/ui/fab';
 import { Briefcase, Calendar, MapPin, List, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -54,10 +55,6 @@ export default function Jobs() {
       <PageHeader 
         title="Jobs"
         subtitle={`${jobs.length} total`}
-        action={{
-          label: "New Job",
-          onClick: () => navigate('/jobs/new'),
-        }}
       />
       
       <div className="p-4 space-y-4 animate-fade-in">
@@ -153,6 +150,8 @@ export default function Jobs() {
           </div>
         )}
       </div>
+
+      <FAB onClick={() => navigate('/jobs/new')} label="New Job" />
     </MobileLayout>
   );
 }
