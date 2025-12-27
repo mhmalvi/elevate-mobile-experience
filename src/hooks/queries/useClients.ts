@@ -19,6 +19,7 @@ export function useClients(page: number = 1) {
         .from('clients')
         .select('*', { count: 'exact' })
         .eq('user_id', user.id)
+        .is('deleted_at', null)
         .order('name', { ascending: true })
         .range(from, to);
 
@@ -60,9 +61,10 @@ export function useDeleteClient() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // Soft delete: set deleted_at timestamp
       const { error } = await supabase
         .from('clients')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', id);
 
       if (error) throw error;
@@ -86,6 +88,7 @@ export function useClientSearch(searchTerm: string) {
         .from('clients')
         .select('*')
         .eq('user_id', user.id)
+        .is('deleted_at', null)
         .or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
         .order('name')
         .limit(10);
