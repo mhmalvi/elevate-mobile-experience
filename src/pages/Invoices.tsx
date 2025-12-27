@@ -61,6 +61,7 @@ export default function Invoices() {
       <PageHeader 
         title="Invoices"
         subtitle={`${invoices.length} total`}
+        showSettings
       />
       
       <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
