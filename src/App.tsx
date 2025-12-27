@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,34 +8,41 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { ThemeProvider } from "next-themes";
 
-// Pages
-import Auth from "./pages/Auth";
-import Onboarding from "./pages/Onboarding";
-import Dashboard from "./pages/Dashboard";
-import Clients from "./pages/Clients";
-import ClientForm from "./pages/ClientForm";
-import ClientDetail from "./pages/ClientDetail";
-import ClientEdit from "./pages/ClientEdit";
-import Quotes from "./pages/Quotes";
-import QuoteForm from "./pages/QuoteForm";
-import QuoteDetail from "./pages/QuoteDetail";
-import QuoteEdit from "./pages/QuoteEdit";
-import Jobs from "./pages/Jobs";
-import JobForm from "./pages/JobForm";
-import JobDetail from "./pages/JobDetail";
-import JobEdit from "./pages/JobEdit";
-import Invoices from "./pages/Invoices";
-import InvoiceForm from "./pages/InvoiceForm";
-import InvoiceDetail from "./pages/InvoiceDetail";
-import InvoiceEdit from "./pages/InvoiceEdit";
-import Settings from "./pages/Settings";
-import ProfileSettings from "./pages/settings/ProfileSettings";
-import BusinessSettings from "./pages/settings/BusinessSettings";
-import PaymentSettings from "./pages/settings/PaymentSettings";
-import SubscriptionSettings from "./pages/settings/SubscriptionSettings";
-import PublicQuote from "./pages/PublicQuote";
-import PublicInvoice from "./pages/PublicInvoice";
-import NotFound from "./pages/NotFound";
+// Loading component
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+  </div>
+);
+
+// Lazy-loaded pages for code splitting
+const Auth = lazy(() => import("./pages/Auth"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Clients = lazy(() => import("./pages/Clients"));
+const ClientForm = lazy(() => import("./pages/ClientForm"));
+const ClientDetail = lazy(() => import("./pages/ClientDetail"));
+const ClientEdit = lazy(() => import("./pages/ClientEdit"));
+const Quotes = lazy(() => import("./pages/Quotes"));
+const QuoteForm = lazy(() => import("./pages/QuoteForm"));
+const QuoteDetail = lazy(() => import("./pages/QuoteDetail"));
+const QuoteEdit = lazy(() => import("./pages/QuoteEdit"));
+const Jobs = lazy(() => import("./pages/Jobs"));
+const JobForm = lazy(() => import("./pages/JobForm"));
+const JobDetail = lazy(() => import("./pages/JobDetail"));
+const JobEdit = lazy(() => import("./pages/JobEdit"));
+const Invoices = lazy(() => import("./pages/Invoices"));
+const InvoiceForm = lazy(() => import("./pages/InvoiceForm"));
+const InvoiceDetail = lazy(() => import("./pages/InvoiceDetail"));
+const InvoiceEdit = lazy(() => import("./pages/InvoiceEdit"));
+const Settings = lazy(() => import("./pages/Settings"));
+const ProfileSettings = lazy(() => import("./pages/settings/ProfileSettings"));
+const BusinessSettings = lazy(() => import("./pages/settings/BusinessSettings"));
+const PaymentSettings = lazy(() => import("./pages/settings/PaymentSettings"));
+const SubscriptionSettings = lazy(() => import("./pages/settings/SubscriptionSettings"));
+const PublicQuote = lazy(() => import("./pages/PublicQuote"));
+const PublicInvoice = lazy(() => import("./pages/PublicInvoice"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -75,28 +83,25 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
-      <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/auth" replace />} />
-      <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
-      <Route path="/onboarding" element={
-        !user ? <Navigate to="/auth" replace /> : 
-        (profileLoading ? (
-          <div className="min-h-screen flex items-center justify-center bg-background">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : profile?.onboarding_completed ? <Navigate to="/dashboard" replace /> : <Onboarding />)
-      } />
-      {/* Public routes */}
-      <Route path="/q/:id" element={<PublicQuote />} />
-      <Route path="/i/:id" element={<PublicInvoice />} />
-      {/* Protected routes */}
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
-      <Route path="/clients/new" element={<ProtectedRoute><ClientForm /></ProtectedRoute>} />
-      <Route path="/clients/:id" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
-      <Route path="/clients/:id/edit" element={<ProtectedRoute><ClientEdit /></ProtectedRoute>} />
-      <Route path="/quotes" element={<ProtectedRoute><Quotes /></ProtectedRoute>} />
-      <Route path="/quotes/new" element={<ProtectedRoute><QuoteForm /></ProtectedRoute>} />
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/auth" replace />} />
+        <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
+        <Route path="/onboarding" element={
+          !user ? <Navigate to="/auth" replace /> :
+          (profileLoading ? <PageLoader /> : profile?.onboarding_completed ? <Navigate to="/dashboard" replace /> : <Onboarding />)
+        } />
+        {/* Public routes */}
+        <Route path="/q/:id" element={<PublicQuote />} />
+        <Route path="/i/:id" element={<PublicInvoice />} />
+        {/* Protected routes */}
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
+        <Route path="/clients/new" element={<ProtectedRoute><ClientForm /></ProtectedRoute>} />
+        <Route path="/clients/:id" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
+        <Route path="/clients/:id/edit" element={<ProtectedRoute><ClientEdit /></ProtectedRoute>} />
+        <Route path="/quotes" element={<ProtectedRoute><Quotes /></ProtectedRoute>} />
+        <Route path="/quotes/new" element={<ProtectedRoute><QuoteForm /></ProtectedRoute>} />
       <Route path="/quotes/:id" element={<ProtectedRoute><QuoteDetail /></ProtectedRoute>} />
       <Route path="/quotes/:id/edit" element={<ProtectedRoute><QuoteEdit /></ProtectedRoute>} />
       <Route path="/jobs" element={<ProtectedRoute><Jobs /></ProtectedRoute>} />
@@ -112,8 +117,9 @@ function AppRoutes() {
       <Route path="/settings/business" element={<ProtectedRoute><BusinessSettings /></ProtectedRoute>} />
       <Route path="/settings/payment" element={<ProtectedRoute><PaymentSettings /></ProtectedRoute>} />
       <Route path="/settings/subscription" element={<ProtectedRoute><SubscriptionSettings /></ProtectedRoute>} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Suspense>
   );
 }
 
