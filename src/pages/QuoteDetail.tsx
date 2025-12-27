@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { User, FileText, Send, Receipt } from 'lucide-react';
+import { User, FileText, Send, Receipt, Download, Share2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const QUOTE_STATUSES = ['draft', 'sent', 'viewed', 'accepted', 'declined'] as const;
@@ -195,6 +195,19 @@ export default function QuoteDetail() {
 
         {/* Actions */}
         <div className="space-y-2">
+          <Button 
+            variant="outline" 
+            className="w-full" 
+            onClick={() => {
+              const url = `${window.location.origin}/q/${id}`;
+              navigator.clipboard.writeText(url);
+              toast({ title: 'Link copied!', description: 'Share this link with your client.' });
+            }}
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            Copy Share Link
+          </Button>
+          
           {quote.status === 'accepted' && (
             <>
               <Button onClick={convertToJob} className="w-full">
