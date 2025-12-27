@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PremiumCard } from '@/components/ui/premium-card';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
+import { useUsageLimits } from '@/hooks/useUsageLimits';
+import { UsageLimitBanner, UsageLimitBlocker } from '@/components/UsageLimitBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Trash2, User, FileText, Sparkles, Calendar } from 'lucide-react';
@@ -41,6 +43,7 @@ export default function QuoteForm() {
   const { user } = useAuth();
   const { profile } = useProfile();
   const { toast } = useToast();
+  const { canCreate, used, limit, tier, isUnlimited, incrementUsage } = useUsageLimits('quotes');
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
@@ -152,6 +155,12 @@ export default function QuoteForm() {
     e.preventDefault();
     if (!user) return;
 
+    // Check usage limits
+    if (!canCreate) {
+      toast({ title: 'Limit reached', description: 'Upgrade your plan to create more quotes', variant: 'destructive' });
+      return;
+    }
+
     const validItems = lineItems.filter(item => item.description && item.unit_price > 0);
     if (validItems.length === 0) {
       toast({ title: 'Error', description: 'Add at least one line item', variant: 'destructive' });
@@ -203,6 +212,8 @@ export default function QuoteForm() {
     if (itemsError) {
       toast({ title: 'Error', description: itemsError.message, variant: 'destructive' });
     } else {
+      // Increment usage counter
+      await incrementUsage();
       toast({ title: 'Quote created! 🎉', description: 'Looking good, mate.' });
       navigate('/quotes');
     }
@@ -210,6 +221,16 @@ export default function QuoteForm() {
   };
 
   const { subtotal, gst, total } = calculateTotals();
+
+  // Show blocker if limit reached
+  if (!canCreate) {
+    return (
+      <MobileLayout showNav={false}>
+        <PageHeader title="New Quote" showBack backPath="/quotes" />
+        <UsageLimitBlocker usageType="quotes" tier={tier} />
+      </MobileLayout>
+    );
+  }
 
   // Template selection step
   if (step === 'template') {
@@ -220,7 +241,8 @@ export default function QuoteForm() {
       <MobileLayout showNav={false}>
         <PageHeader title="New Quote" showBack backPath="/quotes" />
         
-        <div className="p-4 space-y-6 animate-fade-in">
+        <div className="p-4 space-y-6 animate-fade-in scrollbar-hide">
+          <UsageLimitBanner usageType="quotes" used={used} limit={limit} tier={tier} isUnlimited={isUnlimited} />
           <div className="text-center">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center mx-auto mb-4 shadow-glow">
               <Sparkles className="w-8 h-8 text-primary-foreground" />

@@ -17,6 +17,65 @@ interface NotificationRequest {
   };
 }
 
+// Tier limits for SMS
+const SMS_LIMITS: Record<string, number> = {
+  free: 5,
+  solo: 25,
+  crew: 100,
+  pro: -1, // unlimited
+};
+
+// Check and increment usage for rate limiting
+async function checkAndIncrementUsage(
+  supabase: any,
+  userId: string,
+  tier: string,
+  usageType: 'sms' | 'email'
+): Promise<{ allowed: boolean; used: number; limit: number }> {
+  const monthYear = new Date().toISOString().slice(0, 7); // "2025-01"
+  const limits = usageType === 'sms' ? SMS_LIMITS : { free: 10, solo: 50, crew: -1, pro: -1 };
+  const limit = limits[tier] ?? limits.free;
+
+  // Unlimited
+  if (limit === -1) {
+    return { allowed: true, used: 0, limit: -1 };
+  }
+
+  // Get current usage
+  const column = usageType === 'sms' ? 'sms_sent' : 'emails_sent';
+  const { data: existing } = await supabase
+    .from('usage_tracking')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('month_year', monthYear)
+    .maybeSingle();
+
+  const currentUsage = existing?.[column] || 0;
+
+  if (currentUsage >= limit) {
+    return { allowed: false, used: currentUsage, limit };
+  }
+
+  // Increment usage
+  if (existing) {
+    await supabase
+      .from('usage_tracking')
+      .update({ [column]: currentUsage + 1 })
+      .eq('user_id', userId)
+      .eq('month_year', monthYear);
+  } else {
+    await supabase
+      .from('usage_tracking')
+      .insert({
+        user_id: userId,
+        month_year: monthYear,
+        [column]: 1,
+      });
+  }
+
+  return { allowed: true, used: currentUsage + 1, limit };
+}
+
 // Send SMS via Twilio API
 async function sendTwilioSms(to: string, body: string): Promise<{ success: boolean; error?: string }> {
   const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
@@ -109,13 +168,32 @@ serve(async (req) => {
       throw new Error(`${type} not found`);
     }
 
-    // Get business profile
+    // Get business profile and subscription tier
     const { data: profileData } = await supabase
       .from('profiles')
       .select('*')
       .eq('user_id', document.user_id)
       .single();
     profile = profileData;
+
+    const tier = profile?.subscription_tier || 'free';
+
+    // Check rate limits
+    const usageType = method === 'sms' ? 'sms' : 'email';
+    const usageCheck = await checkAndIncrementUsage(supabase, document.user_id, tier, usageType);
+    
+    if (!usageCheck.allowed) {
+      console.log(`Rate limit exceeded for ${usageType}: ${usageCheck.used}/${usageCheck.limit}`);
+      return new Response(
+        JSON.stringify({ 
+          error: `Monthly ${usageType.toUpperCase()} limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan for more.`,
+          limitReached: true,
+          used: usageCheck.used,
+          limit: usageCheck.limit,
+        }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Generate the share URL
     const baseUrl = Deno.env.get('SITE_URL') || 'https://tradiemate.lovable.app';
