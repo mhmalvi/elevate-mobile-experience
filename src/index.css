@@ -5,13 +5,14 @@
 @tailwind utilities;
 
 /* ============================================
-   TradieMate Design System
-   Premium, Modern Australian Tradie App
+   TradieMate Design System v2.0
+   Premium Mobile-First Australian Tradie App
+   Deep Charcoal + Electric Blue Palette
    ============================================ */
 
 @layer base {
   :root {
-    /* Core Brand Colors - Electric Blue + Charcoal */
+    /* Light Mode - Clean & Professional */
     --background: 220 20% 97%;
     --foreground: 220 25% 10%;
 
@@ -51,7 +52,7 @@
     --input: 220 13% 91%;
     --ring: 217 91% 50%;
 
-    --radius: 0.75rem;
+    --radius: 0.875rem;
 
     /* Sidebar */
     --sidebar-background: 0 0% 100%;
@@ -64,66 +65,72 @@
     --sidebar-ring: 217 91% 50%;
 
     /* Custom TradieMate tokens */
-    --glass: 0 0% 100% / 0.8;
-    --glass-border: 220 13% 91% / 0.5;
-    --shadow-color: 217 91% 50% / 0.1;
+    --glass: 0 0% 100% / 0.85;
+    --glass-border: 220 13% 91% / 0.6;
+    --glass-subtle: 0 0% 100% / 0.6;
+    --shadow-color: 220 25% 10% / 0.08;
+    --shadow-primary: 217 91% 50% / 0.25;
     --gradient-start: 217 91% 50%;
     --gradient-end: 240 80% 60%;
+    --glow-primary: 217 91% 50% / 0.4;
   }
 
   .dark {
-    /* Dark Mode - Premium Charcoal */
-    --background: 222 25% 8%;
+    /* Dark Mode - Premium Deep Charcoal */
+    --background: 222 30% 6%;
     --foreground: 210 40% 98%;
 
-    --card: 222 25% 11%;
+    --card: 222 28% 10%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222 25% 11%;
+    --popover: 222 28% 10%;
     --popover-foreground: 210 40% 98%;
 
     /* Primary - Brighter Electric Blue for dark mode */
     --primary: 217 91% 60%;
-    --primary-foreground: 222 25% 8%;
+    --primary-foreground: 222 30% 6%;
 
-    --secondary: 222 20% 16%;
+    --secondary: 222 24% 14%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 222 20% 16%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 222 24% 14%;
+    --muted-foreground: 215 20% 60%;
 
     --accent: 38 92% 55%;
-    --accent-foreground: 222 25% 8%;
+    --accent-foreground: 222 30% 6%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 72% 55%;
     --destructive-foreground: 210 40% 98%;
 
-    --success: 152 69% 50%;
-    --success-foreground: 222 25% 8%;
+    --success: 152 69% 45%;
+    --success-foreground: 222 30% 6%;
 
     --warning: 38 92% 55%;
-    --warning-foreground: 222 25% 8%;
+    --warning-foreground: 222 30% 6%;
 
-    --border: 222 20% 18%;
-    --input: 222 20% 18%;
+    --border: 222 24% 16%;
+    --input: 222 24% 16%;
     --ring: 217 91% 60%;
 
     /* Sidebar Dark */
-    --sidebar-background: 222 25% 6%;
+    --sidebar-background: 222 30% 5%;
     --sidebar-foreground: 210 40% 98%;
     --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 222 25% 8%;
-    --sidebar-accent: 222 20% 14%;
+    --sidebar-primary-foreground: 222 30% 6%;
+    --sidebar-accent: 222 24% 12%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 20% 16%;
+    --sidebar-border: 222 24% 14%;
     --sidebar-ring: 217 91% 60%;
 
     /* Custom TradieMate tokens - Dark */
-    --glass: 222 25% 11% / 0.9;
-    --glass-border: 222 20% 20% / 0.5;
-    --shadow-color: 0 0% 0% / 0.3;
+    --glass: 222 28% 10% / 0.92;
+    --glass-border: 222 24% 22% / 0.5;
+    --glass-subtle: 222 28% 12% / 0.7;
+    --shadow-color: 0 0% 0% / 0.4;
+    --shadow-primary: 217 91% 60% / 0.3;
     --gradient-start: 217 91% 60%;
     --gradient-end: 240 80% 70%;
+    --glow-primary: 217 91% 60% / 0.5;
   }
 }
 
@@ -139,6 +146,11 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Default to dark mode for TradieMate premium look */
+  html {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv11", "ss01";
@@ -151,45 +163,86 @@
 }
 
 @layer utilities {
-  /* Glass morphism effect */
+  /* Premium Glass morphism effect */
   .glass {
     background: hsl(var(--glass));
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
     border: 1px solid hsl(var(--glass-border));
   }
 
-  /* Premium gradient */
+  .glass-subtle {
+    background: hsl(var(--glass-subtle));
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+  }
+
+  /* Premium gradients */
   .gradient-primary {
     background: linear-gradient(135deg, hsl(var(--gradient-start)), hsl(var(--gradient-end)));
   }
 
-  /* Subtle gradient background */
   .gradient-subtle {
-    background: linear-gradient(180deg, hsl(var(--background)), hsl(var(--secondary)));
+    background: linear-gradient(180deg, hsl(var(--background)), hsl(var(--card)));
+  }
+
+  .gradient-glow {
+    background: radial-gradient(ellipse at top, hsl(var(--primary) / 0.15), transparent 50%);
   }
 
   /* Premium shadows */
   .shadow-premium {
     box-shadow: 
-      0 1px 2px hsl(var(--shadow-color)),
-      0 4px 8px hsl(var(--shadow-color)),
-      0 8px 16px hsl(var(--shadow-color));
+      0 1px 3px hsl(var(--shadow-color)),
+      0 4px 12px hsl(var(--shadow-color)),
+      0 12px 24px hsl(var(--shadow-color));
+  }
+
+  .shadow-premium-lg {
+    box-shadow: 
+      0 2px 4px hsl(var(--shadow-color)),
+      0 8px 16px hsl(var(--shadow-color)),
+      0 16px 32px hsl(var(--shadow-color)),
+      0 24px 48px hsl(var(--shadow-color));
   }
 
   .shadow-glow {
-    box-shadow: 0 0 40px hsl(var(--primary) / 0.15);
+    box-shadow: 0 0 40px hsl(var(--glow-primary));
   }
 
-  /* Touch-friendly tap area */
+  .shadow-glow-sm {
+    box-shadow: 0 0 20px hsl(var(--glow-primary));
+  }
+
+  .shadow-glow-lg {
+    box-shadow: 0 0 60px hsl(var(--glow-primary)), 0 0 100px hsl(var(--primary) / 0.2);
+  }
+
+  /* Card with hover glow effect */
+  .card-premium {
+    @apply rounded-xl border bg-card transition-all duration-300;
+    box-shadow: 0 2px 8px hsl(var(--shadow-color));
+  }
+
+  .card-premium:hover {
+    box-shadow: 0 4px 16px hsl(var(--shadow-color)), 0 0 0 1px hsl(var(--primary) / 0.1);
+    transform: translateY(-2px);
+  }
+
+  /* Touch-friendly tap areas */
   .touch-target {
+    min-height: 48px;
+    min-width: 48px;
+  }
+
+  .touch-target-sm {
     min-height: 44px;
     min-width: 44px;
   }
 
   /* Safe area padding for mobile */
   .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 16px);
+    padding-bottom: max(env(safe-area-inset-bottom, 16px), 16px);
   }
 
   .safe-top {
@@ -201,6 +254,14 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
+  .transition-bounce {
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .transition-spring {
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
   /* Hide scrollbar but allow scrolling */
   .scrollbar-hide {
     -ms-overflow-style: none;
@@ -210,19 +271,44 @@
     display: none;
   }
 
-  /* Status colors */
+  /* Text gradient effect */
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(var(--gradient-start)), hsl(var(--gradient-end)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Status colors with premium styling */
   .status-draft { @apply bg-muted text-muted-foreground; }
-  .status-sent { @apply bg-primary/10 text-primary; }
-  .status-accepted { @apply bg-success/10 text-success; }
-  .status-declined { @apply bg-destructive/10 text-destructive; }
-  .status-pending { @apply bg-warning/10 text-warning; }
-  .status-paid { @apply bg-success/10 text-success; }
-  .status-overdue { @apply bg-destructive/10 text-destructive; }
+  .status-sent { @apply bg-primary/15 text-primary; }
+  .status-accepted { @apply bg-success/15 text-success; }
+  .status-declined { @apply bg-destructive/15 text-destructive; }
+  .status-pending { @apply bg-warning/15 text-warning; }
+  .status-paid { @apply bg-success/15 text-success; }
+  .status-overdue { @apply bg-destructive/15 text-destructive; }
+
+  /* Interactive states */
+  .interactive {
+    @apply transition-all duration-200 active:scale-[0.98];
+  }
+
+  .interactive-lift {
+    @apply transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0;
+  }
 }
 
-/* Smooth page transitions */
+/* ============================================
+   Premium Animations
+   ============================================ */
+
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -232,13 +318,29 @@
 }
 
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-20px); }
+  from { opacity: 0; transform: translateY(-24px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
+  from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes scaleInBounce {
+  0% { opacity: 0; transform: scale(0.8); }
+  50% { transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
 }
 
 @keyframes shimmer {
@@ -247,24 +349,58 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px hsl(var(--primary) / 0.2); }
-  50% { box-shadow: 0 0 40px hsl(var(--primary) / 0.4); }
+  0%, 100% { box-shadow: 0 0 20px hsl(var(--glow-primary)); }
+  50% { box-shadow: 0 0 40px hsl(var(--glow-primary)), 0 0 60px hsl(var(--primary) / 0.3); }
 }
 
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-3deg); }
+  75% { transform: rotate(3deg); }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Animation classes */
 .animate-fade-in {
-  animation: fadeIn 0.4s ease-out forwards;
+  animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-slide-up {
-  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-slide-down {
-  animation: slideDown 0.3s ease-out forwards;
+  animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-scale-in {
-  animation: scaleIn 0.2s ease-out forwards;
+  animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scale-in-bounce {
+  animation: scaleInBounce 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-shimmer {
@@ -274,7 +410,20 @@
 }
 
 .animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+  animation: pulse-glow 2.5s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-wiggle {
+  animation: wiggle 0.5s ease-in-out;
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 4s ease infinite;
 }
 
 /* Stagger animation delays */
@@ -283,3 +432,75 @@
 .stagger-3 { animation-delay: 0.15s; }
 .stagger-4 { animation-delay: 0.2s; }
 .stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+.stagger-7 { animation-delay: 0.35s; }
+.stagger-8 { animation-delay: 0.4s; }
+
+/* ============================================
+   Component-specific styles
+   ============================================ */
+
+/* Premium button press effect */
+.btn-press {
+  @apply transition-all duration-150 active:scale-[0.97] active:shadow-none;
+}
+
+/* Floating Action Button styles */
+.fab {
+  @apply fixed bottom-24 right-4 z-40;
+  @apply w-14 h-14 rounded-full;
+  @apply gradient-primary shadow-glow;
+  @apply flex items-center justify-center;
+  @apply transition-all duration-300;
+  @apply active:scale-95;
+}
+
+.fab:hover {
+  @apply shadow-glow-lg;
+  transform: scale(1.05);
+}
+
+/* Bottom navigation premium styling */
+.bottom-nav {
+  @apply fixed bottom-0 left-0 right-0 z-50;
+  @apply glass border-t border-border/50;
+  @apply safe-bottom;
+}
+
+/* Header premium styling */
+.header-premium {
+  @apply sticky top-0 z-40;
+  @apply glass border-b border-border/30;
+  @apply px-4 py-3 safe-top;
+}
+
+/* Card interactive states */
+.card-interactive {
+  @apply rounded-xl border bg-card;
+  @apply transition-all duration-300;
+  @apply hover:shadow-premium hover:border-primary/20;
+  @apply active:scale-[0.99];
+}
+
+/* Input focus states */
+.input-premium {
+  @apply transition-all duration-200;
+  @apply focus:ring-2 focus:ring-primary/30 focus:border-primary;
+  @apply focus:shadow-glow-sm;
+}
+
+/* Skeleton loading animation */
+.skeleton {
+  @apply animate-pulse bg-muted rounded;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 0%,
+    hsl(var(--muted-foreground) / 0.1) 50%,
+    hsl(var(--muted)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
