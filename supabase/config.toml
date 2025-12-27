@@ -1,1 +1,4 @@
 project_id = "srkadryziusimejwvdik"
+
+[functions.generate-pdf]
+verify_jwt = false
