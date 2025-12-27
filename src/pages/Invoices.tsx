@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -10,7 +10,8 @@ import { PremiumCard } from '@/components/ui/premium-card';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { FAB } from '@/components/ui/fab';
-import { Receipt, Calendar, AlertTriangle } from 'lucide-react';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { Receipt, Calendar, AlertTriangle, RefreshCw } from 'lucide-react';
 import { format, isPast, parseISO } from 'date-fns';
 
 export default function Invoices() {
@@ -20,11 +21,8 @@ export default function Invoices() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    if (user) fetchInvoices();
-  }, [user]);
-
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
+    if (!user) return;
     const { data } = await supabase
       .from('invoices')
       .select('*, clients(name)')
@@ -32,7 +30,15 @@ export default function Invoices() {
       .order('created_at', { ascending: false });
     setInvoices(data || []);
     setLoading(false);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) fetchInvoices();
+  }, [user, fetchInvoices]);
+
+  const { containerProps, RefreshIndicator } = usePullToRefresh({
+    onRefresh: fetchInvoices,
+  });
 
   const filteredInvoices = useMemo(() => {
     if (!search.trim()) return invoices;
@@ -57,7 +63,8 @@ export default function Invoices() {
         subtitle={`${invoices.length} total`}
       />
       
-      <div className="p-4 space-y-4 animate-fade-in">
+      <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+        <RefreshIndicator />
         {invoices.length > 0 && (
           <SearchInput
             value={search}
@@ -101,6 +108,9 @@ export default function Invoices() {
                         <h3 className="font-semibold truncate text-foreground">{invoice.title}</h3>
                         {overdue && (
                           <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
+                        )}
+                        {invoice.is_recurring && (
+                          <RefreshCw className="w-3.5 h-3.5 text-primary shrink-0" />
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">

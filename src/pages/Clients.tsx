@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -10,6 +10,7 @@ import { QuickContact } from '@/components/ui/quick-contact';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { FAB } from '@/components/ui/fab';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { Users, MapPin } from 'lucide-react';
 
 export default function Clients() {
@@ -19,11 +20,8 @@ export default function Clients() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    if (user) fetchClients();
-  }, [user]);
-
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
+    if (!user) return;
     const { data } = await supabase
       .from('clients')
       .select('*')
@@ -31,7 +29,15 @@ export default function Clients() {
       .order('name', { ascending: true });
     setClients(data || []);
     setLoading(false);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) fetchClients();
+  }, [user, fetchClients]);
+
+  const { containerProps, RefreshIndicator } = usePullToRefresh({
+    onRefresh: fetchClients,
+  });
 
   const filteredClients = useMemo(() => {
     if (!search.trim()) return clients;
@@ -51,7 +57,8 @@ export default function Clients() {
         subtitle={`${clients.length} total`}
       />
       
-      <div className="p-4 space-y-4 animate-fade-in">
+      <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+        <RefreshIndicator />
         {clients.length > 0 && (
           <SearchInput
             value={search}

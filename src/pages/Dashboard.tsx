@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { FAB } from '@/components/ui/fab';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { supabase } from '@/integrations/supabase/client';
 import { DollarSign, FileText, Briefcase, TrendingUp, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,12 +24,21 @@ export default function Dashboard() {
   });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
+  const fetchData = useCallback(async () => {
+    if (!user) return;
+    await Promise.all([fetchStats(), fetchRecentActivity()]);
+  }, [user]);
+
   useEffect(() => {
     if (user) {
       fetchStats();
       fetchRecentActivity();
     }
   }, [user]);
+
+  const { containerProps, RefreshIndicator } = usePullToRefresh({
+    onRefresh: fetchData,
+  });
 
   const fetchStats = async () => {
     // Get start of current month
@@ -105,7 +115,8 @@ export default function Dashboard() {
         subtitle="Here's how your business is tracking"
       />
       
-      <div className="p-4 space-y-6">
+      <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-6">
+        <RefreshIndicator />
         {/* Quick Actions */}
         <div className="flex gap-3 animate-fade-in">
           <Button 
