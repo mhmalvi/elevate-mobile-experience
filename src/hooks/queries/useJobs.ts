@@ -47,6 +47,7 @@ export function useJob(id: string) {
         .from('jobs')
         .select('*, clients(*), quote:quotes(*)')
         .eq('id', id)
+        .is('deleted_at', null)
         .single();
 
       if (error) throw error;
