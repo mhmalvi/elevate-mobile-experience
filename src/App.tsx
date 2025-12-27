@@ -31,6 +31,7 @@ import Settings from "./pages/Settings";
 import ProfileSettings from "./pages/settings/ProfileSettings";
 import BusinessSettings from "./pages/settings/BusinessSettings";
 import PaymentSettings from "./pages/settings/PaymentSettings";
+import SubscriptionSettings from "./pages/settings/SubscriptionSettings";
 import PublicQuote from "./pages/PublicQuote";
 import PublicInvoice from "./pages/PublicInvoice";
 import NotFound from "./pages/NotFound";
@@ -110,6 +111,7 @@ function AppRoutes() {
       <Route path="/settings/profile" element={<ProtectedRoute><ProfileSettings /></ProtectedRoute>} />
       <Route path="/settings/business" element={<ProtectedRoute><BusinessSettings /></ProtectedRoute>} />
       <Route path="/settings/payment" element={<ProtectedRoute><PaymentSettings /></ProtectedRoute>} />
+      <Route path="/settings/subscription" element={<ProtectedRoute><SubscriptionSettings /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
