@@ -42,7 +42,10 @@ serve(async (req) => {
     logStep('Webhook received');
 
     const webhookSecret = Deno.env.get('REVENUECAT_WEBHOOK_SECRET');
-    
+
+    // Get raw body for signature verification
+    const rawBody = await req.text();
+
     // Verify webhook signature if secret is configured
     if (webhookSecret) {
       const signature = req.headers.get('X-RevenueCat-Signature');
@@ -53,7 +56,44 @@ serve(async (req) => {
           status: 401,
         });
       }
-      // Note: In production, implement proper HMAC verification
+
+      // Verify HMAC-SHA256 signature
+      try {
+        const encoder = new TextEncoder();
+        const key = await crypto.subtle.importKey(
+          'raw',
+          encoder.encode(webhookSecret),
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign']
+        );
+
+        const signatureBuffer = await crypto.subtle.sign(
+          'HMAC',
+          key,
+          encoder.encode(rawBody)
+        );
+
+        const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+
+        if (signature !== expectedSignature) {
+          logStep('Invalid webhook signature');
+          return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 401,
+          });
+        }
+
+        logStep('Webhook signature verified');
+      } catch (error) {
+        logStep('Signature verification failed', { error: String(error) });
+        return new Response(JSON.stringify({ error: 'Signature verification failed' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 401,
+        });
+      }
     }
 
     const supabaseClient = createClient(
@@ -62,7 +102,7 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    const body: RevenueCatEvent = await req.json();
+    const body: RevenueCatEvent = JSON.parse(rawBody);
     const event = body.event;
 
     logStep('Event received', { 
