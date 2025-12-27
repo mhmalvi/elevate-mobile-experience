@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -15,57 +15,24 @@ import {
   PaginationNext,
   PaginationPrevious
 } from '@/components/ui/pagination';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { FAB } from '@/components/ui/fab';
-import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { FileText, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
-
-const PAGE_SIZE = 20;
+import { useQuotes } from '@/hooks/queries/useQuotes';
 
 export default function Quotes() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [quotes, setQuotes] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
 
-  const fetchQuotes = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
+  // Use React Query for data fetching with automatic caching and refetching
+  const { data, isLoading, error, refetch } = useQuotes(currentPage);
 
-    // Calculate range for pagination
-    const from = (currentPage - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
+  const quotes = data?.quotes || [];
+  const totalCount = data?.totalCount || 0;
+  const totalPages = data?.totalPages || 0;
 
-    const { data, count } = await supabase
-      .from('quotes')
-      .select('*, clients(name)', { count: 'exact' })
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: false })
-      .range(from, to);
-
-    setQuotes(data || []);
-    setTotalCount(count || 0);
-    setLoading(false);
-  }, [user, currentPage]);
-
-  useEffect(() => {
-    if (user) fetchQuotes();
-  }, [user, fetchQuotes]);
-
-  // Reset to page 1 when search changes
-  useEffect(() => {
-    if (search) setCurrentPage(1);
-  }, [search]);
-
-  const { containerProps, RefreshIndicator } = usePullToRefresh({
-    onRefresh: fetchQuotes,
-  });
-
+  // Client-side search filtering
   const filteredQuotes = useMemo(() => {
     if (!search.trim()) return quotes;
     const term = search.toLowerCase();
@@ -76,8 +43,31 @@ export default function Quotes() {
     );
   }, [quotes, search]);
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const showPagination = totalPages > 1 && !search;
+
+  // Handle pull-to-refresh
+  const handleRefresh = async () => {
+    await refetch();
+  };
+
+  if (error) {
+    return (
+      <MobileLayout>
+        <PageHeader title="Quotes" showSettings />
+        <div className="flex-1 flex items-center justify-center p-4">
+          <EmptyState
+            icon={<FileText className="w-8 h-8" />}
+            title="Error loading quotes"
+            description="Failed to load quotes. Please try again."
+            action={{
+              label: "Retry",
+              onClick: handleRefresh,
+            }}
+          />
+        </div>
+      </MobileLayout>
+    );
+  }
 
   return (
     <MobileLayout>
@@ -86,9 +76,8 @@ export default function Quotes() {
         subtitle={`${totalCount} total`}
         showSettings
       />
-      
-      <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
-        <RefreshIndicator />
+
+      <div className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
         {quotes.length > 0 && (
           <SearchInput
             value={search}
@@ -97,7 +86,7 @@ export default function Quotes() {
           />
         )}
 
-        {loading ? (
+        {isLoading ? (
           <ListSkeleton count={5} />
         ) : filteredQuotes.length === 0 && search ? (
           <EmptyState
@@ -133,7 +122,7 @@ export default function Quotes() {
                   </div>
                   <StatusBadge status={quote.status} />
                 </div>
-                
+
                 <div className="mt-3 flex items-center justify-between">
                   <p className="text-lg font-bold text-foreground">
                     ${Number(quote.total || 0).toLocaleString()}
@@ -162,13 +151,11 @@ export default function Quotes() {
 
               {[...Array(totalPages)].map((_, i) => {
                 const page = i + 1;
-                // Show first page, last page, current page, and pages around current
                 const showPage = page === 1 ||
                                 page === totalPages ||
                                 (page >= currentPage - 1 && page <= currentPage + 1);
 
                 if (!showPage) {
-                  // Show ellipsis once before and after current range
                   if (page === 2 && currentPage > 3) {
                     return (
                       <PaginationItem key={page}>
