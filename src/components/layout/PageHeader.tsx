@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -9,6 +9,7 @@ interface PageHeaderProps {
   subtitle?: string;
   showBack?: boolean;
   backPath?: string;
+  showSettings?: boolean;
   action?: {
     label: string;
     onClick: () => void;
@@ -22,6 +23,7 @@ export function PageHeader({
   subtitle, 
   showBack, 
   backPath,
+  showSettings,
   action,
   className 
 }: PageHeaderProps) {
@@ -52,16 +54,29 @@ export function PageHeader({
           </div>
         </div>
         
-        {action && (
-          <Button 
-            onClick={action.onClick}
-            size="sm"
-            className="shrink-0 gap-1.5 shadow-glow-sm hover:shadow-glow transition-all duration-300 btn-press"
-          >
-            {action.icon || <Plus className="w-4 h-4" />}
-            <span className="hidden sm:inline">{action.label}</span>
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {showSettings && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate('/settings')}
+              className="shrink-0 hover:bg-primary/10 active:scale-95 transition-all duration-200"
+            >
+              <Settings className="w-5 h-5" />
+            </Button>
+          )}
+          
+          {action && (
+            <Button 
+              onClick={action.onClick}
+              size="sm"
+              className="shrink-0 gap-1.5 shadow-glow-sm hover:shadow-glow transition-all duration-300 btn-press"
+            >
+              {action.icon || <Plus className="w-4 h-4" />}
+              <span className="hidden sm:inline">{action.label}</span>
+            </Button>
+          )}
+        </div>
       </div>
     </header>
   );
