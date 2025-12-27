@@ -6,6 +6,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SendNotificationButton } from '@/components/SendNotificationButton';
+import { PDFPreviewModal } from '@/components/PDFPreviewModal';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -197,36 +198,44 @@ export default function QuoteDetail() {
 
         {/* Actions */}
         <div className="space-y-2">
-          <Button 
-            variant="outline" 
-            className="w-full" 
-            disabled={downloadingPDF}
-            onClick={async () => {
-              setDownloadingPDF(true);
-              try {
-                const response = await supabase.functions.invoke('generate-pdf', {
-                  body: { type: 'quote', id }
-                });
-                
-                if (response.error) throw response.error;
-                
-                const printWindow = window.open('', '_blank');
-                if (printWindow) {
-                  printWindow.document.write(response.data.html);
-                  printWindow.document.close();
-                  printWindow.print();
+          {/* PDF Preview & Download */}
+          <div className="flex gap-2">
+            <PDFPreviewModal 
+              type="quote" 
+              id={id!} 
+              documentNumber={quote.quote_number} 
+            />
+            <Button 
+              variant="outline" 
+              className="flex-1"
+              disabled={downloadingPDF}
+              onClick={async () => {
+                setDownloadingPDF(true);
+                try {
+                  const response = await supabase.functions.invoke('generate-pdf', {
+                    body: { type: 'quote', id }
+                  });
+                  
+                  if (response.error) throw response.error;
+                  
+                  const printWindow = window.open('', '_blank');
+                  if (printWindow) {
+                    printWindow.document.write(response.data.html);
+                    printWindow.document.close();
+                    printWindow.print();
+                  }
+                } catch (error) {
+                  console.error('PDF generation error:', error);
+                  toast({ title: 'Error generating PDF', description: 'Please try again.', variant: 'destructive' });
+                } finally {
+                  setDownloadingPDF(false);
                 }
-              } catch (error) {
-                console.error('PDF generation error:', error);
-                toast({ title: 'Error generating PDF', description: 'Please try again.', variant: 'destructive' });
-              } finally {
-                setDownloadingPDF(false);
-              }
-            }}
-          >
-            {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-            Download PDF
-          </Button>
+              }}
+            >
+              {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+              PDF
+            </Button>
+          </div>
           
           <Button 
             variant="outline" 
