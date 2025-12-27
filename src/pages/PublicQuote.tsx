@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { SignaturePad } from '@/components/ui/signature-pad';
 import { Check, FileText, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -16,6 +17,7 @@ export default function PublicQuote() {
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSignature, setShowSignature] = useState(false);
 
   useEffect(() => {
     if (id) fetchQuote();
@@ -68,25 +70,36 @@ export default function PublicQuote() {
     }
   };
 
-  const handleAccept = async () => {
+  const handleAccept = async (signatureData?: string) => {
     if (!quote) return;
     setAccepting(true);
 
+    const updateData: any = { 
+      status: 'accepted', 
+      accepted_at: new Date().toISOString() 
+    };
+
+    if (signatureData) {
+      updateData.signature_data = signatureData;
+    }
+
     const { error } = await supabase
       .from('quotes')
-      .update({ 
-        status: 'accepted', 
-        accepted_at: new Date().toISOString() 
-      })
+      .update(updateData)
       .eq('id', id);
 
     if (error) {
       toast({ title: 'Error', description: 'Failed to accept quote', variant: 'destructive' });
     } else {
       toast({ title: 'Quote accepted! 🎉', description: 'Thanks for your business!' });
+      setShowSignature(false);
       fetchQuote();
     }
     setAccepting(false);
+  };
+
+  const handleSignatureComplete = (signatureData: string) => {
+    handleAccept(signatureData);
   };
 
   if (loading) {
@@ -201,20 +214,49 @@ export default function PublicQuote() {
           </div>
         )}
 
-        {/* Accept Button */}
+        {/* Signature Pad or Accept Button */}
         {!isAccepted && !isDeclined && !isExpired && (
-          <Button 
-            onClick={handleAccept} 
-            className="w-full h-14 text-lg shadow-premium"
-            disabled={accepting}
-          >
-            {accepting ? (
-              <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+          <>
+            {showSignature ? (
+              <div className="space-y-4">
+                <h3 className="font-semibold text-center text-foreground">Sign to Accept</h3>
+                <p className="text-sm text-muted-foreground text-center">
+                  By signing below, you accept this quote and agree to the terms.
+                </p>
+                <SignaturePad onSave={handleSignatureComplete} />
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => setShowSignature(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
             ) : (
-              <Check className="w-5 h-5 mr-2" />
+              <div className="space-y-2">
+                <Button 
+                  onClick={() => setShowSignature(true)} 
+                  className="w-full h-14 text-lg shadow-premium"
+                  disabled={accepting}
+                >
+                  {accepting ? (
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  ) : (
+                    <Check className="w-5 h-5 mr-2" />
+                  )}
+                  Accept Quote with Signature
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => handleAccept()} 
+                  className="w-full"
+                  disabled={accepting}
+                >
+                  Accept Without Signature
+                </Button>
+              </div>
             )}
-            Accept Quote
-          </Button>
+          </>
         )}
 
         {isAccepted && (
@@ -224,6 +266,16 @@ export default function PublicQuote() {
             <p className="text-sm text-muted-foreground">
               Accepted on {format(new Date(quote.accepted_at), 'd MMMM yyyy')}
             </p>
+            {quote.signature_data && (
+              <div className="mt-4 pt-4 border-t border-success/30">
+                <p className="text-xs text-muted-foreground mb-2">Signature</p>
+                <img 
+                  src={quote.signature_data} 
+                  alt="Customer signature" 
+                  className="max-w-[200px] h-auto mx-auto bg-background rounded border p-2"
+                />
+              </div>
+            )}
           </div>
         )}
 

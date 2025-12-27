@@ -8,10 +8,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Timer } from '@/components/ui/timer';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { User, MapPin, Calendar, Receipt, Camera, DollarSign, Loader2, X, Image } from 'lucide-react';
+import { User, MapPin, Calendar, Receipt, Camera, DollarSign, Loader2, X, Image, Play, CheckCircle, TrendingUp, TrendingDown, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const JOB_STATUSES = ['quoted', 'approved', 'scheduled', 'in_progress', 'completed', 'invoiced'] as const;
@@ -27,6 +38,7 @@ export default function JobDetail() {
   const [savingMaterials, setSavingMaterials] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [quoteLineItems, setQuoteLineItems] = useState<any[]>([]);
 
   useEffect(() => {
     if (user && id) {
@@ -38,16 +50,25 @@ export default function JobDetail() {
   const fetchJob = async () => {
     const { data } = await supabase
       .from('jobs')
-      .select('*, clients(name, email, phone), quotes(quote_number, total)')
+      .select('*, clients(name, email, phone), quotes(quote_number, total, subtotal)')
       .eq('id', id)
       .single();
     setJob(data);
     setMaterialCost(data?.material_costs?.toString() || '');
+    
+    // If job has a quote, fetch quote line items for costing comparison
+    if (data?.quote_id) {
+      const { data: items } = await supabase
+        .from('quote_line_items')
+        .select('*')
+        .eq('quote_id', data.quote_id);
+      setQuoteLineItems(items || []);
+    }
+    
     setLoading(false);
   };
 
   const fetchPhotos = async () => {
-    // List photos from job-photos bucket
     const { data } = await supabase.storage
       .from('job-photos')
       .list(`${id}`, { limit: 20 });
@@ -133,6 +154,16 @@ export default function JobDetail() {
     setSavingMaterials(false);
   };
 
+  const handleDeleteJob = async () => {
+    const { error } = await supabase.from('jobs').delete().eq('id', id);
+    if (error) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Job deleted' });
+      navigate('/jobs');
+    }
+  };
+
   const createInvoice = async () => {
     if (!job) return;
     
@@ -164,6 +195,31 @@ export default function JobDetail() {
     }
   };
 
+  // Calculate job costing comparison
+  const calculateCosting = () => {
+    if (!job?.quotes) return null;
+    
+    const quotedTotal = Number(job.quotes.total) || 0;
+    const labourHours = job.actual_hours || 0;
+    const hourlyRate = 85; // Default hourly rate - could be fetched from profile
+    const labourCost = labourHours * hourlyRate;
+    const materialsCost = Number(job.material_costs) || 0;
+    const actualCost = labourCost + materialsCost;
+    const profit = quotedTotal - actualCost;
+    const profitMargin = quotedTotal > 0 ? (profit / quotedTotal) * 100 : 0;
+    
+    return {
+      quotedTotal,
+      labourCost,
+      materialsCost,
+      actualCost,
+      profit,
+      profitMargin,
+    };
+  };
+
+  const costing = calculateCosting();
+
   if (loading || !job) {
     return (
       <MobileLayout showNav={false}>
@@ -191,6 +247,28 @@ export default function JobDetail() {
               <User className="w-4 h-4" />
               {job.clients.name}
             </div>
+          )}
+        </div>
+
+        {/* Quick Action Buttons for Status Workflow */}
+        <div className="flex gap-2">
+          {job.status === 'approved' && (
+            <Button onClick={() => updateStatus('scheduled')} className="flex-1">
+              <Calendar className="w-4 h-4 mr-2" />
+              Schedule Job
+            </Button>
+          )}
+          {job.status === 'scheduled' && (
+            <Button onClick={() => updateStatus('in_progress')} className="flex-1">
+              <Play className="w-4 h-4 mr-2" />
+              Start Job
+            </Button>
+          )}
+          {job.status === 'in_progress' && (
+            <Button onClick={() => updateStatus('completed')} className="flex-1">
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Complete Job
+            </Button>
           )}
         </div>
 
@@ -249,6 +327,44 @@ export default function JobDetail() {
             </div>
           )}
         </div>
+
+        {/* Job Costing Comparison */}
+        {costing && (job.status === 'completed' || job.status === 'invoiced') && (
+          <div className="p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 space-y-3">
+            <h3 className="font-semibold flex items-center gap-2">
+              <DollarSign className="w-4 h-4" />
+              Job Costing
+            </h3>
+            
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Quoted Total</span>
+                <span className="font-medium">${costing.quotedTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Labour Cost ({job.actual_hours?.toFixed(1) || 0}h × $85)</span>
+                <span className="font-medium">-${costing.labourCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Material Costs</span>
+                <span className="font-medium">-${costing.materialsCost.toFixed(2)}</span>
+              </div>
+              <div className="border-t border-border pt-2 flex justify-between font-semibold">
+                <span className="flex items-center gap-1">
+                  {costing.profit >= 0 ? (
+                    <TrendingUp className="w-4 h-4 text-success" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-destructive" />
+                  )}
+                  Profit
+                </span>
+                <span className={costing.profit >= 0 ? 'text-success' : 'text-destructive'}>
+                  ${costing.profit.toFixed(2)} ({costing.profitMargin.toFixed(0)}%)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Material Costs */}
         <div className="p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 space-y-3">
@@ -345,6 +461,28 @@ export default function JobDetail() {
             Create Invoice
           </Button>
         )}
+
+        {/* Delete Button with Confirmation */}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="outline" className="w-full text-destructive hover:text-destructive">
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Job
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this job?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. All job data and photos will be permanently deleted.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteJob}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </MobileLayout>
   );
