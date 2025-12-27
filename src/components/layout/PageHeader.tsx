@@ -29,7 +29,7 @@ export function PageHeader({
 
   return (
     <header className={cn(
-      "header-premium animate-slide-down",
+      "header-premium animate-slide-down px-4 sm:px-6",
       className
     )}>
       <div className="flex items-center justify-between gap-4">
