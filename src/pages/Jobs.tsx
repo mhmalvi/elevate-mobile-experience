@@ -7,10 +7,14 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { SearchInput } from '@/components/ui/search-input';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { PremiumCard } from '@/components/ui/premium-card';
+import { Button } from '@/components/ui/button';
+import { JobCalendarView } from '@/components/jobs/JobCalendarView';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Briefcase, Calendar, MapPin } from 'lucide-react';
+import { Briefcase, Calendar, MapPin, List, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
+
+type ViewMode = 'list' | 'calendar';
 
 export default function Jobs() {
   const navigate = useNavigate();
@@ -18,6 +22,8 @@ export default function Jobs() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
   useEffect(() => {
     if (user) fetchJobs();
@@ -55,7 +61,29 @@ export default function Jobs() {
       />
       
       <div className="p-4 space-y-4 animate-fade-in">
-        {jobs.length > 0 && (
+        {/* View Toggle */}
+        <div className="flex gap-2">
+          <Button
+            variant={viewMode === 'list' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('list')}
+            className="flex-1"
+          >
+            <List className="w-4 h-4 mr-2" />
+            List
+          </Button>
+          <Button
+            variant={viewMode === 'calendar' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('calendar')}
+            className="flex-1"
+          >
+            <CalendarDays className="w-4 h-4 mr-2" />
+            Calendar
+          </Button>
+        </div>
+
+        {viewMode === 'list' && jobs.length > 0 && (
           <SearchInput
             value={search}
             onChange={setSearch}
@@ -65,6 +93,12 @@ export default function Jobs() {
 
         {loading ? (
           <ListSkeleton count={5} />
+        ) : viewMode === 'calendar' ? (
+          <JobCalendarView 
+            jobs={jobs}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+          />
         ) : filteredJobs.length === 0 && search ? (
           <EmptyState
             icon={<Briefcase className="w-8 h-8" />}

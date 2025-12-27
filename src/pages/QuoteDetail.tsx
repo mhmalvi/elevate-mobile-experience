@@ -5,10 +5,11 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SendNotificationButton } from '@/components/SendNotificationButton';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { User, FileText, Send, Receipt, Download, Share2, Loader2 } from 'lucide-react';
+import { User, FileText, Send, Receipt, Download, Share2, Loader2, Briefcase } from 'lucide-react';
 import { format } from 'date-fns';
 
 const QUOTE_STATUSES = ['draft', 'sent', 'viewed', 'accepted', 'declined'] as const;
@@ -239,11 +240,25 @@ export default function QuoteDetail() {
             <Share2 className="w-4 h-4 mr-2" />
             Copy Share Link
           </Button>
+
+          {/* Send to Client */}
+          {quote.clients && (
+            <SendNotificationButton
+              type="quote"
+              id={id!}
+              recipient={{
+                email: quote.clients.email,
+                phone: quote.clients.phone,
+                name: quote.clients.name,
+              }}
+              onSent={fetchQuote}
+            />
+          )}
           
           {quote.status === 'accepted' && (
             <>
               <Button onClick={convertToJob} className="w-full">
-                <FileText className="w-4 h-4 mr-2" />
+                <Briefcase className="w-4 h-4 mr-2" />
                 Convert to Job
               </Button>
               <Button onClick={convertToInvoice} variant="outline" className="w-full">
