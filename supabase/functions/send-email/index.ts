@@ -16,6 +16,59 @@ interface EmailRequest {
   message?: string;
 }
 
+// Tier limits for emails
+const EMAIL_LIMITS: Record<string, number> = {
+  free: 10,
+  solo: 50,
+  crew: -1, // unlimited
+  pro: -1,
+};
+
+// Check and increment usage for rate limiting
+async function checkAndIncrementUsage(
+  supabase: any,
+  userId: string,
+  tier: string
+): Promise<{ allowed: boolean; used: number; limit: number }> {
+  const monthYear = new Date().toISOString().slice(0, 7);
+  const limit = EMAIL_LIMITS[tier] ?? EMAIL_LIMITS.free;
+
+  if (limit === -1) {
+    return { allowed: true, used: 0, limit: -1 };
+  }
+
+  const { data: existing } = await supabase
+    .from('usage_tracking')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('month_year', monthYear)
+    .maybeSingle();
+
+  const currentUsage = existing?.emails_sent || 0;
+
+  if (currentUsage >= limit) {
+    return { allowed: false, used: currentUsage, limit };
+  }
+
+  if (existing) {
+    await supabase
+      .from('usage_tracking')
+      .update({ emails_sent: currentUsage + 1 })
+      .eq('user_id', userId)
+      .eq('month_year', monthYear);
+  } else {
+    await supabase
+      .from('usage_tracking')
+      .insert({
+        user_id: userId,
+        month_year: monthYear,
+        emails_sent: 1,
+      });
+  }
+
+  return { allowed: true, used: currentUsage + 1, limit };
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -108,6 +161,23 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Invalid document type" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check rate limits
+    const tier = profile?.subscription_tier || 'free';
+    const usageCheck = await checkAndIncrementUsage(supabase, documentData.user_id, tier);
+    
+    if (!usageCheck.allowed) {
+      console.log(`Email rate limit exceeded: ${usageCheck.used}/${usageCheck.limit}`);
+      return new Response(
+        JSON.stringify({ 
+          error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan for more.`,
+          limitReached: true,
+          used: usageCheck.used,
+          limit: usageCheck.limit,
+        }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

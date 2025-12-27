@@ -526,6 +526,48 @@ export type Database = {
           },
         ]
       }
+      usage_tracking: {
+        Row: {
+          clients_created: number | null
+          created_at: string
+          emails_sent: number | null
+          id: string
+          invoices_created: number | null
+          jobs_created: number | null
+          month_year: string
+          quotes_created: number | null
+          sms_sent: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          clients_created?: number | null
+          created_at?: string
+          emails_sent?: number | null
+          id?: string
+          invoices_created?: number | null
+          jobs_created?: number | null
+          month_year: string
+          quotes_created?: number | null
+          sms_sent?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          clients_created?: number | null
+          created_at?: string
+          emails_sent?: number | null
+          id?: string
+          invoices_created?: number | null
+          jobs_created?: number | null
+          month_year?: string
+          quotes_created?: number | null
+          sms_sent?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

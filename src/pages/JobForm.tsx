@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
+import { useUsageLimits } from '@/hooks/useUsageLimits';
+import { UsageLimitBanner, UsageLimitBlocker } from '@/components/UsageLimitBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, User } from 'lucide-react';
@@ -27,6 +29,7 @@ export default function JobForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { canCreate, used, limit, tier, isUnlimited, incrementUsage } = useUsageLimits('jobs');
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [form, setForm] = useState({
@@ -56,6 +59,12 @@ export default function JobForm() {
     e.preventDefault();
     if (!user) return;
 
+    // Check usage limits
+    if (!canCreate) {
+      toast({ title: 'Limit reached', description: 'Upgrade your plan to create more jobs', variant: 'destructive' });
+      return;
+    }
+
     setLoading(true);
     const { error } = await supabase.from('jobs').insert({
       user_id: user.id,
@@ -71,17 +80,30 @@ export default function JobForm() {
     if (error) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } else {
+      // Increment usage counter
+      await incrementUsage();
       toast({ title: 'Job created', description: 'Your job has been saved.' });
       navigate('/jobs');
     }
     setLoading(false);
   };
 
+  // Show blocker if limit reached
+  if (!canCreate) {
+    return (
+      <MobileLayout showNav={false}>
+        <PageHeader title="New Job" showBack backPath="/jobs" />
+        <UsageLimitBlocker usageType="jobs" tier={tier} />
+      </MobileLayout>
+    );
+  }
+
   return (
     <MobileLayout showNav={false}>
       <PageHeader title="New Job" showBack backPath="/jobs" />
       
-      <form onSubmit={handleSubmit} className="p-4 space-y-4 animate-fade-in">
+      <form onSubmit={handleSubmit} className="p-4 space-y-4 animate-fade-in scrollbar-hide">
+        <UsageLimitBanner usageType="jobs" used={used} limit={limit} tier={tier} isUnlimited={isUnlimited} />
         {/* Client Selection */}
         <div className="space-y-2">
           <Label>Client</Label>
