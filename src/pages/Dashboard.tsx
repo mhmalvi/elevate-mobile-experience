@@ -7,7 +7,8 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/integrations/supabase/client';
-import { DollarSign, FileText, Briefcase, Clock } from 'lucide-react';
+import { DollarSign, FileText, Briefcase, TrendingUp, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -29,21 +30,18 @@ export default function Dashboard() {
   }, [user]);
 
   const fetchStats = async () => {
-    // Fetch active jobs count
     const { count: jobsCount } = await supabase
       .from('jobs')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user?.id)
       .in('status', ['approved', 'scheduled', 'in_progress']);
 
-    // Fetch pending quotes count
     const { count: quotesCount } = await supabase
       .from('quotes')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', user?.id)
       .in('status', ['sent', 'viewed']);
 
-    // Fetch outstanding invoices
     const { data: invoices } = await supabase
       .from('invoices')
       .select('total, amount_paid')
@@ -51,7 +49,7 @@ export default function Dashboard() {
       .in('status', ['sent', 'viewed', 'partially_paid', 'overdue']);
 
     const outstanding = invoices?.reduce((sum, inv) => 
-      sum + (Number(inv.total) - Number(inv.amount_paid)), 0) || 0;
+      sum + (Number(inv.total) - Number(inv.amount_paid || 0)), 0) || 0;
 
     setStats({
       monthlyRevenue: 0,
@@ -83,54 +81,90 @@ export default function Dashboard() {
     <MobileLayout>
       <PageHeader 
         title={`${greeting()}, ${profile?.business_name || 'Mate'}!`}
-        subtitle="Here's your business overview"
+        subtitle="Here's how your business is tracking"
       />
       
-      <div className="p-4 space-y-6 animate-fade-in">
+      <div className="p-4 space-y-6">
+        {/* Quick Actions */}
+        <div className="flex gap-3 animate-fade-in">
+          <Button 
+            onClick={() => navigate('/quotes/new')}
+            className="flex-1 h-14"
+            variant="premium"
+          >
+            <Plus className="w-5 h-5" />
+            New Quote
+          </Button>
+          <Button 
+            onClick={() => navigate('/jobs/new')}
+            variant="outline"
+            className="flex-1 h-14"
+          >
+            <Briefcase className="w-5 h-5" />
+            New Job
+          </Button>
+        </div>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-3">
-          <StatCard
-            label="Outstanding"
-            value={`$${stats.outstandingInvoices.toLocaleString()}`}
-            icon={<DollarSign className="w-5 h-5" />}
-            variant="warning"
-          />
-          <StatCard
-            label="Active Jobs"
-            value={stats.activeJobs}
-            icon={<Briefcase className="w-5 h-5" />}
-            variant="primary"
-          />
-          <StatCard
-            label="Pending Quotes"
-            value={stats.pendingQuotes}
-            icon={<FileText className="w-5 h-5" />}
-            variant="default"
-          />
-          <StatCard
-            label="This Month"
-            value={`$${stats.monthlyRevenue.toLocaleString()}`}
-            icon={<Clock className="w-5 h-5" />}
-            variant="success"
-          />
+          <div className="animate-fade-in stagger-1">
+            <StatCard
+              label="Outstanding"
+              value={`$${stats.outstandingInvoices.toLocaleString()}`}
+              icon={<DollarSign className="w-5 h-5" />}
+              variant="warning"
+            />
+          </div>
+          <div className="animate-fade-in stagger-2">
+            <StatCard
+              label="Active Jobs"
+              value={stats.activeJobs}
+              icon={<Briefcase className="w-5 h-5" />}
+              variant="primary"
+            />
+          </div>
+          <div className="animate-fade-in stagger-3">
+            <StatCard
+              label="Pending Quotes"
+              value={stats.pendingQuotes}
+              icon={<FileText className="w-5 h-5" />}
+              variant="default"
+            />
+          </div>
+          <div className="animate-fade-in stagger-4">
+            <StatCard
+              label="This Month"
+              value={`$${stats.monthlyRevenue.toLocaleString()}`}
+              icon={<TrendingUp className="w-5 h-5" />}
+              variant="success"
+            />
+          </div>
         </div>
 
         {/* Recent Activity */}
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Recent Quotes</h2>
+        <div className="space-y-3 animate-fade-in stagger-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold">Recent Quotes</h2>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/quotes')}>
+              View all
+            </Button>
+          </div>
           {recentActivity.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No quotes yet. Create your first quote!
-            </p>
+            <div className="p-8 text-center rounded-xl bg-card border">
+              <FileText className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+              <p className="text-muted-foreground font-medium">No quotes yet, mate!</p>
+              <p className="text-sm text-muted-foreground mt-1">Create your first quote to get started</p>
+            </div>
           ) : (
             <div className="space-y-2">
-              {recentActivity.map((item) => (
+              {recentActivity.map((item, index) => (
                 <button
                   key={item.id}
                   onClick={() => navigate(`/quotes/${item.id}`)}
-                  className="w-full p-3 bg-card rounded-lg border flex items-center justify-between hover:bg-muted/50 transition-smooth"
+                  className="w-full p-4 bg-card rounded-xl border flex items-center justify-between card-interactive animate-fade-in"
+                  style={{ animationDelay: `${(index + 6) * 0.05}s` }}
                 >
-                  <span className="font-medium text-sm truncate">{item.title}</span>
+                  <span className="font-semibold text-sm truncate pr-3">{item.title}</span>
                   <StatusBadge status={item.status} />
                 </button>
               ))}
