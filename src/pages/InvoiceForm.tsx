@@ -15,7 +15,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Trash2, User } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
-import { addDays, format } from 'date-fns';
+import { addDays, addMonths, format } from 'date-fns';
+import { RecurringInvoiceToggle } from '@/components/invoices/RecurringInvoiceToggle';
 
 type Client = Tables<'clients'>;
 
@@ -42,6 +43,9 @@ export default function InvoiceForm() {
     description: '',
     due_date: format(addDays(new Date(), 14), 'yyyy-MM-dd'),
     notes: '',
+    is_recurring: false,
+    recurring_interval: 'monthly',
+    next_due_date: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
   });
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { id: crypto.randomUUID(), description: '', quantity: 1, unit: 'each', unit_price: 0, item_type: 'labour' }
@@ -137,6 +141,9 @@ export default function InvoiceForm() {
         gst,
         total,
         status: 'draft',
+        is_recurring: form.is_recurring,
+        recurring_interval: form.is_recurring ? form.recurring_interval : null,
+        next_due_date: form.is_recurring ? form.next_due_date : null,
       })
       .select()
       .single();
@@ -336,6 +343,16 @@ export default function InvoiceForm() {
             rows={2}
           />
         </div>
+
+        {/* Recurring Invoice Toggle */}
+        <RecurringInvoiceToggle
+          isRecurring={form.is_recurring}
+          recurringInterval={form.recurring_interval}
+          nextDueDate={form.next_due_date}
+          onToggle={(enabled) => setForm({ ...form, is_recurring: enabled })}
+          onIntervalChange={(interval) => setForm({ ...form, recurring_interval: interval })}
+          onNextDueDateChange={(date) => setForm({ ...form, next_due_date: date })}
+        />
 
         <Button type="submit" className="w-full" disabled={loading}>
           {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
