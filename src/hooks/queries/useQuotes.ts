@@ -47,6 +47,7 @@ export function useQuote(id: string) {
         .from('quotes')
         .select('*, clients(*), quote_line_items(*)')
         .eq('id', id)
+        .is('deleted_at', null)
         .single();
 
       if (error) throw error;

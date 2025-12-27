@@ -47,6 +47,7 @@ export function useInvoice(id: string) {
         .from('invoices')
         .select('*, clients(*), invoice_line_items(*)')
         .eq('id', id)
+        .is('deleted_at', null)
         .single();
 
       if (error) throw error;
