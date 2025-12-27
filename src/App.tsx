@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -125,6 +126,7 @@ function AppRoutes() {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <ReactQueryDevtools initialIsOpen={false} />
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
       <TooltipProvider>
         <Toaster />

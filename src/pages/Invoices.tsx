@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -15,54 +15,21 @@ import {
   PaginationNext,
   PaginationPrevious
 } from '@/components/ui/pagination';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 import { FAB } from '@/components/ui/fab';
-import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { Receipt, Calendar, AlertTriangle, RefreshCw } from 'lucide-react';
 import { format, isPast, parseISO } from 'date-fns';
-
-const PAGE_SIZE = 20;
+import { useInvoices } from '@/hooks/queries/useInvoices';
 
 export default function Invoices() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
 
-  const fetchInvoices = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
+  const { data, isLoading, error, refetch } = useInvoices(currentPage);
 
-    const from = (currentPage - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-
-    const { data, count } = await supabase
-      .from('invoices')
-      .select('*, clients(name)', { count: 'exact' })
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: false })
-      .range(from, to);
-
-    setInvoices(data || []);
-    setTotalCount(count || 0);
-    setLoading(false);
-  }, [user, currentPage]);
-
-  useEffect(() => {
-    if (user) fetchInvoices();
-  }, [user, fetchInvoices]);
-
-  useEffect(() => {
-    if (search) setCurrentPage(1);
-  }, [search]);
-
-  const { containerProps, RefreshIndicator } = usePullToRefresh({
-    onRefresh: fetchInvoices,
-  });
+  const invoices = data?.invoices || [];
+  const totalCount = data?.totalCount || 0;
+  const totalPages = data?.totalPages || 0;
 
   const filteredInvoices = useMemo(() => {
     if (!search.trim()) return invoices;
@@ -80,8 +47,26 @@ export default function Invoices() {
     return isPast(parseISO(invoice.due_date));
   };
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const showPagination = totalPages > 1 && !search;
+
+  if (error) {
+    return (
+      <MobileLayout>
+        <PageHeader title="Invoices" showSettings />
+        <div className="flex-1 flex items-center justify-center p-4">
+          <EmptyState
+            icon={<Receipt className="w-8 h-8" />}
+            title="Error loading invoices"
+            description="Failed to load invoices. Please try again."
+            action={{
+              label: "Retry",
+              onClick: () => refetch(),
+            }}
+          />
+        </div>
+      </MobileLayout>
+    );
+  }
 
   return (
     <MobileLayout>
@@ -91,8 +76,7 @@ export default function Invoices() {
         showSettings
       />
 
-      <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
-        <RefreshIndicator />
+      <div className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
         {invoices.length > 0 && (
           <SearchInput
             value={search}
@@ -101,7 +85,7 @@ export default function Invoices() {
           />
         )}
 
-        {loading ? (
+        {isLoading ? (
           <ListSkeleton count={5} />
         ) : filteredInvoices.length === 0 && search ? (
           <EmptyState
