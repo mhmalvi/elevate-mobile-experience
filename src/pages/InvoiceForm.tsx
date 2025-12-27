@@ -13,10 +13,9 @@ import { useUsageLimits } from '@/hooks/useUsageLimits';
 import { UsageLimitBanner, UsageLimitBlocker } from '@/components/UsageLimitBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Trash2, User, RefreshCw } from 'lucide-react';
+import { Loader2, Plus, Trash2, User } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import { addDays, format } from 'date-fns';
-import { Switch } from '@/components/ui/switch';
 
 type Client = Tables<'clients'>;
 
@@ -43,8 +42,6 @@ export default function InvoiceForm() {
     description: '',
     due_date: format(addDays(new Date(), 14), 'yyyy-MM-dd'),
     notes: '',
-    is_recurring: false,
-    recurring_interval: 'monthly' as 'weekly' | 'fortnightly' | 'monthly' | 'quarterly',
   });
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { id: crypto.randomUUID(), description: '', quantity: 1, unit: 'each', unit_price: 0, item_type: 'labour' }
@@ -125,19 +122,6 @@ export default function InvoiceForm() {
 
     setLoading(true);
     const { subtotal, gst, total } = calculateTotals();
-    
-    // Calculate next due date for recurring invoices
-    const getNextDueDate = () => {
-      if (!form.is_recurring) return null;
-      const dueDate = new Date(form.due_date);
-      switch (form.recurring_interval) {
-        case 'weekly': return addDays(dueDate, 7).toISOString();
-        case 'fortnightly': return addDays(dueDate, 14).toISOString();
-        case 'monthly': return addDays(dueDate, 30).toISOString();
-        case 'quarterly': return addDays(dueDate, 90).toISOString();
-        default: return null;
-      }
-    };
 
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
@@ -153,9 +137,6 @@ export default function InvoiceForm() {
         gst,
         total,
         status: 'draft',
-        is_recurring: form.is_recurring,
-        recurring_interval: form.is_recurring ? form.recurring_interval : null,
-        next_due_date: getNextDueDate(),
       })
       .select()
       .single();
@@ -250,47 +231,6 @@ export default function InvoiceForm() {
             value={form.due_date}
             onChange={(e) => setForm({ ...form, due_date: e.target.value })}
           />
-        </div>
-
-        {/* Recurring Invoice Toggle */}
-        <div className="p-4 bg-card rounded-xl border space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <RefreshCw className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-semibold">Recurring Invoice</p>
-                <p className="text-sm text-muted-foreground">Auto-generate on schedule</p>
-              </div>
-            </div>
-            <Switch
-              checked={form.is_recurring}
-              onCheckedChange={(checked) => setForm({ ...form, is_recurring: checked })}
-            />
-          </div>
-          
-          {form.is_recurring && (
-            <div className="space-y-2 pt-2 border-t">
-              <Label>Repeat Interval</Label>
-              <Select 
-                value={form.recurring_interval} 
-                onValueChange={(v: 'weekly' | 'fortnightly' | 'monthly' | 'quarterly') => 
-                  setForm({ ...form, recurring_interval: v })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="fortnightly">Fortnightly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="quarterly">Quarterly</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
         </div>
 
         {/* Line Items */}
