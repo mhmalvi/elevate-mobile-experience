@@ -5,10 +5,11 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { SendNotificationButton } from '@/components/SendNotificationButton';
+import { PDFPreviewModal } from '@/components/PDFPreviewModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2 } from 'lucide-react';
+import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2, Eye } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import {
   AlertDialog,
@@ -335,6 +336,11 @@ export default function InvoiceDetail() {
 
         {/* PDF & Share Actions */}
         <div className="flex gap-2">
+          <PDFPreviewModal 
+            type="invoice" 
+            id={id!} 
+            documentNumber={invoice.invoice_number} 
+          />
           <Button 
             variant="outline" 
             className="flex-1"
