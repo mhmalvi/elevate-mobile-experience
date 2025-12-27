@@ -31,32 +31,52 @@ export default function Dashboard() {
   }, [user]);
 
   const fetchStats = async () => {
-    const { count: jobsCount } = await supabase
-      .from('jobs')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user?.id)
-      .in('status', ['approved', 'scheduled', 'in_progress']);
+    // Get start of current month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    const { count: quotesCount } = await supabase
-      .from('quotes')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user?.id)
-      .in('status', ['sent', 'viewed']);
+    const [jobsRes, quotesRes, outstandingRes, paidRes] = await Promise.all([
+      // Active jobs count
+      supabase
+        .from('jobs')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user?.id)
+        .in('status', ['approved', 'scheduled', 'in_progress']),
+      
+      // Pending quotes count
+      supabase
+        .from('quotes')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user?.id)
+        .in('status', ['sent', 'viewed']),
+      
+      // Outstanding invoices (unpaid amounts)
+      supabase
+        .from('invoices')
+        .select('total, amount_paid')
+        .eq('user_id', user?.id)
+        .in('status', ['sent', 'viewed', 'partially_paid', 'overdue']),
+      
+      // Monthly revenue (paid invoices this month)
+      supabase
+        .from('invoices')
+        .select('amount_paid, paid_at')
+        .eq('user_id', user?.id)
+        .eq('status', 'paid')
+        .gte('paid_at', startOfMonth),
+    ]);
 
-    const { data: invoices } = await supabase
-      .from('invoices')
-      .select('total, amount_paid')
-      .eq('user_id', user?.id)
-      .in('status', ['sent', 'viewed', 'partially_paid', 'overdue']);
-
-    const outstanding = invoices?.reduce((sum, inv) => 
+    const outstanding = outstandingRes.data?.reduce((sum, inv) => 
       sum + (Number(inv.total) - Number(inv.amount_paid || 0)), 0) || 0;
 
+    const monthlyRevenue = paidRes.data?.reduce((sum, inv) => 
+      sum + Number(inv.amount_paid || 0), 0) || 0;
+
     setStats({
-      monthlyRevenue: 0,
+      monthlyRevenue,
       outstandingInvoices: outstanding,
-      activeJobs: jobsCount || 0,
-      pendingQuotes: quotesCount || 0,
+      activeJobs: jobsRes.count || 0,
+      pendingQuotes: quotesRes.count || 0,
     });
   };
 
