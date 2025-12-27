@@ -19,6 +19,7 @@ export function useQuotes(page: number = 1) {
         .from('quotes')
         .select('*, clients(name)', { count: 'exact' })
         .eq('user_id', user.id)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .range(from, to);
 
@@ -60,9 +61,10 @@ export function useDeleteQuote() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // Soft delete: set deleted_at timestamp
       const { error } = await supabase
         .from('quotes')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', id);
 
       if (error) throw error;
