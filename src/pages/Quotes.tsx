@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -10,6 +10,7 @@ import { PremiumCard } from '@/components/ui/premium-card';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { FAB } from '@/components/ui/fab';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { FileText, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -20,11 +21,8 @@ export default function Quotes() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    if (user) fetchQuotes();
-  }, [user]);
-
-  const fetchQuotes = async () => {
+  const fetchQuotes = useCallback(async () => {
+    if (!user) return;
     const { data } = await supabase
       .from('quotes')
       .select('*, clients(name)')
@@ -32,7 +30,15 @@ export default function Quotes() {
       .order('created_at', { ascending: false });
     setQuotes(data || []);
     setLoading(false);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) fetchQuotes();
+  }, [user, fetchQuotes]);
+
+  const { containerProps, RefreshIndicator } = usePullToRefresh({
+    onRefresh: fetchQuotes,
+  });
 
   const filteredQuotes = useMemo(() => {
     if (!search.trim()) return quotes;
@@ -51,7 +57,8 @@ export default function Quotes() {
         subtitle={`${quotes.length} total`}
       />
       
-      <div className="p-4 space-y-4 animate-fade-in">
+      <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+        <RefreshIndicator />
         {quotes.length > 0 && (
           <SearchInput
             value={search}
