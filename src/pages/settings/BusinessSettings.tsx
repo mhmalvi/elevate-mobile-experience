@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Constants } from '@/integrations/supabase/types';
 
 const tradeTypes = Constants.public.Enums.trade_type;
@@ -34,7 +35,9 @@ export default function BusinessSettings() {
     phone: '',
     email: '',
     address: '',
-    default_hourly_rate: 85
+    default_hourly_rate: 85,
+    license_number: '',
+    gst_registered: true,
   });
 
   useEffect(() => {
@@ -46,7 +49,9 @@ export default function BusinessSettings() {
         phone: profile.phone || '',
         email: profile.email || '',
         address: profile.address || '',
-        default_hourly_rate: profile.default_hourly_rate || 85
+        default_hourly_rate: profile.default_hourly_rate || 85,
+        license_number: (profile as any).license_number || '',
+        gst_registered: (profile as any).gst_registered ?? true,
       });
     }
   }, [profile]);
@@ -268,6 +273,31 @@ export default function BusinessSettings() {
             value={form.default_hourly_rate}
             onChange={(e) => setForm({ ...form, default_hourly_rate: parseFloat(e.target.value) || 0 })}
             placeholder="85"
+          />
+        </div>
+
+        {/* License Number */}
+        <div className="space-y-2">
+          <Label htmlFor="licenseNumber">License Number</Label>
+          <Input
+            id="licenseNumber"
+            value={form.license_number}
+            onChange={(e) => setForm({ ...form, license_number: e.target.value })}
+            placeholder="e.g., EC12345"
+          />
+          <p className="text-xs text-muted-foreground">Your trade license number for compliance display on documents</p>
+        </div>
+
+        {/* GST Registered */}
+        <div className="flex items-center justify-between p-4 bg-card rounded-xl border">
+          <div className="space-y-0.5">
+            <Label htmlFor="gstRegistered" className="font-medium">GST Registered</Label>
+            <p className="text-xs text-muted-foreground">Toggle off if not registered for GST</p>
+          </div>
+          <Switch
+            id="gstRegistered"
+            checked={form.gst_registered}
+            onCheckedChange={(checked) => setForm({ ...form, gst_registered: checked })}
           />
         </div>
 
