@@ -50,6 +50,7 @@ export function StatCard({
       "rounded-xl border p-4 transition-all duration-300",
       "hover:shadow-premium hover:-translate-y-0.5",
       "active:scale-[0.98]",
+      "min-h-[100px]",
       variantStyles[variant],
       className
     )}>
