@@ -9,8 +9,16 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
+import ClientForm from "./pages/ClientForm";
+import ClientDetail from "./pages/ClientDetail";
 import Quotes from "./pages/Quotes";
+import QuoteForm from "./pages/QuoteForm";
+import QuoteDetail from "./pages/QuoteDetail";
 import Jobs from "./pages/Jobs";
+import JobForm from "./pages/JobForm";
+import JobDetail from "./pages/JobDetail";
+import Invoices from "./pages/Invoices";
+import InvoiceForm from "./pages/InvoiceForm";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -51,8 +59,16 @@ function AppRoutes() {
       <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
+      <Route path="/clients/new" element={<ProtectedRoute><ClientForm /></ProtectedRoute>} />
+      <Route path="/clients/:id" element={<ProtectedRoute><ClientDetail /></ProtectedRoute>} />
       <Route path="/quotes" element={<ProtectedRoute><Quotes /></ProtectedRoute>} />
+      <Route path="/quotes/new" element={<ProtectedRoute><QuoteForm /></ProtectedRoute>} />
+      <Route path="/quotes/:id" element={<ProtectedRoute><QuoteDetail /></ProtectedRoute>} />
       <Route path="/jobs" element={<ProtectedRoute><Jobs /></ProtectedRoute>} />
+      <Route path="/jobs/new" element={<ProtectedRoute><JobForm /></ProtectedRoute>} />
+      <Route path="/jobs/:id" element={<ProtectedRoute><JobDetail /></ProtectedRoute>} />
+      <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
+      <Route path="/invoices/new" element={<ProtectedRoute><InvoiceForm /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
