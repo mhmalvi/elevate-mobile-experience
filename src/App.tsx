@@ -30,6 +30,8 @@ import Settings from "./pages/Settings";
 import ProfileSettings from "./pages/settings/ProfileSettings";
 import BusinessSettings from "./pages/settings/BusinessSettings";
 import PaymentSettings from "./pages/settings/PaymentSettings";
+import PublicQuote from "./pages/PublicQuote";
+import PublicInvoice from "./pages/PublicInvoice";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -82,6 +84,10 @@ function AppRoutes() {
           </div>
         ) : profile?.onboarding_completed ? <Navigate to="/dashboard" replace /> : <Onboarding />)
       } />
+      {/* Public routes */}
+      <Route path="/q/:id" element={<PublicQuote />} />
+      <Route path="/i/:id" element={<PublicInvoice />} />
+      {/* Protected routes */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
       <Route path="/clients/new" element={<ProtectedRoute><ClientForm /></ProtectedRoute>} />
