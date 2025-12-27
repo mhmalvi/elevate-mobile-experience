@@ -9,7 +9,7 @@ import { PDFPreviewModal } from '@/components/PDFPreviewModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2, Eye, RefreshCw, Bell } from 'lucide-react';
+import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2, Eye, Bell } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import {
   AlertDialog,
@@ -197,30 +197,13 @@ export default function InvoiceDetail() {
         <div className="p-4 bg-card rounded-xl border">
           <div className="flex items-start justify-between mb-3">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-xl font-bold">{invoice.title}</h2>
-                {invoice.is_recurring && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/15 text-primary">
-                    <RefreshCw className="w-3 h-3" />
-                    Recurring
-                  </span>
-                )}
-              </div>
+              <h2 className="text-xl font-bold mb-1">{invoice.title}</h2>
               {invoice.description && (
                 <p className="text-sm text-muted-foreground mt-1">{invoice.description}</p>
               )}
             </div>
             <StatusBadge status={invoice.status || 'draft'} />
           </div>
-
-          {invoice.is_recurring && invoice.next_due_date && (
-            <div className="mb-3 p-2 rounded-lg bg-primary/10 text-sm">
-              <span className="text-primary font-medium">Next invoice:</span>{' '}
-              <span className="text-muted-foreground">
-                {format(new Date(invoice.next_due_date), 'dd MMM yyyy')} ({invoice.recurring_interval})
-              </span>
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
