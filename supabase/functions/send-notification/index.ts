@@ -17,6 +17,59 @@ interface NotificationRequest {
   };
 }
 
+// Send SMS via Twilio API
+async function sendTwilioSms(to: string, body: string): Promise<{ success: boolean; error?: string }> {
+  const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID');
+  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN');
+  const fromNumber = Deno.env.get('TWILIO_PHONE_NUMBER');
+
+  if (!accountSid || !authToken || !fromNumber) {
+    console.log('Twilio not configured, falling back to SMS URL');
+    return { success: false, error: 'Twilio not configured' };
+  }
+
+  // Format Australian phone number
+  let formattedTo = to.replace(/\s+/g, '');
+  if (formattedTo.startsWith('0')) {
+    formattedTo = '+61' + formattedTo.slice(1);
+  } else if (!formattedTo.startsWith('+')) {
+    formattedTo = '+61' + formattedTo;
+  }
+
+  console.log(`Sending SMS via Twilio from ${fromNumber} to ${formattedTo}`);
+
+  try {
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          To: formattedTo,
+          From: fromNumber,
+          Body: body,
+        }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('Twilio error:', result);
+      return { success: false, error: result.message || 'Failed to send SMS' };
+    }
+
+    console.log('Twilio SMS sent successfully:', result.sid);
+    return { success: true };
+  } catch (error) {
+    console.error('Twilio request failed:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -111,11 +164,12 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     } else if (method === 'sms') {
-      // For SMS, we'll compose an sms: link for mobile devices
-      // In production, you'd integrate with Twilio, MessageBird, etc.
       const smsBody = type === 'quote'
         ? `G'day! Here's your quote from ${businessName} for $${total}. View it here: ${shareUrl}`
         : `G'day! Here's your invoice from ${businessName} for $${total}. View it here: ${shareUrl}`;
+
+      // Try to send via Twilio first
+      const twilioResult = await sendTwilioSms(recipient.phone!, smsBody);
 
       // Update sent_at timestamp
       if (type === 'quote') {
@@ -130,18 +184,33 @@ serve(async (req) => {
           .eq('id', id);
       }
 
-      console.log('SMS notification prepared successfully');
-
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          method: 'sms',
-          smsUrl: `sms:${recipient.phone}?body=${encodeURIComponent(smsBody)}`,
-          shareUrl,
-          message: 'SMS prepared - opening messages app'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (twilioResult.success) {
+        console.log('SMS sent successfully via Twilio');
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            method: 'sms',
+            directSend: true,
+            shareUrl,
+            message: 'SMS sent successfully!'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } else {
+        // Fallback to SMS URL for native app
+        console.log('Falling back to native SMS URL');
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            method: 'sms',
+            directSend: false,
+            smsUrl: `sms:${recipient.phone}?body=${encodeURIComponent(smsBody)}`,
+            shareUrl,
+            message: 'SMS prepared - opening messages app'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     throw new Error('Invalid notification method');
