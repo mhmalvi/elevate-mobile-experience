@@ -102,22 +102,25 @@ export function JobCalendarView({ jobs, selectedDate, onSelectDate }: JobCalenda
   return (
     <div className="space-y-4">
       {/* Premium Calendar */}
-      <div className="bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 p-4 shadow-premium">
+      <div className="bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 p-3 sm:p-4 shadow-premium overflow-hidden">
         <Calendar
           mode="single"
           selected={selectedDate}
           onSelect={onSelectDate}
           className="w-full"
           classNames={{
+            months: "flex flex-col w-full",
+            month: "space-y-3 w-full",
             day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
-            day: "h-12 w-12 p-0 font-normal aria-selected:opacity-100 relative hover:bg-accent/50 rounded-lg transition-colors",
-            cell: "text-center p-0",
-            head_cell: "text-muted-foreground font-medium text-xs w-12",
-            caption: "flex justify-center pt-1 relative items-center mb-4",
+            day: "h-10 w-10 sm:h-11 sm:w-11 p-0 font-normal aria-selected:opacity-100 relative hover:bg-accent/50 rounded-lg transition-colors flex items-center justify-center",
+            cell: "text-center p-0.5 flex-1 flex items-center justify-center",
+            head_cell: "text-muted-foreground font-medium text-xs flex-1 text-center py-2",
+            caption: "flex justify-center pt-1 relative items-center mb-3",
             caption_label: "text-base font-semibold",
             nav_button: "h-8 w-8 bg-transparent p-0 opacity-70 hover:opacity-100 hover:bg-accent rounded-lg transition-colors",
             table: "w-full border-collapse",
-            row: "flex w-full mt-1 gap-0.5",
+            row: "flex w-full justify-between",
+            head_row: "flex w-full justify-between",
           }}
           components={{
             DayContent: ({ date }) => {
@@ -134,8 +137,8 @@ export function JobCalendarView({ jobs, selectedDate, onSelectDate }: JobCalenda
                   </span>
                   {info && (
                     <div className={cn(
-                      "absolute bottom-0.5 flex items-center justify-center",
-                      "min-w-[18px] h-[18px] rounded-full text-[10px] font-bold",
+                      "absolute -bottom-0.5 flex items-center justify-center",
+                      "min-w-[16px] h-[16px] rounded-full text-[9px] font-bold",
                       isSelected 
                         ? "bg-primary-foreground/30 text-primary-foreground" 
                         : statusColors[info.status].bg,
