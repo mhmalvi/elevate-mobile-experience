@@ -21,6 +21,7 @@ export default function QuoteDetail() {
   const [quote, setQuote] = useState<any>(null);
   const [lineItems, setLineItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloadingPDF, setDownloadingPDF] = useState(false);
 
   useEffect(() => {
     if (user && id) {
@@ -195,6 +196,37 @@ export default function QuoteDetail() {
 
         {/* Actions */}
         <div className="space-y-2">
+          <Button 
+            variant="outline" 
+            className="w-full" 
+            disabled={downloadingPDF}
+            onClick={async () => {
+              setDownloadingPDF(true);
+              try {
+                const response = await supabase.functions.invoke('generate-pdf', {
+                  body: { type: 'quote', id }
+                });
+                
+                if (response.error) throw response.error;
+                
+                const printWindow = window.open('', '_blank');
+                if (printWindow) {
+                  printWindow.document.write(response.data.html);
+                  printWindow.document.close();
+                  printWindow.print();
+                }
+              } catch (error) {
+                console.error('PDF generation error:', error);
+                toast({ title: 'Error generating PDF', description: 'Please try again.', variant: 'destructive' });
+              } finally {
+                setDownloadingPDF(false);
+              }
+            }}
+          >
+            {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            Download PDF
+          </Button>
+          
           <Button 
             variant="outline" 
             className="w-full" 
