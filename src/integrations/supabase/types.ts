@@ -306,11 +306,15 @@ export type Database = {
           created_at: string
           default_hourly_rate: number | null
           email: string | null
+          gst_registered: boolean | null
           id: string
+          license_number: string | null
           logo_url: string | null
           onboarding_completed: boolean | null
           payment_terms: number | null
           phone: string | null
+          stripe_account_id: string | null
+          subscription_tier: string | null
           trade_type: Database["public"]["Enums"]["trade_type"] | null
           updated_at: string
           user_id: string
@@ -326,11 +330,15 @@ export type Database = {
           created_at?: string
           default_hourly_rate?: number | null
           email?: string | null
+          gst_registered?: boolean | null
           id?: string
+          license_number?: string | null
           logo_url?: string | null
           onboarding_completed?: boolean | null
           payment_terms?: number | null
           phone?: string | null
+          stripe_account_id?: string | null
+          subscription_tier?: string | null
           trade_type?: Database["public"]["Enums"]["trade_type"] | null
           updated_at?: string
           user_id: string
@@ -346,11 +354,15 @@ export type Database = {
           created_at?: string
           default_hourly_rate?: number | null
           email?: string | null
+          gst_registered?: boolean | null
           id?: string
+          license_number?: string | null
           logo_url?: string | null
           onboarding_completed?: boolean | null
           payment_terms?: number | null
           phone?: string | null
+          stripe_account_id?: string | null
+          subscription_tier?: string | null
           trade_type?: Database["public"]["Enums"]["trade_type"] | null
           updated_at?: string
           user_id?: string
