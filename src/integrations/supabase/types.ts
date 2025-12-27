@@ -116,10 +116,14 @@ export type Database = {
           gst: number | null
           id: string
           invoice_number: string
+          is_recurring: boolean | null
           job_id: string | null
+          next_due_date: string | null
           notes: string | null
           paid_at: string | null
+          parent_invoice_id: string | null
           quote_id: string | null
+          recurring_interval: string | null
           sent_at: string | null
           status: Database["public"]["Enums"]["invoice_status"] | null
           subtotal: number | null
@@ -139,10 +143,14 @@ export type Database = {
           gst?: number | null
           id?: string
           invoice_number: string
+          is_recurring?: boolean | null
           job_id?: string | null
+          next_due_date?: string | null
           notes?: string | null
           paid_at?: string | null
+          parent_invoice_id?: string | null
           quote_id?: string | null
+          recurring_interval?: string | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["invoice_status"] | null
           subtotal?: number | null
@@ -162,10 +170,14 @@ export type Database = {
           gst?: number | null
           id?: string
           invoice_number?: string
+          is_recurring?: boolean | null
           job_id?: string | null
+          next_due_date?: string | null
           notes?: string | null
           paid_at?: string | null
+          parent_invoice_id?: string | null
           quote_id?: string | null
+          recurring_interval?: string | null
           sent_at?: string | null
           status?: Database["public"]["Enums"]["invoice_status"] | null
           subtotal?: number | null
@@ -189,6 +201,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_parent_invoice_id_fkey"
+            columns: ["parent_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
           {
