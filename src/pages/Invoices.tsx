@@ -7,6 +7,14 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { SearchInput } from '@/components/ui/search-input';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { PremiumCard } from '@/components/ui/premium-card';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious
+} from '@/components/ui/pagination';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { FAB } from '@/components/ui/fab';
@@ -14,27 +22,43 @@ import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { Receipt, Calendar, AlertTriangle, RefreshCw } from 'lucide-react';
 import { format, isPast, parseISO } from 'date-fns';
 
+const PAGE_SIZE = 20;
+
 export default function Invoices() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchInvoices = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    setLoading(true);
+
+    const from = (currentPage - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, count } = await supabase
       .from('invoices')
-      .select('*, clients(name)')
+      .select('*, clients(name)', { count: 'exact' })
       .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
     setInvoices(data || []);
+    setTotalCount(count || 0);
     setLoading(false);
-  }, [user]);
+  }, [user, currentPage]);
 
   useEffect(() => {
     if (user) fetchInvoices();
   }, [user, fetchInvoices]);
+
+  useEffect(() => {
+    if (search) setCurrentPage(1);
+  }, [search]);
 
   const { containerProps, RefreshIndicator } = usePullToRefresh({
     onRefresh: fetchInvoices,
@@ -43,7 +67,7 @@ export default function Invoices() {
   const filteredInvoices = useMemo(() => {
     if (!search.trim()) return invoices;
     const term = search.toLowerCase();
-    return invoices.filter(invoice => 
+    return invoices.filter(invoice =>
       invoice.title?.toLowerCase().includes(term) ||
       invoice.clients?.name?.toLowerCase().includes(term) ||
       invoice.invoice_number?.toLowerCase().includes(term)
@@ -56,14 +80,17 @@ export default function Invoices() {
     return isPast(parseISO(invoice.due_date));
   };
 
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const showPagination = totalPages > 1 && !search;
+
   return (
     <MobileLayout>
-      <PageHeader 
+      <PageHeader
         title="Invoices"
-        subtitle={`${invoices.length} total`}
+        subtitle={`${totalCount} total`}
         showSettings
       />
-      
+
       <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
         <RefreshIndicator />
         {invoices.length > 0 && (
@@ -120,7 +147,7 @@ export default function Invoices() {
                     </div>
                     <StatusBadge status={overdue ? 'overdue' : invoice.status} />
                   </div>
-                  
+
                   <div className="mt-3 flex items-center justify-between">
                     <p className="text-lg font-bold text-foreground">
                       ${Number(invoice.total || 0).toLocaleString()}
@@ -136,6 +163,53 @@ export default function Invoices() {
               );
             })}
           </div>
+        )}
+
+        {showPagination && (
+          <Pagination className="mt-6">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+
+              {[...Array(totalPages)].map((_, i) => {
+                const page = i + 1;
+                const showPage = page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1);
+
+                if (!showPage) {
+                  if (page === 2 && currentPage > 3) {
+                    return <PaginationItem key={page}><span className="px-2">...</span></PaginationItem>;
+                  }
+                  if (page === totalPages - 1 && currentPage < totalPages - 2) {
+                    return <PaginationItem key={page}><span className="px-2">...</span></PaginationItem>;
+                  }
+                  return null;
+                }
+
+                return (
+                  <PaginationItem key={page}>
+                    <PaginationLink
+                      onClick={() => setCurrentPage(page)}
+                      isActive={currentPage === page}
+                      className="cursor-pointer"
+                    >
+                      {page}
+                    </PaginationLink>
+                  </PaginationItem>
+                );
+              })}
+
+              <PaginationItem>
+                <PaginationNext
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         )}
       </div>
 
