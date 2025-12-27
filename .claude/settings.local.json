@@ -5,7 +5,10 @@
       "Bash(wc:*)",
       "Bash(git -C /i/CYBERPUNK/TradieMate log --oneline)",
       "Bash(npm audit:*)",
-      "Bash(npm outdated:*)"
+      "Bash(npm outdated:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
