@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(wc:*)",
+      "Bash(git -C /i/CYBERPUNK/TradieMate log --oneline)",
+      "Bash(npm audit:*)",
+      "Bash(npm outdated:*)"
+    ]
+  }
+}
