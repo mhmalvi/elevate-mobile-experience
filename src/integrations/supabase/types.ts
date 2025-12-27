@@ -314,6 +314,9 @@ export type Database = {
           payment_terms: number | null
           phone: string | null
           stripe_account_id: string | null
+          subscription_expires_at: string | null
+          subscription_id: string | null
+          subscription_provider: string | null
           subscription_tier: string | null
           trade_type: Database["public"]["Enums"]["trade_type"] | null
           updated_at: string
@@ -338,6 +341,9 @@ export type Database = {
           payment_terms?: number | null
           phone?: string | null
           stripe_account_id?: string | null
+          subscription_expires_at?: string | null
+          subscription_id?: string | null
+          subscription_provider?: string | null
           subscription_tier?: string | null
           trade_type?: Database["public"]["Enums"]["trade_type"] | null
           updated_at?: string
@@ -362,6 +368,9 @@ export type Database = {
           payment_terms?: number | null
           phone?: string | null
           stripe_account_id?: string | null
+          subscription_expires_at?: string | null
+          subscription_id?: string | null
+          subscription_provider?: string | null
           subscription_tier?: string | null
           trade_type?: Database["public"]["Enums"]["trade_type"] | null
           updated_at?: string
