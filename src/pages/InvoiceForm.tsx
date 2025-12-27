@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
+import { useUsageLimits } from '@/hooks/useUsageLimits';
+import { UsageLimitBanner, UsageLimitBlocker } from '@/components/UsageLimitBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Trash2, User, RefreshCw } from 'lucide-react';
@@ -32,6 +34,7 @@ export default function InvoiceForm() {
   const { user } = useAuth();
   const { profile } = useProfile();
   const { toast } = useToast();
+  const { canCreate, used, limit, tier, isUnlimited, incrementUsage } = useUsageLimits('invoices');
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
   const [form, setForm] = useState({
@@ -108,6 +111,12 @@ export default function InvoiceForm() {
     e.preventDefault();
     if (!user) return;
 
+    // Check usage limits
+    if (!canCreate) {
+      toast({ title: 'Limit reached', description: 'Upgrade your plan to create more invoices', variant: 'destructive' });
+      return;
+    }
+
     const validItems = lineItems.filter(item => item.description && item.unit_price > 0);
     if (validItems.length === 0) {
       toast({ title: 'Error', description: 'Add at least one line item', variant: 'destructive' });
@@ -175,6 +184,8 @@ export default function InvoiceForm() {
     if (itemsError) {
       toast({ title: 'Error', description: itemsError.message, variant: 'destructive' });
     } else {
+      // Increment usage counter
+      await incrementUsage();
       toast({ title: 'Invoice created', description: 'Your invoice has been saved.' });
       navigate('/invoices');
     }
@@ -183,11 +194,22 @@ export default function InvoiceForm() {
 
   const { subtotal, gst, total } = calculateTotals();
 
+  // Show blocker if limit reached
+  if (!canCreate) {
+    return (
+      <MobileLayout showNav={false}>
+        <PageHeader title="New Invoice" showBack backPath="/invoices" />
+        <UsageLimitBlocker usageType="invoices" tier={tier} />
+      </MobileLayout>
+    );
+  }
+
   return (
     <MobileLayout showNav={false}>
       <PageHeader title="New Invoice" showBack backPath="/invoices" />
       
-      <form onSubmit={handleSubmit} className="p-4 space-y-6 animate-fade-in pb-32">
+      <form onSubmit={handleSubmit} className="p-4 space-y-6 animate-fade-in pb-32 scrollbar-hide">
+        <UsageLimitBanner usageType="invoices" used={used} limit={limit} tier={tier} isUnlimited={isUnlimited} />
         {/* Client Selection */}
         <div className="space-y-2">
           <Label>Client</Label>
