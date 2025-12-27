@@ -60,19 +60,30 @@ export async function initializePurchases(userId?: string): Promise<void> {
 
 /**
  * Get the RevenueCat API key based on platform
- * In production, these should be securely stored
+ * Configure these in your .env file:
+ * - VITE_REVENUECAT_ANDROID_API_KEY (for Android)
+ * - VITE_REVENUECAT_IOS_API_KEY (for iOS)
+ *
+ * Get your API keys from: https://app.revenuecat.com/settings/api-keys
  */
 function getRevenueCatApiKey(): string {
   const platform = getPlatform();
-  
-  // These are placeholder keys - replace with actual keys from RevenueCat dashboard
+
   // Android and iOS have separate API keys in RevenueCat
   if (platform === 'android') {
-    return 'goog_PLACEHOLDER_ANDROID_API_KEY';
+    const key = import.meta.env.VITE_REVENUECAT_ANDROID_API_KEY;
+    if (!key) {
+      throw new Error('VITE_REVENUECAT_ANDROID_API_KEY not configured. Please add it to your .env file.');
+    }
+    return key;
   } else if (platform === 'ios') {
-    return 'appl_PLACEHOLDER_IOS_API_KEY';
+    const key = import.meta.env.VITE_REVENUECAT_IOS_API_KEY;
+    if (!key) {
+      throw new Error('VITE_REVENUECAT_IOS_API_KEY not configured. Please add it to your .env file.');
+    }
+    return key;
   }
-  
+
   throw new Error('RevenueCat is only available on native platforms');
 }
 
