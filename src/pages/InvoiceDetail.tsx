@@ -9,7 +9,7 @@ import { PDFPreviewModal } from '@/components/PDFPreviewModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2, Eye, RefreshCw } from 'lucide-react';
+import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2, Eye, RefreshCw, Bell } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import {
   AlertDialog,
@@ -49,6 +49,7 @@ export default function InvoiceDetail() {
   const [loading, setLoading] = useState(true);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [sendingReminder, setSendingReminder] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -402,6 +403,44 @@ export default function InvoiceDetail() {
             Share
           </Button>
         </div>
+
+        {/* Payment Reminder - Only for overdue invoices */}
+        {isOverdue && client?.phone && (
+          <Button 
+            variant="outline" 
+            className="w-full text-warning border-warning/50 hover:bg-warning/10"
+            disabled={sendingReminder}
+            onClick={async () => {
+              setSendingReminder(true);
+              try {
+                const { data, error } = await supabase.functions.invoke('payment-reminder', {
+                  body: { invoice_id: id }
+                });
+                if (error) throw error;
+                toast({ 
+                  title: 'Reminder Sent!', 
+                  description: `Payment reminder SMS sent to ${client.name}` 
+                });
+              } catch (err) {
+                console.error('Reminder error:', err);
+                toast({ 
+                  title: 'Failed to send reminder', 
+                  description: 'Please try again.', 
+                  variant: 'destructive' 
+                });
+              } finally {
+                setSendingReminder(false);
+              }
+            }}
+          >
+            {sendingReminder ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Bell className="w-4 h-4 mr-2" />
+            )}
+            Send Payment Reminder
+          </Button>
+        )}
 
         {/* Status Actions - Secondary */}
         {invoice.status !== 'paid' && (

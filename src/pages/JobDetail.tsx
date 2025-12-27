@@ -302,7 +302,17 @@ export default function JobDetail() {
           {job.site_address && (
             <div className="flex items-start gap-3 text-sm">
               <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
-              <span className="text-foreground">{job.site_address}</span>
+              <div className="flex-1">
+                <span className="text-foreground">{job.site_address}</span>
+                <a 
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.site_address)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-xs text-primary hover:underline mt-1"
+                >
+                  Get Directions →
+                </a>
+              </div>
             </div>
           )}
           {job.scheduled_date && (
@@ -327,6 +337,21 @@ export default function JobDetail() {
             </div>
           )}
         </div>
+
+        {/* Map Embed */}
+        {job.site_address && (
+          <div className="rounded-xl overflow-hidden border border-border/50 shadow-sm">
+            <iframe
+              title="Job Location"
+              width="100%"
+              height="200"
+              style={{ border: 0 }}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(job.site_address)}`}
+            />
+          </div>
+        )}
 
         {/* Job Costing Comparison */}
         {costing && (job.status === 'completed' || job.status === 'invoiced') && (

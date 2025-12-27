@@ -1,17 +1,39 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { Receipt, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Receipt, Loader2, CreditCard, CheckCircle } from 'lucide-react';
 import { format, isPast, parseISO } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 export default function PublicInvoice() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const { toast } = useToast();
   const [invoice, setInvoice] = useState<any>(null);
   const [lineItems, setLineItems] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [processingPayment, setProcessingPayment] = useState(false);
+
+  // Check for payment status in URL
+  useEffect(() => {
+    const paymentStatus = searchParams.get('payment');
+    if (paymentStatus === 'success') {
+      toast({ 
+        title: 'Payment Successful!', 
+        description: 'Thank you for your payment. The invoice has been updated.'
+      });
+    } else if (paymentStatus === 'cancelled') {
+      toast({ 
+        title: 'Payment Cancelled', 
+        description: 'Your payment was cancelled. You can try again anytime.',
+        variant: 'destructive'
+      });
+    }
+  }, [searchParams, toast]);
 
   useEffect(() => {
     if (id) fetchInvoice();
@@ -87,6 +109,35 @@ export default function PublicInvoice() {
   const isPaid = invoice.status === 'paid';
   const isOverdue = invoice.due_date && isPast(parseISO(invoice.due_date)) && !isPaid;
   const balance = (invoice.total || 0) - (invoice.amount_paid || 0);
+
+  const handlePayNow = async () => {
+    setProcessingPayment(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-payment', {
+        body: {
+          invoice_id: id,
+          success_url: window.location.href,
+          cancel_url: window.location.href,
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No payment URL received');
+      }
+    } catch (err) {
+      console.error('Payment error:', err);
+      toast({
+        title: 'Payment Error',
+        description: 'Unable to start payment. Please try again or contact the business.',
+        variant: 'destructive'
+      });
+      setProcessingPayment(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -237,6 +288,28 @@ export default function PublicInvoice() {
           </div>
         )}
 
+        {/* Pay Now Button */}
+        {!isPaid && balance > 0 && (
+          <Button 
+            onClick={handlePayNow} 
+            disabled={processingPayment}
+            className="w-full h-14 text-lg shadow-premium"
+            size="lg"
+          >
+            {processingPayment ? (
+              <>
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <CreditCard className="w-5 h-5 mr-2" />
+                Pay Now - ${balance.toFixed(2)}
+              </>
+            )}
+          </Button>
+        )}
+
         {/* Notes */}
         {invoice.notes && (
           <div className="p-4 bg-muted/50 rounded-xl">
@@ -247,6 +320,7 @@ export default function PublicInvoice() {
         {/* Footer */}
         <div className="text-center pt-4 text-sm text-muted-foreground">
           {profile?.abn && <p>ABN: {profile.abn}</p>}
+          {(profile as any)?.license_number && <p>License: {(profile as any).license_number}</p>}
           <p className="mt-2">Thank you for your business!</p>
           <p className="mt-1 text-xs">Powered by TradieMate</p>
         </div>
