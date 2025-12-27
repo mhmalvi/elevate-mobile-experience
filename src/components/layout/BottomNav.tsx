@@ -3,17 +3,18 @@ import {
   LayoutDashboard, 
   Briefcase, 
   FileText, 
-  Settings, 
+  Users, 
   Receipt
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// Order: Quotes | Jobs | Home (center) | Invoices | Clients
 const navItems = [
-  { path: '/dashboard', label: 'Home', icon: LayoutDashboard },
   { path: '/quotes', label: 'Quotes', icon: FileText },
   { path: '/jobs', label: 'Jobs', icon: Briefcase },
+  { path: '/dashboard', label: 'Home', icon: LayoutDashboard },
   { path: '/invoices', label: 'Invoices', icon: Receipt },
-  { path: '/settings', label: 'Settings', icon: Settings },
+  { path: '/clients', label: 'Clients', icon: Users },
 ];
 
 export function BottomNav() {
