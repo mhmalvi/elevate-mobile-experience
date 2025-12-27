@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Wrench } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Loader2, Wrench, ArrowLeft } from 'lucide-react';
+
+type AuthMode = 'login' | 'signup' | 'forgot-password';
 
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,7 +23,29 @@ export default function Auth() {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = isLogin 
+    if (mode === 'forgot-password') {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth`,
+      });
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Check ya inbox, mate! 📬",
+          description: "Password reset link sent to your email.",
+        });
+        setMode('login');
+      }
+      setLoading(false);
+      return;
+    }
+
+    const { error } = mode === 'login'
       ? await signIn(email, password)
       : await signUp(email, password);
 
@@ -31,7 +56,7 @@ export default function Auth() {
         variant: "destructive",
       });
     } else {
-      if (!isLogin) {
+      if (mode === 'signup') {
         toast({
           title: "Welcome to TradieMate!",
           description: "Your account has been created.",
@@ -56,6 +81,26 @@ export default function Auth() {
           </p>
         </div>
 
+        {/* Forgot Password Mode */}
+        {mode === 'forgot-password' && (
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => setMode('login')}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to sign in
+            </button>
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold">Reset your password</h2>
+              <p className="text-sm text-muted-foreground">
+                Enter your email and we'll send you a reset link.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -69,34 +114,53 @@ export default function Auth() {
               required
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
-          </div>
+          
+          {mode !== 'forgot-password' && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                {mode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => setMode('forgot-password')}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+            </div>
+          )}
+          
           <Button type="submit" className="w-full" disabled={loading}>
             {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            {isLogin ? 'Sign In' : 'Create Account'}
+            {mode === 'login' && 'Sign In'}
+            {mode === 'signup' && 'Create Account'}
+            {mode === 'forgot-password' && 'Send Reset Link'}
           </Button>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
-          {isLogin ? "Don't have an account?" : "Already have an account?"}{' '}
-          <button
-            type="button"
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-primary font-medium hover:underline"
-          >
-            {isLogin ? 'Sign up' : 'Sign in'}
-          </button>
-        </p>
+        {mode !== 'forgot-password' && (
+          <p className="text-center text-sm text-muted-foreground">
+            {mode === 'login' ? "Don't have an account?" : "Already have an account?"}{' '}
+            <button
+              type="button"
+              onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+              className="text-primary font-medium hover:underline"
+            >
+              {mode === 'login' ? 'Sign up' : 'Sign in'}
+            </button>
+          </p>
+        )}
       </div>
     </div>
   );

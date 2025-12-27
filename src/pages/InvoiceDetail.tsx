@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { Phone, Mail, MapPin, Calendar, DollarSign, FileText } from 'lucide-react';
+import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2 } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import {
   AlertDialog,
@@ -46,6 +46,7 @@ export default function InvoiceDetail() {
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [downloadingPDF, setDownloadingPDF] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -313,6 +314,53 @@ export default function InvoiceDetail() {
             </Button>
           </div>
         )}
+
+        {/* Share & Download Actions */}
+        <div className="space-y-2">
+          <Button 
+            variant="outline" 
+            className="w-full"
+            disabled={downloadingPDF}
+            onClick={async () => {
+              setDownloadingPDF(true);
+              try {
+                const response = await supabase.functions.invoke('generate-pdf', {
+                  body: { type: 'invoice', id }
+                });
+                
+                if (response.error) throw response.error;
+                
+                const printWindow = window.open('', '_blank');
+                if (printWindow) {
+                  printWindow.document.write(response.data.html);
+                  printWindow.document.close();
+                  printWindow.print();
+                }
+              } catch (error) {
+                console.error('PDF generation error:', error);
+                toast({ title: 'Error generating PDF', description: 'Please try again.', variant: 'destructive' });
+              } finally {
+                setDownloadingPDF(false);
+              }
+            }}
+          >
+            {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            Download PDF
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            className="w-full"
+            onClick={() => {
+              const url = `${window.location.origin}/i/${id}`;
+              navigator.clipboard.writeText(url);
+              toast({ title: 'Link copied!', description: 'Share this link with your client.' });
+            }}
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            Copy Share Link
+          </Button>
+        </div>
 
         {/* Status Actions */}
         {invoice.status !== 'paid' && (
