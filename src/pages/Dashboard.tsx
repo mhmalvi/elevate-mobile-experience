@@ -4,6 +4,7 @@ import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StatCard } from '@/components/ui/stat-card';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { FAB } from '@/components/ui/fab';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { supabase } from '@/integrations/supabase/client';
@@ -172,6 +173,9 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Floating Action Button */}
+      <FAB onClick={() => navigate('/quotes/new')} label="New Quote" />
     </MobileLayout>
   );
 }
