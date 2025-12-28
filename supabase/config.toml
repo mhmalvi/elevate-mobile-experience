@@ -32,3 +32,12 @@ verify_jwt = false
 
 [functions.revenuecat-webhook]
 verify_jwt = false
+
+[functions.generate-recurring-invoices]
+verify_jwt = false  # Cron job - uses service role key
+
+[functions.send-team-invitation]
+verify_jwt = true
+
+[functions.accept-team-invitation]
+verify_jwt = true

@@ -58,37 +58,86 @@ export default function Onboarding() {
   };
 
   const handleComplete = async () => {
-    if (!user) return;
-    
+    if (!user) {
+      console.error('No user found');
+      return;
+    }
+
+    console.log('Starting onboarding completion for user:', user.id);
+    console.log('Form data:', formData);
+
     setLoading(true);
     try {
-      const { error } = await supabase
+      // Check if profile exists (using maybeSingle to handle 0 or 1 rows)
+      const { data: existingProfile, error: fetchError } = await supabase
         .from('profiles')
-        .update({
-          trade_type: formData.trade_type || null,
-          business_name: formData.business_name || null,
-          abn: formData.abn || null,
-          phone: formData.phone || null,
-          onboarding_completed: true,
-        })
-        .eq('user_id', user.id);
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error('Error fetching profile:', fetchError);
+        throw new Error(`Profile fetch failed: ${fetchError.message}`);
+      }
+
+      console.log('Existing profile:', existingProfile);
+
+      const profileData = {
+        trade_type: formData.trade_type || null,
+        business_name: formData.business_name || null,
+        abn: formData.abn || null,
+        phone: formData.phone || null,
+        onboarding_completed: true,
+      };
+
+      let result;
+
+      if (existingProfile) {
+        // Update existing profile
+        console.log('Updating existing profile...');
+        result = await supabase
+          .from('profiles')
+          .update(profileData)
+          .eq('user_id', user.id)
+          .select();
+      } else {
+        // Create new profile
+        console.log('Creating new profile...');
+        result = await supabase
+          .from('profiles')
+          .insert({
+            user_id: user.id,
+            email: user.email,
+            ...profileData,
+          })
+          .select();
+      }
+
+      const { data, error } = result;
 
       if (error) {
-        console.error('Onboarding error:', error);
+        console.error('Profile save error:', error);
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
+        console.error('Error details:', error.details);
         throw error;
       }
+
+      console.log('Profile saved successfully:', data);
 
       toast({
         title: "You're all set, mate! 🎉",
         description: "Let's get you some quotes sorted.",
       });
-      
+
       navigate('/dashboard');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Onboarding error:', error);
+      console.error('Error message:', error?.message);
+      console.error('Error details:', JSON.stringify(error, null, 2));
       toast({
         title: "Something went wrong",
-        description: "No worries, give it another go.",
+        description: error?.message || "No worries, give it another go.",
         variant: "destructive",
       });
     } finally {
@@ -96,26 +145,6 @@ export default function Onboarding() {
     }
   };
 
-  const handleSkip = async () => {
-    if (!user) return;
-    
-    setLoading(true);
-    try {
-      await supabase
-        .from('profiles')
-        .update({
-          onboarding_completed: true,
-        })
-        .eq('user_id', user.id);
-      
-      navigate('/dashboard');
-    } catch (error) {
-      console.error('Skip onboarding error:', error);
-      navigate('/dashboard');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -293,17 +322,6 @@ export default function Onboarding() {
               </Button>
             </div>
           </div>
-        )}
-
-        {/* Skip link */}
-        {step > 1 && (
-          <button
-            onClick={handleSkip}
-            className="mt-4 text-sm text-muted-foreground hover:text-foreground transition-colors text-center"
-            disabled={loading}
-          >
-            Skip for now
-          </button>
         )}
       </div>
     </div>

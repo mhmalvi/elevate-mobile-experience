@@ -40,10 +40,13 @@ const InvoiceEdit = lazy(() => import("./pages/InvoiceEdit"));
 const Settings = lazy(() => import("./pages/Settings"));
 const ProfileSettings = lazy(() => import("./pages/settings/ProfileSettings"));
 const BusinessSettings = lazy(() => import("./pages/settings/BusinessSettings"));
+const BrandingSettings = lazy(() => import("./pages/settings/BrandingSettings"));
+const TeamSettings = lazy(() => import("./pages/settings/TeamSettings"));
 const PaymentSettings = lazy(() => import("./pages/settings/PaymentSettings"));
 const SubscriptionSettings = lazy(() => import("./pages/settings/SubscriptionSettings"));
 const PublicQuote = lazy(() => import("./pages/PublicQuote"));
 const PublicInvoice = lazy(() => import("./pages/PublicInvoice"));
+const JoinTeam = lazy(() => import("./pages/JoinTeam"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -96,6 +99,7 @@ function AppRoutes() {
         {/* Public routes */}
         <Route path="/q/:id" element={<PublicQuote />} />
         <Route path="/i/:id" element={<PublicInvoice />} />
+        <Route path="/join-team" element={<JoinTeam />} />
         {/* Protected routes */}
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
@@ -117,6 +121,8 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/settings/profile" element={<ProtectedRoute><ProfileSettings /></ProtectedRoute>} />
       <Route path="/settings/business" element={<ProtectedRoute><BusinessSettings /></ProtectedRoute>} />
+      <Route path="/settings/branding" element={<ProtectedRoute><BrandingSettings /></ProtectedRoute>} />
+      <Route path="/settings/team" element={<ProtectedRoute><TeamSettings /></ProtectedRoute>} />
       <Route path="/settings/payment" element={<ProtectedRoute><PaymentSettings /></ProtectedRoute>} />
       <Route path="/settings/subscription" element={<ProtectedRoute><SubscriptionSettings /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />

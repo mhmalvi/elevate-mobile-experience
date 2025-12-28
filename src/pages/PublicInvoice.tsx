@@ -14,6 +14,7 @@ export default function PublicInvoice() {
   const [invoice, setInvoice] = useState<any>(null);
   const [lineItems, setLineItems] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
+  const [branding, setBranding] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
@@ -79,6 +80,14 @@ export default function PublicInvoice() {
         .single();
       setProfile(profileData);
 
+      // Fetch branding settings
+      const { data: brandingData } = await supabase
+        .from('branding_settings')
+        .select('*')
+        .eq('user_id', invoiceData.user_id)
+        .maybeSingle();
+      setBranding(brandingData);
+
       setLoading(false);
     } catch (err) {
       setError('Failed to load invoice');
@@ -109,6 +118,11 @@ export default function PublicInvoice() {
   const isPaid = invoice.status === 'paid';
   const isOverdue = invoice.due_date && isPast(parseISO(invoice.due_date)) && !isPaid;
   const balance = (invoice.total || 0) - (invoice.amount_paid || 0);
+
+  // Extract branding values with fallbacks
+  const primaryColor = branding?.primary_color || '#3b82f6';
+  const logoUrl = branding?.logo_url || profile?.logo_url;
+  const showLogo = branding?.show_logo_on_documents ?? true;
 
   const handlePayNow = async () => {
     setProcessingPayment(true);
@@ -142,16 +156,28 @@ export default function PublicInvoice() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className={`border-b border-border/50 p-6 ${isOverdue ? 'bg-warning/10' : 'bg-gradient-to-br from-primary/10 to-primary/5'}`}>
+      <div
+        className="border-b border-border/50 p-6"
+        style={{ background: isOverdue ? 'rgba(251, 191, 36, 0.1)' : `linear-gradient(to bottom right, ${primaryColor}15, ${primaryColor}08)` }}
+      >
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">
-                {profile?.business_name || 'Tax Invoice'}
-              </h1>
-              {profile?.phone && (
-                <p className="text-sm text-muted-foreground">{profile.phone}</p>
+            <div className="flex items-center gap-4">
+              {showLogo && logoUrl && (
+                <img
+                  src={logoUrl}
+                  alt="Business logo"
+                  className="max-w-[120px] max-h-[60px] object-contain"
+                />
               )}
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">
+                  {profile?.business_name || 'Tax Invoice'}
+                </h1>
+                {profile?.phone && (
+                  <p className="text-sm text-muted-foreground">{profile.phone}</p>
+                )}
+              </div>
             </div>
             <StatusBadge status={isOverdue ? 'overdue' : invoice.status} />
           </div>
@@ -222,7 +248,7 @@ export default function PublicInvoice() {
           </div>
           <div className="flex justify-between font-bold text-xl pt-2 border-t border-border">
             <span className="text-foreground">Total</span>
-            <span className="text-foreground">${Number(invoice.total || 0).toFixed(2)}</span>
+            <span style={{ color: primaryColor }}>${Number(invoice.total || 0).toFixed(2)}</span>
           </div>
           {(invoice.amount_paid || 0) > 0 && (
             <>
@@ -321,8 +347,10 @@ export default function PublicInvoice() {
         <div className="text-center pt-4 text-sm text-muted-foreground">
           {profile?.abn && <p>ABN: {profile.abn}</p>}
           {(profile as any)?.license_number && <p>License: {(profile as any).license_number}</p>}
-          <p className="mt-2">Thank you for your business!</p>
-          <p className="mt-1 text-xs">Powered by TradieMate</p>
+          {branding?.document_footer_text && (
+            <p className="mt-2">{branding.document_footer_text}</p>
+          )}
+          <p className="mt-2 text-xs">Powered by TradieMate</p>
         </div>
       </div>
     </div>
