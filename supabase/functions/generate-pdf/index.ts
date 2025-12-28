@@ -65,6 +65,14 @@ serve(async (req) => {
         .single();
       profile = profileData;
 
+      // Fetch branding settings
+      const { data: brandingData } = await supabase
+        .from("branding_settings")
+        .select("*")
+        .eq("user_id", quote.user_id)
+        .single();
+      const branding = brandingData;
+
     } else if (type === "invoice") {
       // Fetch invoice with client
       const { data: invoice, error: invoiceError } = await supabase
@@ -99,6 +107,14 @@ serve(async (req) => {
         .eq("user_id", invoice.user_id)
         .single();
       profile = profileData;
+
+      // Fetch branding settings
+      const { data: brandingData } = await supabase
+        .from("branding_settings")
+        .select("*")
+        .eq("user_id", invoice.user_id)
+        .single();
+      const branding = brandingData;
     }
 
     // Generate HTML for PDF
@@ -108,6 +124,7 @@ serve(async (req) => {
       lineItems,
       profile,
       client,
+      branding,
     });
 
     console.log("PDF HTML generated successfully");
@@ -132,8 +149,21 @@ function generatePDFHTML(data: {
   lineItems: any[];
   profile: any;
   client: any;
+  branding?: any;
 }): string {
-  const { type, document, lineItems, profile, client } = data;
+  const { type, document, lineItems, profile, client, branding } = data;
+
+  // Extract branding values with fallbacks
+  const primaryColor = branding?.primary_color || '#3b82f6';
+  const secondaryColor = branding?.secondary_color || '#1d4ed8';
+  const textColor = branding?.text_color || '#1a1a1a';
+  const logoUrl = branding?.logo_url || profile?.logo_url;
+  const logoPosition = branding?.logo_position || 'left';
+  const showLogo = branding?.show_logo_on_documents ?? true;
+  const headerStyle = branding?.document_header_style || 'gradient';
+  const footerText = branding?.document_footer_text || 'Thank you for your business!';
+  const defaultTerms = type === 'quote' ? branding?.default_quote_terms : branding?.default_invoice_terms;
+  const termsText = document.terms || defaultTerms || '';
   const isQuote = type === "quote";
   const docNumber = isQuote ? document.quote_number : document.invoice_number;
   const docTitle = isQuote ? "QUOTE" : "TAX INVOICE";
@@ -148,6 +178,14 @@ function generatePDFHTML(data: {
     });
   };
 
+  // Determine header background based on style
+  const headerBg = headerStyle === 'gradient'
+    ? `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
+    : headerStyle === 'solid'
+    ? primaryColor
+    : '#ffffff';
+  const headerTextColor = headerStyle !== 'minimal' ? '#ffffff' : textColor;
+
   return `
 <!DOCTYPE html>
 <html>
@@ -159,7 +197,7 @@ function generatePDFHTML(data: {
       font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
       font-size: 12px;
       line-height: 1.5;
-      color: #1a1a1a;
+      color: ${textColor};
       padding: 40px;
       background: #fff;
     }
@@ -168,12 +206,22 @@ function generatePDFHTML(data: {
       justify-content: space-between;
       margin-bottom: 40px;
       padding-bottom: 20px;
-      border-bottom: 2px solid #3b82f6;
+      ${headerStyle !== 'minimal' ? `background: ${headerBg}; padding: 20px; border-radius: 8px;` : `border-bottom: 2px solid ${primaryColor};`}
+    }
+    .logo-section {
+      ${logoPosition === 'center' ? 'margin: 0 auto; text-align: center;' : ''}
+      ${logoPosition === 'right' ? 'margin-left: auto;' : ''}
+    }
+    .logo-section img {
+      max-width: 180px;
+      max-height: 80px;
+      object-fit: contain;
+      margin-bottom: 12px;
     }
     .logo-section h1 {
       font-size: 24px;
       font-weight: 700;
-      color: #3b82f6;
+      color: ${headerTextColor};
       margin-bottom: 4px;
     }
     .logo-section p {
@@ -322,6 +370,7 @@ function generatePDFHTML(data: {
 <body>
   <div class="header">
     <div class="logo-section">
+      ${showLogo && logoUrl ? `<img src="${logoUrl}" alt="Logo" />` : ''}
       <h1>${profile?.business_name || "TradieMate"}</h1>
       <p>${profile?.phone || ""}</p>
       <p>${profile?.email || ""}</p>
@@ -421,9 +470,17 @@ function generatePDFHTML(data: {
     </div>
   ` : ""}
 
+  ${termsText ? `
+  <div style="margin-top: 30px; padding: 16px; background: #f9fafb; border-left: 3px solid ${primaryColor}; border-radius: 4px;">
+    <h4 style="margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: ${textColor};">Terms & Conditions</h4>
+    <p style="margin: 0; font-size: 11px; line-height: 1.6; color: #6b7280; white-space: pre-line;">${termsText}</p>
+  </div>
+  ` : ''}
+
   <div class="footer">
     ${profile?.abn ? `<p class="abn">ABN: ${profile.abn}</p>` : ""}
-    <p>Thank you for your business!</p>
+    ${profile?.license_number ? `<p>License: ${profile.license_number}</p>` : ""}
+    <p>${footerText}</p>
   </div>
 </body>
 </html>
