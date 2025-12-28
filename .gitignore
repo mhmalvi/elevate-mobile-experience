@@ -27,3 +27,6 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Configuration values (contains API keys)
+CONFIG_VALUES.md

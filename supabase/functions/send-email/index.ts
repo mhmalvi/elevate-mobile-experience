@@ -104,6 +104,7 @@ serve(async (req) => {
     // Fetch document data
     let documentData: any;
     let profile: any;
+    let branding: any;
     let documentNumber: string;
     let documentTitle: string;
 
@@ -132,6 +133,14 @@ serve(async (req) => {
         .single();
       profile = profileData;
 
+      // Fetch branding settings
+      const { data: brandingData } = await supabase
+        .from("branding_settings")
+        .select("*")
+        .eq("user_id", data.user_id)
+        .single();
+      branding = brandingData;
+
     } else if (type === "invoice") {
       const { data, error } = await supabase
         .from("invoices")
@@ -156,6 +165,14 @@ serve(async (req) => {
         .eq("user_id", data.user_id)
         .single();
       profile = profileData;
+
+      // Fetch branding settings
+      const { data: brandingData } = await supabase
+        .from("branding_settings")
+        .select("*")
+        .eq("user_id", data.user_id)
+        .single();
+      branding = brandingData;
 
     } else {
       return new Response(
@@ -183,9 +200,17 @@ serve(async (req) => {
 
     const businessName = profile?.business_name || "TradieMate";
     const viewUrl = `${supabaseUrl.replace('.supabase.co', '.lovable.app')}/${type === 'quote' ? 'q' : 'i'}/${id}`;
-    
+
+    // Extract branding values with fallbacks
+    const primaryColor = branding?.primary_color || '#3b82f6';
+    const secondaryColor = branding?.secondary_color || '#1d4ed8';
+    const emailHeaderColor = branding?.email_header_color || primaryColor;
+    const logoUrl = branding?.logo_url || profile?.logo_url;
+    const emailSignature = branding?.email_signature;
+    const footerText = branding?.email_footer_text || 'Thank you for your business!';
+
     const emailSubject = subject || `${type === 'quote' ? 'Quote' : 'Invoice'} ${documentNumber} from ${businessName}`;
-    
+
     const emailHtml = `
 <!DOCTYPE html>
 <html>
@@ -198,10 +223,11 @@ serve(async (req) => {
     <tr>
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-          
+
           <!-- Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 32px; text-align: center;">
+            <td style="background: ${emailHeaderColor}; padding: 32px; text-align: center;">
+              ${logoUrl ? `<img src="${logoUrl}" alt="${businessName}" style="max-width: 180px; max-height: 60px; margin-bottom: 12px;" />` : ''}
               <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">${businessName}</h1>
             </td>
           </tr>
@@ -240,7 +266,7 @@ serve(async (req) => {
                           <p style="margin: 0 0 4px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
                             Total
                           </p>
-                          <p style="margin: 0; color: #3b82f6; font-size: 24px; font-weight: 700;">
+                          <p style="margin: 0; color: ${primaryColor}; font-size: 24px; font-weight: 700;">
                             $${(documentData.total || 0).toFixed(2)}
                           </p>
                         </td>
@@ -249,18 +275,28 @@ serve(async (req) => {
                   </td>
                 </tr>
               </table>
-              
+
               <!-- CTA Button -->
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center" style="padding: 16px 0;">
-                    <a href="${viewUrl}" style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-size: 16px; font-weight: 600;">
+                    <a href="${viewUrl}" style="display: inline-block; background: ${primaryColor}; color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-size: 16px; font-weight: 600;">
                       View ${type === 'quote' ? 'Quote' : 'Invoice'}
                     </a>
                   </td>
                 </tr>
               </table>
-              
+
+              ${emailSignature ? `
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+                <tr>
+                  <td>
+                    <p style="margin: 0; color: #374151; font-size: 14px; line-height: 1.6; white-space: pre-line;">${emailSignature}</p>
+                  </td>
+                </tr>
+              </table>
+              ` : ''}
+
               <p style="margin: 24px 0 0; color: #6b7280; font-size: 14px; line-height: 1.6;">
                 If you have any questions, please don't hesitate to reach out.
               </p>
@@ -271,7 +307,7 @@ serve(async (req) => {
           <tr>
             <td style="background-color: #f9fafb; padding: 24px 32px; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px; text-align: center;">
-                Thank you for your business!
+                ${footerText}
               </p>
               ${profile?.phone ? `<p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">${profile.phone}</p>` : ''}
               ${profile?.email ? `<p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">${profile.email}</p>` : ''}
