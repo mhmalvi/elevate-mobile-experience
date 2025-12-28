@@ -14,6 +14,7 @@ export default function PublicQuote() {
   const [quote, setQuote] = useState<any>(null);
   const [lineItems, setLineItems] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
+  const [branding, setBranding] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +63,14 @@ export default function PublicQuote() {
         .eq('user_id', quoteData.user_id)
         .single();
       setProfile(profileData);
+
+      // Fetch branding settings
+      const { data: brandingData } = await supabase
+        .from('branding_settings')
+        .select('*')
+        .eq('user_id', quoteData.user_id)
+        .maybeSingle();
+      setBranding(brandingData);
 
       setLoading(false);
     } catch (err) {
@@ -126,19 +135,33 @@ export default function PublicQuote() {
   const isDeclined = quote.status === 'declined';
   const isExpired = quote.valid_until && new Date(quote.valid_until) < new Date();
 
+  // Extract branding values with fallbacks
+  const primaryColor = branding?.primary_color || '#3b82f6';
+  const logoUrl = branding?.logo_url || profile?.logo_url;
+  const showLogo = branding?.show_logo_on_documents ?? true;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-gradient-to-br from-primary/10 to-primary/5 border-b border-border/50 p-6">
+      <div className="bg-gradient-to-br from-primary/10 to-primary/5 border-b border-border/50 p-6" style={{ background: `linear-gradient(to bottom right, ${primaryColor}15, ${primaryColor}08)` }}>
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">
-                {profile?.business_name || 'Quote'}
-              </h1>
-              {profile?.phone && (
-                <p className="text-sm text-muted-foreground">{profile.phone}</p>
+            <div className="flex items-center gap-4">
+              {showLogo && logoUrl && (
+                <img
+                  src={logoUrl}
+                  alt="Business logo"
+                  className="max-w-[120px] max-h-[60px] object-contain"
+                />
               )}
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">
+                  {profile?.business_name || 'Quote'}
+                </h1>
+                {profile?.phone && (
+                  <p className="text-sm text-muted-foreground">{profile.phone}</p>
+                )}
+              </div>
             </div>
             <StatusBadge status={isExpired && !isAccepted ? 'expired' : quote.status} />
           </div>
@@ -203,7 +226,7 @@ export default function PublicQuote() {
           </div>
           <div className="flex justify-between font-bold text-xl pt-2 border-t border-border">
             <span className="text-foreground">Total</span>
-            <span className="text-primary">${Number(quote.total).toFixed(2)}</span>
+            <span style={{ color: primaryColor }}>${Number(quote.total).toFixed(2)}</span>
           </div>
         </div>
 
@@ -291,7 +314,10 @@ export default function PublicQuote() {
         {/* Footer */}
         <div className="text-center pt-4 text-sm text-muted-foreground">
           {profile?.abn && <p>ABN: {profile.abn}</p>}
-          <p className="mt-2">Powered by TradieMate</p>
+          {branding?.document_footer_text && (
+            <p className="mt-2">{branding.document_footer_text}</p>
+          )}
+          <p className="mt-2 text-xs">Powered by TradieMate</p>
         </div>
       </div>
     </div>

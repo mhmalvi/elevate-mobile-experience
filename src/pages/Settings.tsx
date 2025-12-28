@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { LogOut, User, Building2, CreditCard, ChevronRight, Sparkles, Sun, Moon, Crown } from 'lucide-react';
+import { LogOut, User, Building2, CreditCard, ChevronRight, Sparkles, Sun, Moon, Crown, Palette, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 
@@ -23,6 +23,8 @@ export default function Settings() {
     { icon: Crown, label: 'Subscription & Usage', description: 'Plan, limits & billing', path: '/settings/subscription' },
     { icon: User, label: 'Profile', description: 'Your personal details', path: '/settings/profile' },
     { icon: Building2, label: 'Business Details', description: 'ABN, logo & contact info', path: '/settings/business' },
+    { icon: Palette, label: 'Branding', description: 'Colors, logos & templates', path: '/settings/branding' },
+    { icon: Users, label: 'Team', description: 'Manage team members & roles', path: '/settings/team' },
     { icon: CreditCard, label: 'Payment Details', description: 'Bank account for invoices', path: '/settings/payment' },
   ];
 
