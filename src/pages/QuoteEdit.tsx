@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Trash2, User } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
+import { generateUUID } from '@/lib/utils/uuid';
 
 type Client = Tables<'clients'>;
 
@@ -98,7 +99,7 @@ export default function QuoteEdit() {
   const addLineItem = () => {
     setLineItems([
       ...lineItems,
-      { id: crypto.randomUUID(), description: '', quantity: 1, unit: 'each', unit_price: 0, item_type: 'labour' },
+      { id: generateUUID(), description: '', quantity: 1, unit: 'each', unit_price: 0, item_type: 'labour' },
     ]);
   };
 

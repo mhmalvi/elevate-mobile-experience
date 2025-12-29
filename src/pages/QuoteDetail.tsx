@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { User, FileText, Send, Receipt, Download, Share2, Loader2, Briefcase } from 'lucide-react';
 import { format } from 'date-fns';
+import { copyToClipboard } from '@/lib/utils/clipboard';
 
 const QUOTE_STATUSES = ['draft', 'sent', 'viewed', 'accepted', 'declined'] as const;
 
@@ -237,13 +238,21 @@ export default function QuoteDetail() {
             </Button>
           </div>
           
-          <Button 
-            variant="outline" 
-            className="w-full" 
-            onClick={() => {
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={async () => {
               const url = `${window.location.origin}/q/${id}`;
-              navigator.clipboard.writeText(url);
-              toast({ title: 'Link copied!', description: 'Share this link with your client.' });
+              const success = await copyToClipboard(url);
+              if (success) {
+                toast({ title: 'Link copied!', description: 'Share this link with your client.' });
+              } else {
+                toast({
+                  title: 'Copy failed',
+                  description: 'Please copy the link manually: ' + url,
+                  variant: 'destructive'
+                });
+              }
             }}
           >
             <Share2 className="w-4 h-4 mr-2" />
