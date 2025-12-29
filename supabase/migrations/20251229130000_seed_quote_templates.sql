@@ -15,6 +15,32 @@ CREATE TABLE IF NOT EXISTS public.quote_templates (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Fix trade_type column type if it's using the enum (convert to TEXT)
+DO $$
+BEGIN
+  -- Check if trade_type is using the enum type
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'quote_templates'
+    AND column_name = 'trade_type'
+    AND udt_name = 'trade_type'
+  ) THEN
+    -- Convert enum column to TEXT
+    ALTER TABLE public.quote_templates
+    ALTER COLUMN trade_type TYPE TEXT;
+  END IF;
+END $$;
+
+-- Add is_public column if it doesn't exist (for existing tables)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'quote_templates'
+                 AND column_name = 'is_public') THEN
+    ALTER TABLE public.quote_templates ADD COLUMN is_public BOOLEAN DEFAULT TRUE;
+  END IF;
+END $$;
+
 -- Add RLS policies if not exists
 ALTER TABLE public.quote_templates ENABLE ROW LEVEL SECURITY;
 

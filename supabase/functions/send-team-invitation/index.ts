@@ -6,6 +6,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// UUID v4 generator with fallback
+function generateUUID(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    // Fallback implementation for environments without crypto.randomUUID
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+}
+
 interface InvitationRequest {
   email: string;
   role: 'admin' | 'member' | 'viewer';
@@ -106,7 +120,7 @@ serve(async (req) => {
     }
 
     // Generate unique token
-    const token_value = crypto.randomUUID();
+    const token_value = generateUUID();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
 

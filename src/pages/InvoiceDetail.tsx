@@ -9,6 +9,7 @@ import { PDFPreviewModal } from '@/components/PDFPreviewModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { copyToClipboard } from '@/lib/utils/clipboard';
 import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2, Eye, Bell, RefreshCw } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import { RecurringInvoiceHistory } from '@/components/invoices/RecurringInvoiceHistory';
@@ -406,13 +407,21 @@ export default function InvoiceDetail() {
             PDF
           </Button>
           
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="flex-1"
-            onClick={() => {
+            onClick={async () => {
               const url = `${window.location.origin}/i/${id}`;
-              navigator.clipboard.writeText(url);
-              toast({ title: 'Link copied!', description: 'Share this link with your client.' });
+              const success = await copyToClipboard(url);
+              if (success) {
+                toast({ title: 'Link copied!', description: 'Share this link with your client.' });
+              } else {
+                toast({
+                  title: 'Copy failed',
+                  description: 'Please copy the link manually: ' + url,
+                  variant: 'destructive'
+                });
+              }
             }}
           >
             <Share2 className="w-4 h-4 mr-2" />

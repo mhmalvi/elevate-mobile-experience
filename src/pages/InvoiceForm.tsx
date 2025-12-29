@@ -17,6 +17,7 @@ import { Loader2, Plus, Trash2, User } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import { addDays, addMonths, format } from 'date-fns';
 import { RecurringInvoiceToggle } from '@/components/invoices/RecurringInvoiceToggle';
+import { generateUUID } from '@/lib/utils/uuid';
 
 type Client = Tables<'clients'>;
 
@@ -48,7 +49,7 @@ export default function InvoiceForm() {
     next_due_date: format(addMonths(new Date(), 1), 'yyyy-MM-dd'),
   });
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { id: crypto.randomUUID(), description: '', quantity: 1, unit: 'each', unit_price: 0, item_type: 'labour' }
+    { id: generateUUID(), description: '', quantity: 1, unit: 'each', unit_price: 0, item_type: 'labour' }
   ]);
 
   useEffect(() => {
@@ -74,13 +75,13 @@ export default function InvoiceForm() {
   };
 
   const addLineItem = () => {
-    setLineItems([...lineItems, { 
-      id: crypto.randomUUID(), 
-      description: '', 
-      quantity: 1, 
-      unit: 'each', 
-      unit_price: 0, 
-      item_type: 'labour' 
+    setLineItems([...lineItems, {
+      id: generateUUID(),
+      description: '',
+      quantity: 1,
+      unit: 'each',
+      unit_price: 0,
+      item_type: 'labour'
     }]);
   };
 

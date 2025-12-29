@@ -19,21 +19,38 @@ export class SyncManager {
     action: 'create' | 'update' | 'delete',
     data: any
   ) {
+    // Validate inputs to prevent corrupt queue entries
+    if (!entityType || !entityId || !action || !data) {
+      console.error('[SyncManager] Invalid queue data, skipping:', { entityType, entityId, action });
+      return;
+    }
+
+    // Ensure entity_id is a string
+    if (typeof entityId !== 'string') {
+      console.error('[SyncManager] entity_id must be a string, got:', typeof entityId);
+      return;
+    }
+
     console.log(`[SyncManager] Queuing ${action} for ${entityType} ${entityId}`);
 
-    await db.syncQueue.add({
-      entity_type: entityType,
-      entity_id: entityId,
-      action,
-      data,
-      created_at: new Date().toISOString(),
-      synced: false,
-      retry_count: 0,
-    });
+    try {
+      await db.syncQueue.add({
+        entity_type: entityType,
+        entity_id: entityId,
+        action,
+        data,
+        created_at: new Date().toISOString(),
+        synced: false,
+        retry_count: 0,
+      });
 
-    // Try to sync immediately if online
-    if (navigator.onLine) {
-      this.processQueue();
+      // Try to sync immediately if online
+      if (navigator.onLine) {
+        this.processQueue();
+      }
+    } catch (error) {
+      console.error('[SyncManager] Error adding to sync queue:', error);
+      // Don't throw - we don't want to break the app if queue fails
     }
   }
 
@@ -169,6 +186,7 @@ export class SyncManager {
 
     try {
       // Fetch all user data in parallel
+      // Note: RLS policies handle both user-owned and team-shared data
       const [jobsResult, quotesResult, invoicesResult, clientsResult] = await Promise.all([
         supabase
           .from('jobs')
@@ -194,6 +212,12 @@ export class SyncManager {
           .eq('user_id', userId)
           .is('deleted_at', null),
       ]);
+
+      // Log any errors
+      if (jobsResult.error) console.error('[SyncManager] Jobs fetch error:', jobsResult.error);
+      if (quotesResult.error) console.error('[SyncManager] Quotes fetch error:', quotesResult.error);
+      if (invoicesResult.error) console.error('[SyncManager] Invoices fetch error:', invoicesResult.error);
+      if (clientsResult.error) console.error('[SyncManager] Clients fetch error:', clientsResult.error);
 
       // Store in IndexedDB
       if (jobsResult.data) {
@@ -235,18 +259,47 @@ export class SyncManager {
     console.log('[SyncManager] Sync queue cleared');
   }
 
+  private lastQueueClearTime = 0;
+  private queueErrorCount = 0;
+
   /**
    * Get pending sync count
    */
   async getPendingSyncCount(): Promise<number> {
-    return await db.syncQueue.where('synced').equals(false).count();
+    try {
+      return await db.syncQueue.where('synced').equals(false).count();
+    } catch (error) {
+      this.queueErrorCount++;
+
+      // Only log and clear if we haven't done so recently (within 30 seconds)
+      const now = Date.now();
+      if (now - this.lastQueueClearTime > 30000) {
+        console.error('[SyncManager] Queue corrupted, clearing (error count: ' + this.queueErrorCount + '):', error);
+        this.lastQueueClearTime = now;
+
+        try {
+          await db.syncQueue.clear();
+          this.queueErrorCount = 0;
+          console.log('[SyncManager] Queue cleared successfully');
+        } catch (clearError) {
+          console.error('[SyncManager] Failed to clear queue:', clearError);
+        }
+      }
+
+      return 0;
+    }
   }
 
   /**
    * Get sync queue items
    */
   async getSyncQueue(): Promise<SyncQueueItem[]> {
-    return await db.syncQueue.where('synced').equals(false).toArray();
+    try {
+      return await db.syncQueue.where('synced').equals(false).toArray();
+    } catch (error) {
+      console.error('[SyncManager] Error getting sync queue:', error);
+      return [];
+    }
   }
 
   /**

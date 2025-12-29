@@ -4,6 +4,7 @@ import { db, OfflineJob, OfflineQuote, OfflineInvoice, OfflineClient } from './d
 import { syncManager } from './syncManager';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { generateUUID } from '@/lib/utils/uuid';
 
 /**
  * Hook to detect online/offline status
@@ -39,9 +40,28 @@ export function useOfflineJobs(userId: string) {
     [userId]
   );
 
+  // Fetch fresh data from Supabase when online
+  useEffect(() => {
+    if (userId && isOnline) {
+      const fetchJobs = async () => {
+        const { data } = await supabase
+          .from('jobs')
+          .select('*')
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .order('updated_at', { ascending: false });
+
+        if (data && data.length > 0) {
+          await db.jobs.bulkPut(data);
+        }
+      };
+      fetchJobs();
+    }
+  }, [userId, isOnline]);
+
   const createJob = useCallback(async (jobData: Partial<OfflineJob>) => {
     const newJob: OfflineJob = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       user_id: userId,
       status: 'pending',
       created_at: new Date().toISOString(),
@@ -147,9 +167,28 @@ export function useOfflineQuotes(userId: string) {
     [userId]
   );
 
+  // Fetch fresh data from Supabase when online
+  useEffect(() => {
+    if (userId && isOnline) {
+      const fetchQuotes = async () => {
+        const { data } = await supabase
+          .from('quotes')
+          .select('*')
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .order('updated_at', { ascending: false });
+
+        if (data && data.length > 0) {
+          await db.quotes.bulkPut(data);
+        }
+      };
+      fetchQuotes();
+    }
+  }, [userId, isOnline]);
+
   const createQuote = useCallback(async (quoteData: Partial<OfflineQuote>) => {
     const newQuote: OfflineQuote = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       user_id: userId,
       quote_number: `Q-${Date.now()}`,
       status: 'draft',
@@ -217,9 +256,28 @@ export function useOfflineInvoices(userId: string) {
     [userId]
   );
 
+  // Fetch fresh data from Supabase when online
+  useEffect(() => {
+    if (userId && isOnline) {
+      const fetchInvoices = async () => {
+        const { data } = await supabase
+          .from('invoices')
+          .select('*')
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .order('updated_at', { ascending: false });
+
+        if (data && data.length > 0) {
+          await db.invoices.bulkPut(data);
+        }
+      };
+      fetchInvoices();
+    }
+  }, [userId, isOnline]);
+
   const createInvoice = useCallback(async (invoiceData: Partial<OfflineInvoice>) => {
     const newInvoice: OfflineInvoice = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       user_id: userId,
       invoice_number: `INV-${Date.now()}`,
       status: 'draft',
@@ -288,9 +346,28 @@ export function useOfflineClients(userId: string) {
     [userId]
   );
 
+  // Fetch fresh data from Supabase when online
+  useEffect(() => {
+    if (userId && isOnline) {
+      const fetchClients = async () => {
+        const { data } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .order('name', { ascending: true });
+
+        if (data && data.length > 0) {
+          await db.clients.bulkPut(data);
+        }
+      };
+      fetchClients();
+    }
+  }, [userId, isOnline]);
+
   const createClient = useCallback(async (clientData: Partial<OfflineClient>) => {
     const newClient: OfflineClient = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       user_id: userId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

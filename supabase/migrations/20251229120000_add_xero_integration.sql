@@ -27,7 +27,7 @@ ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS xero_sync_status TEXT DEFAU
 CREATE INDEX IF NOT EXISTS idx_profiles_xero_tenant ON public.profiles(xero_tenant_id) WHERE xero_tenant_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_clients_xero_contact ON public.clients(xero_contact_id) WHERE xero_contact_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_invoices_xero_invoice ON public.invoices(xero_invoice_id) WHERE xero_invoice_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_invoices_xero_sync_status ON public.invoices(xero_sync_status) WHERE xero_sync_enabled = TRUE;
+CREATE INDEX IF NOT EXISTS idx_invoices_xero_sync_status ON public.invoices(xero_sync_status) WHERE xero_sync_status IS NOT NULL;
 
 -- Add comments for documentation
 COMMENT ON COLUMN public.profiles.xero_tenant_id IS 'Xero organization/tenant ID';
