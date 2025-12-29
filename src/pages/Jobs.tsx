@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -10,10 +10,9 @@ import { PremiumCard } from '@/components/ui/premium-card';
 import { Button } from '@/components/ui/button';
 import { JobCalendarView } from '@/components/jobs/JobCalendarView';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { useOfflineJobs } from '@/lib/offline/offlineHooks';
 import { FAB } from '@/components/ui/fab';
-import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { Briefcase, Calendar, MapPin, List, CalendarDays } from 'lucide-react';
+import { Briefcase, Calendar, MapPin, List, CalendarDays, WifiOff } from 'lucide-react';
 import { format } from 'date-fns';
 
 type ViewMode = 'list' | 'calendar';
@@ -21,30 +20,12 @@ type ViewMode = 'list' | 'calendar';
 export default function Jobs() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [jobs, setJobs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 
-  const fetchJobs = useCallback(async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('jobs')
-      .select('*, clients(name)')
-      .eq('user_id', user?.id)
-      .order('created_at', { ascending: false });
-    setJobs(data || []);
-    setLoading(false);
-  }, [user]);
-
-  useEffect(() => {
-    if (user) fetchJobs();
-  }, [user, fetchJobs]);
-
-  const { containerProps, RefreshIndicator } = usePullToRefresh({
-    onRefresh: fetchJobs,
-  });
+  // Use offline-first hook
+  const { jobs, loading, isOnline } = useOfflineJobs(user?.id || '');
 
   const filteredJobs = useMemo(() => {
     if (!search.trim()) return jobs;
@@ -63,9 +44,16 @@ export default function Jobs() {
         subtitle={`${jobs.length} total`}
         showSettings
       />
-      
-      <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
-        <RefreshIndicator />
+
+      <div className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+        {/* Offline indicator */}
+        {!isOnline && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm text-yellow-600 dark:text-yellow-400">
+            <WifiOff className="w-4 h-4" />
+            <span>Working offline - changes will sync when reconnected</span>
+          </div>
+        )}
+
         {/* View Toggle */}
         <div className="flex gap-2">
           <Button

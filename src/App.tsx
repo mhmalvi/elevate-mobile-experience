@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { ThemeProvider } from "next-themes";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { OfflineProvider } from "@/lib/offline/OfflineProvider";
 
 // Loading component
 const PageLoader = () => (
@@ -44,6 +45,7 @@ const BrandingSettings = lazy(() => import("./pages/settings/BrandingSettings"))
 const TeamSettings = lazy(() => import("./pages/settings/TeamSettings"));
 const PaymentSettings = lazy(() => import("./pages/settings/PaymentSettings"));
 const SubscriptionSettings = lazy(() => import("./pages/settings/SubscriptionSettings"));
+const IntegrationsSettings = lazy(() => import("./pages/settings/IntegrationsSettings"));
 const PublicQuote = lazy(() => import("./pages/PublicQuote"));
 const PublicInvoice = lazy(() => import("./pages/PublicInvoice"));
 const JoinTeam = lazy(() => import("./pages/JoinTeam"));
@@ -125,6 +127,7 @@ function AppRoutes() {
       <Route path="/settings/team" element={<ProtectedRoute><TeamSettings /></ProtectedRoute>} />
       <Route path="/settings/payment" element={<ProtectedRoute><PaymentSettings /></ProtectedRoute>} />
       <Route path="/settings/subscription" element={<ProtectedRoute><SubscriptionSettings /></ProtectedRoute>} />
+      <Route path="/settings/integrations" element={<ProtectedRoute><IntegrationsSettings /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>
@@ -141,7 +144,9 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <AuthProvider>
-              <AppRoutes />
+              <OfflineProvider>
+                <AppRoutes />
+              </OfflineProvider>
             </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>

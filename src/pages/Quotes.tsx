@@ -7,30 +7,21 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { SearchInput } from '@/components/ui/search-input';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { PremiumCard } from '@/components/ui/premium-card';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious
-} from '@/components/ui/pagination';
 import { FAB } from '@/components/ui/fab';
-import { FileText, Calendar } from 'lucide-react';
+import { FileText, Calendar, WifiOff } from 'lucide-react';
 import { format } from 'date-fns';
-import { useQuotes } from '@/hooks/queries/useQuotes';
+import { useAuth } from '@/hooks/useAuth';
+import { useOfflineQuotes } from '@/lib/offline/offlineHooks';
 
 export default function Quotes() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
 
-  // Use React Query for data fetching with automatic caching and refetching
-  const { data, isLoading, error, refetch } = useQuotes(currentPage);
+  // Use offline-first hook
+  const { quotes, loading: isLoading, isOnline } = useOfflineQuotes(user?.id || '');
 
-  const quotes = data?.quotes || [];
-  const totalCount = data?.totalCount || 0;
-  const totalPages = data?.totalPages || 0;
+  const totalCount = quotes.length;
 
   // Client-side search filtering
   const filteredQuotes = useMemo(() => {
@@ -43,32 +34,6 @@ export default function Quotes() {
     );
   }, [quotes, search]);
 
-  const showPagination = totalPages > 1 && !search;
-
-  // Handle pull-to-refresh
-  const handleRefresh = async () => {
-    await refetch();
-  };
-
-  if (error) {
-    return (
-      <MobileLayout>
-        <PageHeader title="Quotes" showSettings />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <EmptyState
-            icon={<FileText className="w-8 h-8" />}
-            title="Error loading quotes"
-            description="Failed to load quotes. Please try again."
-            action={{
-              label: "Retry",
-              onClick: handleRefresh,
-            }}
-          />
-        </div>
-      </MobileLayout>
-    );
-  }
-
   return (
     <MobileLayout>
       <PageHeader
@@ -78,6 +43,14 @@ export default function Quotes() {
       />
 
       <div className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+        {/* Offline indicator */}
+        {!isOnline && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm text-yellow-600 dark:text-yellow-400">
+            <WifiOff className="w-4 h-4" />
+            <span>Working offline - changes will sync when reconnected</span>
+          </div>
+        )}
+
         {quotes.length > 0 && (
           <SearchInput
             value={search}
@@ -137,63 +110,6 @@ export default function Quotes() {
               </PremiumCard>
             ))}
           </div>
-        )}
-
-        {showPagination && (
-          <Pagination className="mt-6">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                />
-              </PaginationItem>
-
-              {[...Array(totalPages)].map((_, i) => {
-                const page = i + 1;
-                const showPage = page === 1 ||
-                                page === totalPages ||
-                                (page >= currentPage - 1 && page <= currentPage + 1);
-
-                if (!showPage) {
-                  if (page === 2 && currentPage > 3) {
-                    return (
-                      <PaginationItem key={page}>
-                        <span className="px-2">...</span>
-                      </PaginationItem>
-                    );
-                  }
-                  if (page === totalPages - 1 && currentPage < totalPages - 2) {
-                    return (
-                      <PaginationItem key={page}>
-                        <span className="px-2">...</span>
-                      </PaginationItem>
-                    );
-                  }
-                  return null;
-                }
-
-                return (
-                  <PaginationItem key={page}>
-                    <PaginationLink
-                      onClick={() => setCurrentPage(page)}
-                      isActive={currentPage === page}
-                      className="cursor-pointer"
-                    >
-                      {page}
-                    </PaginationLink>
-                  </PaginationItem>
-                );
-              })}
-
-              <PaginationItem>
-                <PaginationNext
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
         )}
       </div>
 

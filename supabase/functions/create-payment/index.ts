@@ -74,17 +74,41 @@ serve(async (req) => {
       );
     }
 
-    // Fetch profile for business name
+    // Fetch profile for business name and Stripe account
     const { data: profile } = await supabase
       .from("profiles")
-      .select("business_name")
+      .select("business_name, stripe_account_id, stripe_charges_enabled")
       .eq("user_id", invoice.user_id)
       .single();
 
     const businessName = profile?.business_name || "TradieMate";
     const baseUrl = success_url?.split('/i/')[0] || 'https://app.tradiemate.com.au';
 
-    // Create Stripe Checkout session
+    // Check if tradie has connected Stripe account
+    const stripeAccountId = profile?.stripe_account_id;
+
+    if (!stripeAccountId) {
+      console.error("Tradie has not connected Stripe account");
+      return new Response(
+        JSON.stringify({
+          error: "Payment setup incomplete. Please connect your Stripe account in Settings > Payments to accept invoice payments."
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!profile?.stripe_charges_enabled) {
+      console.error("Stripe account cannot accept charges yet");
+      return new Response(
+        JSON.stringify({
+          error: "Payment setup incomplete. Please complete your Stripe onboarding to accept payments."
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Create Stripe Checkout session with Connect account
+    // CRITICAL: Payment goes directly to tradie's Stripe account
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [
@@ -109,6 +133,13 @@ serve(async (req) => {
         invoice_number: invoice.invoice_number,
         business_name: businessName,
       },
+      payment_intent_data: {
+        // Platform fee: 0.25% of transaction (configurable)
+        // To disable, set to 0
+        application_fee_amount: Math.round(balance * 100 * 0.0025), // 0.25% platform fee
+      },
+    }, {
+      stripeAccount: stripeAccountId, // CRITICAL: Routes payment to tradie's account
     });
 
     console.log(`Stripe session created: ${session.id}`);

@@ -7,29 +7,21 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { SearchInput } from '@/components/ui/search-input';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { PremiumCard } from '@/components/ui/premium-card';
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious
-} from '@/components/ui/pagination';
 import { FAB } from '@/components/ui/fab';
-import { Receipt, Calendar, AlertTriangle } from 'lucide-react';
+import { Receipt, Calendar, AlertTriangle, WifiOff } from 'lucide-react';
 import { format, isPast, parseISO } from 'date-fns';
-import { useInvoices } from '@/hooks/queries/useInvoices';
+import { useAuth } from '@/hooks/useAuth';
+import { useOfflineInvoices } from '@/lib/offline/offlineHooks';
 
 export default function Invoices() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
 
-  const { data, isLoading, error, refetch } = useInvoices(currentPage);
+  // Use offline-first hook
+  const { invoices, loading: isLoading, isOnline } = useOfflineInvoices(user?.id || '');
 
-  const invoices = data?.invoices || [];
-  const totalCount = data?.totalCount || 0;
-  const totalPages = data?.totalPages || 0;
+  const totalCount = invoices.length;
 
   const filteredInvoices = useMemo(() => {
     if (!search.trim()) return invoices;
@@ -47,27 +39,6 @@ export default function Invoices() {
     return isPast(parseISO(invoice.due_date));
   };
 
-  const showPagination = totalPages > 1 && !search;
-
-  if (error) {
-    return (
-      <MobileLayout>
-        <PageHeader title="Invoices" showSettings />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <EmptyState
-            icon={<Receipt className="w-8 h-8" />}
-            title="Error loading invoices"
-            description="Failed to load invoices. Please try again."
-            action={{
-              label: "Retry",
-              onClick: () => refetch(),
-            }}
-          />
-        </div>
-      </MobileLayout>
-    );
-  }
-
   return (
     <MobileLayout>
       <PageHeader
@@ -77,6 +48,14 @@ export default function Invoices() {
       />
 
       <div className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+        {/* Offline indicator */}
+        {!isOnline && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm text-yellow-600 dark:text-yellow-400">
+            <WifiOff className="w-4 h-4" />
+            <span>Working offline - changes will sync when reconnected</span>
+          </div>
+        )}
+
         {invoices.length > 0 && (
           <SearchInput
             value={search}
@@ -144,53 +123,6 @@ export default function Invoices() {
               );
             })}
           </div>
-        )}
-
-        {showPagination && (
-          <Pagination className="mt-6">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                />
-              </PaginationItem>
-
-              {[...Array(totalPages)].map((_, i) => {
-                const page = i + 1;
-                const showPage = page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1);
-
-                if (!showPage) {
-                  if (page === 2 && currentPage > 3) {
-                    return <PaginationItem key={page}><span className="px-2">...</span></PaginationItem>;
-                  }
-                  if (page === totalPages - 1 && currentPage < totalPages - 2) {
-                    return <PaginationItem key={page}><span className="px-2">...</span></PaginationItem>;
-                  }
-                  return null;
-                }
-
-                return (
-                  <PaginationItem key={page}>
-                    <PaginationLink
-                      onClick={() => setCurrentPage(page)}
-                      isActive={currentPage === page}
-                      className="cursor-pointer"
-                    >
-                      {page}
-                    </PaginationLink>
-                  </PaginationItem>
-                );
-              })}
-
-              <PaginationItem>
-                <PaginationNext
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
         )}
       </div>
 

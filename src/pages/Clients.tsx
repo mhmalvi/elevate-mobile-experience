@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -8,36 +8,17 @@ import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { PremiumCard } from '@/components/ui/premium-card';
 import { QuickContact } from '@/components/ui/quick-contact';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { useOfflineClients } from '@/lib/offline/offlineHooks';
 import { FAB } from '@/components/ui/fab';
-import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { Users, MapPin } from 'lucide-react';
+import { Users, MapPin, WifiOff } from 'lucide-react';
 
 export default function Clients() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [clients, setClients] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  const fetchClients = useCallback(async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('name', { ascending: true });
-    setClients(data || []);
-    setLoading(false);
-  }, [user]);
-
-  useEffect(() => {
-    if (user) fetchClients();
-  }, [user, fetchClients]);
-
-  const { containerProps, RefreshIndicator } = usePullToRefresh({
-    onRefresh: fetchClients,
-  });
+  // Use offline-first hook
+  const { clients, loading, isOnline } = useOfflineClients(user?.id || '');
 
   const filteredClients = useMemo(() => {
     if (!search.trim()) return clients;
@@ -57,9 +38,16 @@ export default function Clients() {
         subtitle={`${clients.length} total`}
         showSettings
       />
-      
-      <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
-        <RefreshIndicator />
+
+      <div className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+        {/* Offline indicator */}
+        {!isOnline && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm text-yellow-600 dark:text-yellow-400">
+            <WifiOff className="w-4 h-4" />
+            <span>Working offline - changes will sync when reconnected</span>
+          </div>
+        )}
+
         {clients.length > 0 && (
           <SearchInput
             value={search}

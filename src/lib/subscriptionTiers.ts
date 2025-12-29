@@ -40,7 +40,7 @@ export const SUBSCRIPTION_TIERS: TierConfig[] = [
   {
     id: 'solo',
     name: 'Solo',
-    price: 19,
+    price: 29,
     stripePriceId: import.meta.env.VITE_STRIPE_PRICE_ID_SOLO || null,
     googlePlayProductId: 'solo_monthly',
     appleProductId: 'solo_monthly',
@@ -73,7 +73,7 @@ export const SUBSCRIPTION_TIERS: TierConfig[] = [
   {
     id: 'pro',
     name: 'Pro',
-    price: 99,
+    price: 79,
     stripePriceId: import.meta.env.VITE_STRIPE_PRICE_ID_PRO || null,
     googlePlayProductId: 'pro_monthly',
     appleProductId: 'pro_monthly',

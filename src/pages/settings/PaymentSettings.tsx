@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { Card } from '@/components/ui/card';
+import { CheckCircle2, XCircle, Loader2, CreditCard } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -20,10 +23,24 @@ const paymentTermsOptions = [
   { value: '30', label: '30 days' },
 ];
 
+interface StripeAccountStatus {
+  connected: boolean;
+  onboarding_complete: boolean;
+  charges_enabled: boolean;
+  account_id?: string;
+}
+
 export default function PaymentSettings() {
   const { profile, updateProfile, loading: profileLoading } = useProfile();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [stripeLoading, setStripeLoading] = useState(false);
+  const [checkingStripe, setCheckingStripe] = useState(true);
+  const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus>({
+    connected: false,
+    onboarding_complete: false,
+    charges_enabled: false,
+  });
   const [form, setForm] = useState({
     bank_name: '',
     bank_bsb: '',
@@ -43,6 +60,65 @@ export default function PaymentSettings() {
       });
     }
   }, [profile]);
+
+  // Check Stripe account status on mount
+  useEffect(() => {
+    checkStripeAccount();
+  }, []);
+
+  const checkStripeAccount = async () => {
+    setCheckingStripe(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('check-stripe-account');
+
+      if (error) {
+        console.error('Error checking Stripe account:', error);
+      } else if (data) {
+        setStripeStatus(data);
+      }
+    } catch (error) {
+      console.error('Error checking Stripe account:', error);
+    } finally {
+      setCheckingStripe(false);
+    }
+  };
+
+  const connectStripe = async () => {
+    setStripeLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-stripe-connect');
+
+      if (error) {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to connect Stripe account',
+          variant: 'destructive',
+        });
+      } else if (data?.url) {
+        // Open Stripe onboarding in new window
+        window.open(data.url, '_blank');
+
+        toast({
+          title: 'Redirecting to Stripe',
+          description: 'Complete the setup to start accepting payments.',
+        });
+
+        // Recheck status after 5 seconds
+        setTimeout(() => {
+          checkStripeAccount();
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('Error connecting Stripe:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to connect Stripe account',
+        variant: 'destructive',
+      });
+    } finally {
+      setStripeLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,11 +155,112 @@ export default function PaymentSettings() {
   return (
     <MobileLayout>
       <PageHeader title="Payment Details" showBack />
-      
-      <form onSubmit={handleSubmit} className="p-4 space-y-6 animate-fade-in">
-        <p className="text-sm text-muted-foreground">
-          These details will appear on your invoices so customers know where to pay.
-        </p>
+
+      <div className="p-4 space-y-6 animate-fade-in">
+        {/* Stripe Connect Section */}
+        <Card className="p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-primary" />
+            <h3 className="font-semibold">Online Payments (Stripe)</h3>
+          </div>
+
+          <p className="text-sm text-muted-foreground">
+            Connect Stripe to accept credit card and digital wallet payments directly from your invoices.
+          </p>
+
+          {checkingStripe ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Checking connection status...
+            </div>
+          ) : stripeStatus.charges_enabled ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-green-600">
+                <CheckCircle2 className="w-5 h-5" />
+                <span className="font-medium">Stripe Connected</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                You can now accept payments on invoices. Funds will be deposited to your bank account within 2-7 business days.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={connectStripe}
+                disabled={stripeLoading}
+                className="w-full"
+              >
+                {stripeLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Manage Stripe Account'
+                )}
+              </Button>
+            </div>
+          ) : stripeStatus.connected && !stripeStatus.onboarding_complete ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-yellow-600">
+                <XCircle className="w-5 h-5" />
+                <span className="font-medium">Setup Incomplete</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                You need to complete your Stripe setup to start accepting payments.
+              </p>
+              <Button
+                type="button"
+                onClick={connectStripe}
+                disabled={stripeLoading}
+                className="w-full"
+              >
+                {stripeLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Complete Stripe Setup'
+                )}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <XCircle className="w-5 h-5" />
+                <span className="font-medium">Not Connected</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Connect your Stripe account to enable online payments for your invoices.
+              </p>
+              <Button
+                type="button"
+                onClick={connectStripe}
+                disabled={stripeLoading}
+                className="w-full"
+              >
+                {stripeLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Connect Stripe Account'
+                )}
+              </Button>
+            </div>
+          )}
+        </Card>
+
+        {/* Bank Details Section */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold">Bank Transfer Details</h3>
+          </div>
+
+          <p className="text-sm text-muted-foreground">
+            These details will appear on your invoices for customers who prefer bank transfers.
+          </p>
 
         {/* Bank Name */}
         <div className="space-y-2">
@@ -153,10 +330,11 @@ export default function PaymentSettings() {
           </p>
         </div>
 
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Saving...' : 'Save Changes'}
-        </Button>
-      </form>
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? 'Saving...' : 'Save Bank Details'}
+          </Button>
+        </form>
+      </div>
     </MobileLayout>
   );
 }
