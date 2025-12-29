@@ -47,9 +47,9 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
 
 export const TIER_NAMES: Record<SubscriptionTier, string> = {
   free: 'Free',
-  solo: 'Solo ($19/mo)',
+  solo: 'Solo ($29/mo)',
   crew: 'Crew ($49/mo)',
-  pro: 'Pro ($99/mo)',
+  pro: 'Pro ($79/mo)',
 };
 
 export type UsageType = keyof TierLimits;
