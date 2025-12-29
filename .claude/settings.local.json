@@ -14,7 +14,14 @@
       "Bash(npx:*)",
       "Bash(npm install:*)",
       "Bash(git reset:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npm run build:*)",
+      "Bash(node check_db_state.js:*)",
+      "Bash(grep:*)",
+      "Bash(echo:*)"
     ]
   }
 }

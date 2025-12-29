@@ -179,18 +179,26 @@ class TradieMateDB extends Dexie {
    * Get statistics about offline data
    */
   async getStats() {
+    let pendingSyncCount = 0;
+
+    try {
+      pendingSyncCount = await this.syncQueue.where('synced').equals(false).count();
+    } catch (error) {
+      console.error('[DB] Error counting sync queue, clearing:', error);
+      await this.syncQueue.clear();
+      pendingSyncCount = 0;
+    }
+
     const [
       jobsCount,
       quotesCount,
       invoicesCount,
       clientsCount,
-      pendingSyncCount,
     ] = await Promise.all([
       this.jobs.count(),
       this.quotes.count(),
       this.invoices.count(),
       this.clients.count(),
-      this.syncQueue.where('synced').equals(false).count(),
     ]);
 
     return {
