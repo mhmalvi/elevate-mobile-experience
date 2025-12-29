@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Plus, Trash2, User, FileText, Sparkles, Calendar } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import { format, addDays } from 'date-fns';
+import { generateUUID } from '@/lib/utils/uuid';
 
 type Client = Tables<'clients'>;
 type QuoteTemplate = Tables<'quote_templates'>;
@@ -57,7 +58,7 @@ export default function QuoteForm() {
     valid_until: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
   });
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { id: crypto.randomUUID(), description: '', quantity: 1, unit: 'each', unit_price: 0, item_type: 'labour' }
+    { id: generateUUID(), description: '', quantity: 1, unit: 'each', unit_price: 0, item_type: 'labour' }
   ]);
 
   useEffect(() => {
@@ -100,7 +101,7 @@ export default function QuoteForm() {
     const items = template.default_items as unknown as TemplateItem[] | null;
     if (items && Array.isArray(items) && items.length > 0) {
       setLineItems(items.map(item => ({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         description: item.description || '',
         quantity: item.quantity || 1,
         unit: item.unit || 'each',
@@ -117,13 +118,13 @@ export default function QuoteForm() {
   };
 
   const addLineItem = () => {
-    setLineItems([...lineItems, { 
-      id: crypto.randomUUID(), 
-      description: '', 
-      quantity: 1, 
-      unit: 'each', 
-      unit_price: profile?.default_hourly_rate || 75, 
-      item_type: 'labour' 
+    setLineItems([...lineItems, {
+      id: generateUUID(),
+      description: '',
+      quantity: 1,
+      unit: 'each',
+      unit_price: profile?.default_hourly_rate || 75,
+      item_type: 'labour'
     }]);
   };
 
