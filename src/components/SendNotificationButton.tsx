@@ -90,10 +90,26 @@ export function SendNotificationButton({
       onSent?.();
     } catch (error: any) {
       console.error('Send notification error:', error);
-      toast({ 
-        title: 'Error', 
-        description: error.message || 'Failed to send notification',
-        variant: 'destructive' 
+
+      // Provide specific error messages
+      let errorTitle = 'Error';
+      let errorDescription = error.message || 'Failed to send notification';
+
+      if (error.message?.includes('JWT') || error.message?.includes('auth')) {
+        errorTitle = 'Authentication error';
+        errorDescription = 'Please sign out and sign in again to refresh your session.';
+      } else if (error.message?.includes('not configured')) {
+        errorTitle = 'Service not configured';
+        errorDescription = 'Notification service is not properly configured. Please contact support.';
+      } else if (error.message?.includes('rate limit') || error.message?.includes('limit reached')) {
+        errorTitle = 'Limit reached';
+        errorDescription = error.message || 'You have reached your monthly notification limit. Please upgrade your plan.';
+      }
+
+      toast({
+        title: errorTitle,
+        description: errorDescription,
+        variant: 'destructive'
       });
     } finally {
       setSendingEmail(false);
@@ -103,10 +119,10 @@ export function SendNotificationButton({
 
   const handleDirectEmail = async () => {
     if (!recipient.email) {
-      toast({ 
-        title: 'No email address', 
+      toast({
+        title: 'No email address',
         description: 'This client has no email address on file.',
-        variant: 'destructive' 
+        variant: 'destructive'
       });
       return;
     }
@@ -114,6 +130,7 @@ export function SendNotificationButton({
     setSendingDirectEmail(true);
 
     try {
+      console.log('Sending direct email:', { type, id, email: recipient.email });
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           type,
@@ -123,23 +140,43 @@ export function SendNotificationButton({
         },
       });
 
-      if (error) throw error;
+      console.log('Email response:', { data, error });
 
-      toast({ 
-        title: 'Email Sent!', 
+      if (error) {
+        console.error('Email API error:', error);
+        throw error;
+      }
+
+      toast({
+        title: 'Email Sent!',
         description: `${type === 'quote' ? 'Quote' : 'Invoice'} sent directly to ${recipient.email}`
       });
 
       onSent?.();
     } catch (error: any) {
-      console.error('Direct email error:', error);
+      console.error('Direct email error (full):', error);
+      const errorMessage = error?.message || error?.error_description || 'Unknown error';
+
+      // Provide specific error messages
+      let fallbackMessage = `Direct email failed (${errorMessage})`;
+
+      if (errorMessage.includes('rate limit') || errorMessage.includes('limit reached')) {
+        fallbackMessage = 'Monthly email limit reached. Opening your email app instead.';
+      } else if (errorMessage.includes('not configured')) {
+        fallbackMessage = 'Email service not configured. Opening your email app instead.';
+      } else if (errorMessage.includes('JWT') || errorMessage.includes('auth')) {
+        fallbackMessage = 'Session expired. Opening your email app instead.';
+      } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+        fallbackMessage = 'Network error. Opening your email app instead.';
+      }
+
       // If direct email fails, fall back to mailto
       const subject = encodeURIComponent(`${type === 'quote' ? 'Quote' : 'Invoice'} from TradieMate`);
       const body = encodeURIComponent(`Hi ${recipient.name || 'there'},\n\nPlease find your ${type} attached.\n\nView it online: ${window.location.origin}/${type === 'quote' ? 'q' : 'i'}/${id}\n\nThank you!`);
       window.location.href = `mailto:${recipient.email}?subject=${subject}&body=${body}`;
-      toast({ 
-        title: 'Opening email app', 
-        description: 'Direct email unavailable - opening your email app instead.'
+      toast({
+        title: 'Opening email app',
+        description: fallbackMessage
       });
     } finally {
       setSendingDirectEmail(false);

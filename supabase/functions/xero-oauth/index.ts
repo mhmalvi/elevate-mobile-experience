@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encryptToken, decryptToken } from "../_shared/encryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -172,14 +173,16 @@ serve(async (req) => {
       // Calculate token expiry
       const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
-      // Save tokens to database
-      // NOTE: In production, these should be encrypted using Supabase Vault or similar
+      // Save tokens to database (ENCRYPTED)
+      const encryptedAccessToken = await encryptToken(tokens.access_token);
+      const encryptedRefreshToken = await encryptToken(tokens.refresh_token);
+
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
           xero_tenant_id: tenantId,
-          xero_access_token: tokens.access_token, // TODO: Encrypt in production
-          xero_refresh_token: tokens.refresh_token, // TODO: Encrypt in production
+          xero_access_token: encryptedAccessToken,
+          xero_refresh_token: encryptedRefreshToken,
           xero_token_expires_at: expiresAt,
           xero_sync_enabled: true,
           xero_connected_at: new Date().toISOString(),
@@ -245,6 +248,9 @@ serve(async (req) => {
       // Refresh the access token
       const basicAuth = btoa(`${xeroClientId}:${xeroClientSecret}`);
 
+      // Decrypt the refresh token before using it
+      const decryptedRefreshToken = await decryptToken(profile.xero_refresh_token);
+
       const refreshResponse = await fetch("https://identity.xero.com/connect/token", {
         method: "POST",
         headers: {
@@ -253,7 +259,7 @@ serve(async (req) => {
         },
         body: new URLSearchParams({
           grant_type: "refresh_token",
-          refresh_token: profile.xero_refresh_token,
+          refresh_token: decryptedRefreshToken,
         }),
       });
 
@@ -268,12 +274,16 @@ serve(async (req) => {
       const newTokens: XeroTokenResponse = await refreshResponse.json();
       const expiresAt = new Date(Date.now() + newTokens.expires_in * 1000).toISOString();
 
+      // Encrypt the new tokens before storing
+      const encryptedNewAccessToken = await encryptToken(newTokens.access_token);
+      const encryptedNewRefreshToken = await encryptToken(newTokens.refresh_token);
+
       // Update tokens in database
       await supabase
         .from("profiles")
         .update({
-          xero_access_token: newTokens.access_token,
-          xero_refresh_token: newTokens.refresh_token,
+          xero_access_token: encryptedNewAccessToken,
+          xero_refresh_token: encryptedNewRefreshToken,
           xero_token_expires_at: expiresAt,
         })
         .eq("user_id", user.id);

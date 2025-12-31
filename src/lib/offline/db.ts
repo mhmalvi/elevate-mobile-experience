@@ -102,7 +102,7 @@ class TradieMateDB extends Dexie {
   constructor() {
     super('TradieMateDB');
 
-    // Define schema
+    // Define schema version 1
     this.version(1).stores({
       // Entity tables - indexed by id and user_id for filtering
       jobs: 'id, user_id, status, updated_at, client_id, scheduled_date',
@@ -115,6 +115,16 @@ class TradieMateDB extends Dexie {
 
       // Metadata - keyed by string
       metadata: 'key, updated_at',
+    });
+
+    // Version 2: Clear sync queue to fix data corruption issues
+    this.version(2).stores({}).upgrade(async (tx) => {
+      try {
+        console.log('[DB] Upgrading to v2: Clearing sync queue to fix corruption');
+        await tx.table('syncQueue').clear();
+      } catch (error) {
+        console.error('[DB] Error during upgrade:', error);
+      }
     });
   }
 
