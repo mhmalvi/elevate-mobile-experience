@@ -33,15 +33,59 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
   const loadPreview = async () => {
     setLoading(true);
     try {
+      console.log('Loading PDF preview for:', { type, id });
       const response = await supabase.functions.invoke('generate-pdf', {
         body: { type, id }
       });
-      
-      if (response.error) throw response.error;
+
+      console.log('PDF response:', {
+        error: response.error,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : []
+      });
+
+      if (response.error) {
+        console.error('PDF generation error:', response.error);
+        throw response.error;
+      }
+
+      if (!response.data || !response.data.html) {
+        console.error('PDF response missing HTML:', response.data);
+        throw new Error('PDF generation failed - no HTML returned');
+      }
+
       setHtml(response.data.html);
     } catch (error) {
-      console.error('PDF preview error:', error);
-      toast({ title: 'Error loading preview', description: 'Please try again.', variant: 'destructive' });
+      console.error('PDF preview error (full):', error);
+
+      // Provide specific error messages based on error type
+      let errorTitle = 'Error loading preview';
+      let errorDescription = 'Unknown error';
+
+      if (error instanceof Error) {
+        errorDescription = error.message;
+
+        // Detect specific error types
+        if (error.message.includes('JWT') || error.message.includes('auth')) {
+          errorTitle = 'Authentication error';
+          errorDescription = 'Please sign out and sign in again to refresh your session.';
+        } else if (error.message.includes('not found') || error.message.includes('404')) {
+          errorTitle = 'Document not found';
+          errorDescription = 'The document could not be found. It may have been deleted.';
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorTitle = 'Network error';
+          errorDescription = 'Please check your internet connection and try again.';
+        } else if (error.message.includes('service not configured')) {
+          errorTitle = 'Service configuration error';
+          errorDescription = 'PDF generation is not properly configured. Please contact support.';
+        }
+      }
+
+      toast({
+        title: errorTitle,
+        description: errorDescription,
+        variant: 'destructive'
+      });
       setOpen(false);
     } finally {
       setLoading(false);

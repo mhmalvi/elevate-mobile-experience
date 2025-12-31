@@ -199,7 +199,8 @@ serve(async (req) => {
     }
 
     const businessName = profile?.business_name || "TradieMate";
-    const viewUrl = `${supabaseUrl.replace('.supabase.co', '.lovable.app')}/${type === 'quote' ? 'q' : 'i'}/${id}`;
+    const baseUrl = Deno.env.get('APP_URL') || 'https://app.tradiemate.com.au';
+    const viewUrl = `${baseUrl}/${type === 'quote' ? 'q' : 'i'}/${id}`;
 
     // Extract branding values with fallbacks
     const primaryColor = branding?.primary_color || '#3b82f6';

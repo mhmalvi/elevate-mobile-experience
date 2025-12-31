@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptToken } from "../_shared/encryption.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,8 +87,10 @@ serve(async (req) => {
       );
     }
 
+    // Decrypt the access token
+    let accessToken = await decryptToken(profile.xero_access_token);
+
     // Check if token needs refresh
-    let accessToken = profile.xero_access_token;
     if (new Date(profile.xero_token_expires_at) < new Date()) {
       console.log("Access token expired, refreshing...");
 
@@ -114,7 +117,7 @@ serve(async (req) => {
         .eq("user_id", user.id)
         .single();
 
-      accessToken = refreshedProfile.xero_access_token;
+      accessToken = await decryptToken(refreshedProfile.xero_access_token);
     }
 
     // Determine which invoices to sync

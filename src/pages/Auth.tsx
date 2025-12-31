@@ -59,10 +59,16 @@ export default function Auth() {
       if (mode === 'signup') {
         toast({
           title: "Welcome to TradieMate!",
-          description: "Your account has been created.",
+          description: "Check your email to verify your account and get started.",
+          duration: 6000,
         });
+        // Don't navigate immediately - let user see the message
+        setTimeout(() => {
+          setMode('login');
+        }, 2000);
+      } else {
+        navigate('/dashboard');
       }
-      navigate('/dashboard');
     }
     setLoading(false);
   };

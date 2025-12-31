@@ -33,7 +33,6 @@ serve(async (req) => {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const { invoice_id, send_all_overdue }: ReminderRequest = await req.json();
 
     console.log(`Payment reminder request: invoice_id=${invoice_id}, send_all_overdue=${send_all_overdue}`);

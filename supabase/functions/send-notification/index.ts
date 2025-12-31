@@ -196,7 +196,7 @@ serve(async (req) => {
     }
 
     // Generate the share URL
-    const baseUrl = Deno.env.get('SITE_URL') || 'https://tradiemate.lovable.app';
+    const baseUrl = Deno.env.get('APP_URL') || 'https://app.tradiemate.com.au';
     const shareUrl = type === 'quote' 
       ? `${baseUrl}/q/${id}` 
       : `${baseUrl}/i/${id}`;

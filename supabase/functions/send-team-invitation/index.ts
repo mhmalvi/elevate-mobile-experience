@@ -147,7 +147,8 @@ serve(async (req) => {
     }
 
     // Send invitation email
-    const invitationUrl = `${supabaseUrl.replace('.supabase.co', '.lovable.app')}/join-team?token=${token_value}`;
+    const baseUrl = Deno.env.get('APP_URL') || 'https://app.tradiemate.com.au';
+    const invitationUrl = `${baseUrl}/join-team?token=${token_value}`;
     const teamName = (userMembership as any).teams?.name || 'TradieMate Team';
 
     console.log(`Sending invitation email to ${email}`);

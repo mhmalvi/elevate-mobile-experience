@@ -383,21 +383,43 @@ export default function InvoiceDetail() {
             onClick={async () => {
               setDownloadingPDF(true);
               try {
+                console.log('Generating PDF for invoice:', id);
                 const response = await supabase.functions.invoke('generate-pdf', {
                   body: { type: 'invoice', id }
                 });
-                
-                if (response.error) throw response.error;
-                
+
+                console.log('PDF generation response:', {
+                  error: response.error,
+                  hasData: !!response.data,
+                  dataKeys: response.data ? Object.keys(response.data) : []
+                });
+
+                if (response.error) {
+                  console.error('PDF generation API error:', response.error);
+                  throw response.error;
+                }
+
+                if (!response.data || !response.data.html) {
+                  console.error('PDF response missing HTML:', response.data);
+                  throw new Error('PDF generation failed - no HTML returned');
+                }
+
                 const printWindow = window.open('', '_blank');
                 if (printWindow) {
                   printWindow.document.write(response.data.html);
                   printWindow.document.close();
                   printWindow.print();
+                } else {
+                  throw new Error('Could not open print window - popup blocked?');
                 }
               } catch (error) {
-                console.error('PDF generation error:', error);
-                toast({ title: 'Error generating PDF', description: 'Please try again.', variant: 'destructive' });
+                console.error('PDF generation error (full):', error);
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                toast({
+                  title: 'Error generating PDF',
+                  description: errorMessage,
+                  variant: 'destructive'
+                });
               } finally {
                 setDownloadingPDF(false);
               }

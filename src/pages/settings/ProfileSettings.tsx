@@ -31,7 +31,16 @@ export default function ProfileSettings() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!passwords.current) {
+      toast({
+        title: 'Current password required',
+        description: 'Please enter your current password to verify.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     if (passwords.new !== passwords.confirm) {
       toast({
         title: 'Passwords don\'t match',
@@ -51,6 +60,24 @@ export default function ProfileSettings() {
     }
 
     setLoading(true);
+
+    // Verify current password by attempting to sign in
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email: user!.email!,
+      password: passwords.current,
+    });
+
+    if (verifyError) {
+      toast({
+        title: 'Incorrect password',
+        description: 'Your current password is incorrect.',
+        variant: 'destructive'
+      });
+      setLoading(false);
+      return;
+    }
+
+    // Now update the password
     const { error } = await supabase.auth.updateUser({
       password: passwords.new
     });
@@ -72,12 +99,38 @@ export default function ProfileSettings() {
   };
 
   const handleDeleteAccount = async () => {
-    // Note: Full account deletion requires server-side implementation
-    await signOut();
-    toast({
-      title: 'Signed out',
-      description: 'Contact support to fully delete your account.'
-    });
+    setLoading(true);
+
+    try {
+      // Call the delete-account Edge Function
+      const { error } = await supabase.functions.invoke('delete-account');
+
+      if (error) {
+        toast({
+          title: 'Error deleting account',
+          description: error.message || 'Failed to delete account. Please try again.',
+          variant: 'destructive'
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Account deleted successfully - sign out
+      await signOut();
+
+      toast({
+        title: 'Account deleted',
+        description: 'Your account and all associated data have been permanently deleted.',
+      });
+    } catch (error: any) {
+      console.error('Delete account error:', error);
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred. Please contact support.',
+        variant: 'destructive'
+      });
+      setLoading(false);
+    }
   };
 
   return (
@@ -94,8 +147,19 @@ export default function ProfileSettings() {
         {/* Change Password */}
         <form onSubmit={handleChangePassword} className="space-y-4">
           <h3 className="font-semibold">Change Password</h3>
-          
+
           <div className="space-y-3">
+            <div>
+              <Label htmlFor="currentPassword">Current Password</Label>
+              <Input
+                id="currentPassword"
+                type="password"
+                value={passwords.current}
+                onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
+                placeholder="Enter current password"
+              />
+            </div>
+
             <div>
               <Label htmlFor="newPassword">New Password</Label>
               <Input
@@ -106,7 +170,7 @@ export default function ProfileSettings() {
                 placeholder="Enter new password"
               />
             </div>
-            
+
             <div>
               <Label htmlFor="confirmPassword">Confirm Password</Label>
               <Input
@@ -118,10 +182,10 @@ export default function ProfileSettings() {
               />
             </div>
           </div>
-          
-          <Button 
-            type="submit" 
-            disabled={loading || !passwords.new || !passwords.confirm}
+
+          <Button
+            type="submit"
+            disabled={loading || !passwords.current || !passwords.new || !passwords.confirm}
             className="w-full"
           >
             {loading ? 'Updating...' : 'Update Password'}
@@ -134,7 +198,7 @@ export default function ProfileSettings() {
           
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" className="w-full">
+              <Button variant="destructive" className="w-full" disabled={loading}>
                 Delete Account
               </Button>
             </AlertDialogTrigger>
@@ -142,13 +206,14 @@ export default function ProfileSettings() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete your account?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This action cannot be undone. All your data will be permanently deleted.
+                  This action cannot be undone. All your data including clients, quotes, invoices,
+                  and jobs will be permanently deleted.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteAccount}>
-                  Delete Account
+                <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteAccount} disabled={loading}>
+                  {loading ? 'Deleting...' : 'Delete Account'}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

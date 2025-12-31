@@ -2,6 +2,37 @@ import { db, SyncQueueItem } from './db';
 import { supabase } from '@/integrations/supabase/client';
 
 /**
+ * Sanitize data for IndexedDB storage
+ * Converts Date objects to ISO strings and removes undefined values
+ */
+function sanitizeDataForIndexedDB(data: any): any {
+  if (data === null || data === undefined) {
+    return null;
+  }
+
+  if (data instanceof Date) {
+    return data.toISOString();
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeDataForIndexedDB(item));
+  }
+
+  if (typeof data === 'object') {
+    const sanitized: any = {};
+    for (const [key, value] of Object.entries(data)) {
+      // Skip undefined values
+      if (value !== undefined) {
+        sanitized[key] = sanitizeDataForIndexedDB(value);
+      }
+    }
+    return sanitized;
+  }
+
+  return data;
+}
+
+/**
  * SyncManager handles synchronization between IndexedDB and Supabase
  * Manages the sync queue and processes pending changes when online
  */
@@ -34,11 +65,14 @@ export class SyncManager {
     console.log(`[SyncManager] Queuing ${action} for ${entityType} ${entityId}`);
 
     try {
+      // Sanitize data to prevent IndexedDB errors
+      const sanitizedData = sanitizeDataForIndexedDB(data);
+
       await db.syncQueue.add({
         entity_type: entityType,
         entity_id: entityId,
         action,
-        data,
+        data: sanitizedData,
         created_at: new Date().toISOString(),
         synced: false,
         retry_count: 0,

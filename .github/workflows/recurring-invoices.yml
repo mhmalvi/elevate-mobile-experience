@@ -1,0 +1,47 @@
+name: Generate Recurring Invoices
+
+# This workflow automatically generates recurring invoices daily
+# It calls the Supabase Edge Function that handles the logic
+
+on:
+  schedule:
+    # Runs daily at 00:00 UTC (10:00 AM Australian Eastern Time)
+    - cron: '0 0 * * *'
+
+  # Allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  generate-recurring-invoices:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Supabase Function
+        run: |
+          echo "Triggering recurring invoice generation..."
+
+          response=$(curl -X POST \
+            "https://rucuomtojzifrvplhwja.supabase.co/functions/v1/generate-recurring-invoices" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -w "\n%{http_code}" \
+            -s)
+
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          echo "Response: $body"
+          echo "HTTP Status: $http_code"
+
+          if [ "$http_code" -ne 200 ]; then
+            echo "Error: Function returned status $http_code"
+            exit 1
+          fi
+
+          echo "Recurring invoices generated successfully!"
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "Failed to generate recurring invoices. Check the logs above."
+          echo "This could indicate an issue with the Supabase function or credentials."
