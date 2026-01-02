@@ -73,6 +73,11 @@ serve(async (req) => {
 
     const appUrl = Deno.env.get("APP_URL") || "https://app.tradiemate.com.au";
 
+    // Check if URL is a valid public URL (not localhost/local IP)
+    const isPublicUrl = appUrl.startsWith("https://") &&
+                       !appUrl.includes("localhost") &&
+                       !appUrl.match(/https?:\/\/(127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/);
+
     // Check if already has Stripe account
     if (profile?.stripe_account_id) {
       console.log(`User already has Stripe account: ${profile.stripe_account_id}`);
@@ -126,7 +131,7 @@ serve(async (req) => {
     // Create new Stripe Connect account
     console.log("Creating new Stripe Connect account");
     const account = await stripe.accounts.create({
-      type: "standard", // Tradie manages their own Stripe dashboard
+      type: "express", // Express account allows platform fees
       country: "AU",
       email: profile?.email || user.email,
       capabilities: {
@@ -138,7 +143,8 @@ serve(async (req) => {
         name: profile?.business_name || "TradieMate Business",
         product_description: profile?.trade_type || "Trade services",
         mcc: "1799", // Special Trade Contractors
-        url: appUrl,
+        // Only include URL if it's a valid public URL (not localhost/local IP)
+        ...(isPublicUrl ? { url: appUrl } : {}),
       },
     });
 
@@ -184,9 +190,21 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error("Error creating Stripe Connect account:", error);
+    console.error("Error creating Stripe Connect account:", errorMessage);
+    console.error("Full error details:", JSON.stringify(error, null, 2));
+
+    // Check if it's a Stripe error with more details
+    if (error && typeof error === 'object') {
+      console.error("Error type:", (error as any).type);
+      console.error("Error code:", (error as any).code);
+      console.error("Error raw:", (error as any).raw);
+    }
+
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({
+        error: errorMessage,
+        details: error && typeof error === 'object' ? (error as any).raw : undefined
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

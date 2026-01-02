@@ -107,6 +107,7 @@ serve(async (req) => {
     let branding: any;
     let documentNumber: string;
     let documentTitle: string;
+    let lineItems: any[] = [];
 
     if (type === "quote") {
       const { data, error } = await supabase
@@ -138,8 +139,16 @@ serve(async (req) => {
         .from("branding_settings")
         .select("*")
         .eq("user_id", data.user_id)
-        .single();
+        .maybeSingle();
       branding = brandingData;
+
+      // Fetch line items for quote
+      const { data: items } = await supabase
+        .from("quote_line_items")
+        .select("*")
+        .eq("quote_id", id)
+        .order("sort_order");
+      lineItems = items || [];
 
     } else if (type === "invoice") {
       const { data, error } = await supabase
@@ -171,8 +180,16 @@ serve(async (req) => {
         .from("branding_settings")
         .select("*")
         .eq("user_id", data.user_id)
-        .single();
+        .maybeSingle();
       branding = brandingData;
+
+      // Fetch line items for invoice
+      const { data: items } = await supabase
+        .from("invoice_line_items")
+        .select("*")
+        .eq("invoice_id", id)
+        .order("sort_order");
+      lineItems = items || [];
 
     } else {
       return new Response(
@@ -243,9 +260,9 @@ serve(async (req) => {
               ${message ? `<p style="margin: 0 0 24px; color: #374151; font-size: 16px; line-height: 1.6;">${message}</p>` : ''}
               
               <p style="margin: 0 0 24px; color: #374151; font-size: 16px; line-height: 1.6;">
-                ${type === 'quote' 
-                  ? `Please find your quote attached below. We've prepared this quote for "${documentTitle}" and would be happy to answer any questions you may have.`
-                  : `Please find your invoice attached below for "${documentTitle}". We appreciate your business and prompt payment.`
+                ${type === 'quote'
+                  ? `We've prepared this quote for "${documentTitle}". Please review the details below and let us know if you have any questions.`
+                  : `Thank you for your business! Please find your invoice below for "${documentTitle}". We appreciate your prompt payment.`
                 }
               </p>
               
@@ -276,6 +293,74 @@ serve(async (req) => {
                   </td>
                 </tr>
               </table>
+
+              <!-- Line Items Table -->
+              ${lineItems.length > 0 ? `
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+                <!-- Table Header -->
+                <tr style="background-color: #f9fafb;">
+                  <td style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase;">Item</p>
+                  </td>
+                  <td align="center" style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase;">Qty</p>
+                  </td>
+                  <td align="right" style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase;">Rate</p>
+                  </td>
+                  <td align="right" style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb;">
+                    <p style="margin: 0; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase;">Amount</p>
+                  </td>
+                </tr>
+                <!-- Line Items -->
+                ${lineItems.map((item: any, index: number) => `
+                <tr style="border-bottom: ${index < lineItems.length - 1 ? '1px solid #e5e7eb' : 'none'};">
+                  <td style="padding: 16px;">
+                    <p style="margin: 0 0 4px; color: #1f2937; font-size: 14px; font-weight: 500;">${item.description || item.name || 'Item'}</p>
+                    ${item.notes ? `<p style="margin: 0; color: #6b7280; font-size: 12px;">${item.notes}</p>` : ''}
+                  </td>
+                  <td align="center" style="padding: 16px;">
+                    <p style="margin: 0; color: #1f2937; font-size: 14px;">${item.quantity || 1}</p>
+                  </td>
+                  <td align="right" style="padding: 16px;">
+                    <p style="margin: 0; color: #1f2937; font-size: 14px;">$${(item.unit_price || item.rate || 0).toFixed(2)}</p>
+                  </td>
+                  <td align="right" style="padding: 16px;">
+                    <p style="margin: 0; color: #1f2937; font-size: 14px; font-weight: 500;">$${(item.total || (item.quantity || 1) * (item.unit_price || item.rate || 0)).toFixed(2)}</p>
+                  </td>
+                </tr>
+                `).join('')}
+                <!-- Totals -->
+                ${documentData.subtotal ? `
+                <tr style="background-color: #f9fafb;">
+                  <td colspan="3" align="right" style="padding: 12px 16px; border-top: 2px solid #e5e7eb;">
+                    <p style="margin: 0; color: #6b7280; font-size: 14px;">Subtotal:</p>
+                  </td>
+                  <td align="right" style="padding: 12px 16px; border-top: 2px solid #e5e7eb;">
+                    <p style="margin: 0; color: #1f2937; font-size: 14px;">$${(documentData.subtotal || 0).toFixed(2)}</p>
+                  </td>
+                </tr>
+                ` : ''}
+                ${documentData.tax && documentData.tax > 0 ? `
+                <tr style="background-color: #f9fafb;">
+                  <td colspan="3" align="right" style="padding: 12px 16px;">
+                    <p style="margin: 0; color: #6b7280; font-size: 14px;">Tax${documentData.tax_rate ? ` (${documentData.tax_rate}%)` : ''}:</p>
+                  </td>
+                  <td align="right" style="padding: 12px 16px;">
+                    <p style="margin: 0; color: #1f2937; font-size: 14px;">$${(documentData.tax || 0).toFixed(2)}</p>
+                  </td>
+                </tr>
+                ` : ''}
+                <tr style="background-color: ${primaryColor};">
+                  <td colspan="3" align="right" style="padding: 16px;">
+                    <p style="margin: 0; color: #ffffff; font-size: 16px; font-weight: 600;">Total:</p>
+                  </td>
+                  <td align="right" style="padding: 16px;">
+                    <p style="margin: 0; color: #ffffff; font-size: 18px; font-weight: 700;">$${(documentData.total || 0).toFixed(2)}</p>
+                  </td>
+                </tr>
+              </table>
+              ` : ''}
 
               <!-- CTA Button -->
               <table width="100%" cellpadding="0" cellspacing="0">
@@ -326,15 +411,40 @@ serve(async (req) => {
 </html>
     `;
 
+    // Get sender email - use custom domain if configured, otherwise use test email for dev
+    const customEmailDomain = Deno.env.get("EMAIL_FROM_DOMAIN"); // e.g., "noreply@tradiemate.com.au"
+    const appUrl = Deno.env.get("APP_URL") || "";
+    const isProduction = appUrl.includes("tradiemate.com.au") || appUrl.includes("production");
+
+    // In production, require custom domain. In dev/test, allow onboarding@resend.dev
+    let fromEmail: string;
+    if (customEmailDomain) {
+      fromEmail = customEmailDomain;
+    } else if (isProduction) {
+      console.warn("Production environment detected but EMAIL_FROM_DOMAIN not configured!");
+      fromEmail = `${businessName} <onboarding@resend.dev>`;
+    } else {
+      // Dev/test mode - use Resend's test email
+      fromEmail = `${businessName} <onboarding@resend.dev>`;
+    }
+
+    console.log(`[${isProduction ? 'PRODUCTION' : 'DEV'}] Sending email from: ${fromEmail} to: ${recipient_email}`);
+
     // Send email via Resend
     const emailResponse = await resend.emails.send({
-      from: `${businessName} <onboarding@resend.dev>`,
+      from: fromEmail,
       to: [recipient_email],
       subject: emailSubject,
       html: emailHtml,
     });
 
     console.log("Email sent successfully:", emailResponse);
+
+    // Check if email was actually sent (Resend returns id on success)
+    if (!emailResponse.id && !emailResponse.data?.id) {
+      console.error("Email may not have been sent - no ID returned:", emailResponse);
+      throw new Error("Email service did not confirm delivery");
+    }
 
     // Update document status to 'sent' if it was in draft
     if (documentData.status === 'draft') {

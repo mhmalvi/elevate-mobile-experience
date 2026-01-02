@@ -1,71 +1,114 @@
-# Deploy all secrets to Supabase Edge Functions
-# This ensures all functions have access to required API keys
+# TradieMate - Deploy Supabase Edge Function Secrets
+# This script reads secrets from .env and deploys them to Supabase
 
-$PROJECT_REF = "rucuomtojzifrvplhwja"
-
-Write-Host "🚀 Deploying secrets to Supabase Edge Functions..." -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "TradieMate - Deploying Supabase Secrets" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Helper function to extract env variable value
-function Get-EnvValue {
-    param($VarName)
-    $line = Get-Content .env | Where-Object { $_ -match "^$VarName=" }
-    if ($line) {
-        return $line -replace "^$VarName=", '' -replace '"', ''
-    }
-    return $null
+# Check if .env exists
+if (-not (Test-Path ".env")) {
+    Write-Host "ERROR: .env file not found!" -ForegroundColor Red
+    exit 1
 }
 
-# Deploy all secrets
-$secrets = @{
-    "ENCRYPTION_KEY" = Get-EnvValue "ENCRYPTION_KEY"
-    "RESEND_API_KEY" = Get-EnvValue "RESEND_API_KEY"
-    "STRIPE_SECRET_KEY" = Get-EnvValue "STRIPE_SECRET_KEY"
-    "STRIPE_WEBHOOK_SECRET" = Get-EnvValue "STRIPE_WEBHOOK_SECRET"
-    "TWILIO_ACCOUNT_SID" = Get-EnvValue "TWILIO_ACCOUNT_SID"
-    "TWILIO_AUTH_TOKEN" = Get-EnvValue "TWILIO_AUTH_TOKEN"
-    "TWILIO_PHONE_NUMBER" = Get-EnvValue "TWILIO_PHONE_NUMBER"
-    "XERO_CLIENT_ID" = Get-EnvValue "XERO_CLIENT_ID"
-    "XERO_CLIENT_SECRET" = Get-EnvValue "XERO_CLIENT_SECRET"
-    "XERO_REDIRECT_URI" = Get-EnvValue "XERO_REDIRECT_URI"
-    "APP_URL" = Get-EnvValue "APP_URL"
-    "REVENUECAT_WEBHOOK_SECRET" = Get-EnvValue "REVENUECAT_WEBHOOK_SECRET"
-}
+# Read .env file
+Write-Host "Reading secrets from .env..." -ForegroundColor Yellow
+$envContent = Get-Content .env
 
-foreach ($key in $secrets.Keys) {
-    $value = $secrets[$key]
-    if ($value) {
-        Write-Host "Setting $key..." -ForegroundColor Yellow
-        npx supabase secrets set "$key=$value" --project-ref $PROJECT_REF
-    } else {
-        Write-Host "⚠️  Skipping $key (not found in .env)" -ForegroundColor Red
+# Extract access token
+$accessToken = ""
+foreach ($line in $envContent) {
+    if ($line -match '^SUPABASE_ACCESS_TOKEN=(.+)$') {
+        $accessToken = $matches[1].Trim('"')
+        break
     }
 }
 
-Write-Host ""
-Write-Host "✅ All secrets deployed!" -ForegroundColor Green
-Write-Host ""
-Write-Host "🔄 Redeploying critical Edge Functions with new secrets..." -ForegroundColor Cyan
+if ([string]::IsNullOrEmpty($accessToken)) {
+    Write-Host "ERROR: SUPABASE_ACCESS_TOKEN not found in .env!" -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "✅ Access token found" -ForegroundColor Green
 Write-Host ""
 
-# Redeploy critical functions to pick up new secrets
-$functions = @(
-    "send-email",
-    "send-notification",
-    "send-team-invitation",
-    "create-payment",
-    "xero-oauth",
-    "xero-sync-invoices",
-    "xero-sync-clients",
-    "generate-pdf"
+# Define secrets to deploy
+$secrets = @(
+    "RESEND_API_KEY",
+    "EMAIL_FROM_DOMAIN",
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_PHONE_NUMBER",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "ENCRYPTION_KEY",
+    "XERO_CLIENT_ID",
+    "XERO_CLIENT_SECRET",
+    "APP_URL",
+    "REVENUECAT_WEBHOOK_SECRET"
 )
 
-foreach ($func in $functions) {
-    Write-Host "Deploying $func..." -ForegroundColor Yellow
-    npx supabase functions deploy $func --project-ref $PROJECT_REF
+Write-Host "Deploying secrets to Supabase..." -ForegroundColor Yellow
+Write-Host ""
+
+$successCount = 0
+$failCount = 0
+$skippedCount = 0
+
+foreach ($secretKey in $secrets) {
+    # Find the secret value in .env
+    $secretValue = ""
+    foreach ($line in $envContent) {
+        if ($line -match "^$secretKey=(.+)$") {
+            $secretValue = $matches[1].Trim('"')
+            break
+        }
+    }
+
+    if ([string]::IsNullOrEmpty($secretValue)) {
+        Write-Host "⚠️  Skipped: $secretKey (not found in .env)" -ForegroundColor Gray
+        $skippedCount++
+        continue
+    }
+
+    # Deploy the secret
+    Write-Host "Deploying: $secretKey..." -ForegroundColor Cyan -NoNewline
+
+    $env:SUPABASE_ACCESS_TOKEN = $accessToken
+    $result = npx supabase secrets set "$secretKey=$secretValue" --project-ref rucuomtojzifrvplhwja 2>&1
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host " ✅ Success" -ForegroundColor Green
+        $successCount++
+    } else {
+        Write-Host " ❌ Failed" -ForegroundColor Red
+        Write-Host "   Error: $result" -ForegroundColor Red
+        $failCount++
+    }
 }
 
 Write-Host ""
-Write-Host "✅ Deployment complete! All features should now be functional." -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Deployment Summary" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "✅ Successful: $successCount" -ForegroundColor Green
+Write-Host "❌ Failed: $failCount" -ForegroundColor Red
+Write-Host "⚠️  Skipped: $skippedCount" -ForegroundColor Gray
 Write-Host ""
-Write-Host "🧪 Next step: Test the features in your app" -ForegroundColor Cyan
+
+if ($failCount -eq 0) {
+    Write-Host "🎉 All secrets deployed successfully!" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Next steps:" -ForegroundColor Yellow
+    Write-Host "1. Test PDF generation in your app" -ForegroundColor White
+    Write-Host "2. Test email sending functionality" -ForegroundColor White
+    Write-Host "3. Test SMS sending functionality" -ForegroundColor White
+    Write-Host ""
+    Write-Host "To verify deployed secrets, run:" -ForegroundColor Yellow
+    Write-Host "  npx supabase secrets list --project-ref rucuomtojzifrvplhwja" -ForegroundColor White
+} else {
+    Write-Host "⚠️  Some secrets failed to deploy. Please review errors above." -ForegroundColor Yellow
+}
+
+Write-Host ""

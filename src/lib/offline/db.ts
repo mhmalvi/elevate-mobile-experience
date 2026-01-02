@@ -71,6 +71,7 @@ export interface SyncQueueItem {
   action: 'create' | 'update' | 'delete';
   data: any;
   created_at: string;
+  updated_at?: string; // For tracking coalesced updates
   synced: boolean;
   sync_error?: string;
   retry_count: number;
@@ -111,19 +112,110 @@ class TradieMateDB extends Dexie {
       clients: 'id, user_id, name, updated_at',
 
       // Sync queue - auto-incrementing id
-      syncQueue: '++id, entity_type, entity_id, synced, created_at',
+      // ⚠️ Removed 'synced' from index - boolean indexing can cause IDBKeyRange errors
+      syncQueue: '++id, entity_type, entity_id, created_at',
 
       // Metadata - keyed by string
       metadata: 'key, updated_at',
     });
 
     // Version 2: Clear sync queue to fix data corruption issues
-    this.version(2).stores({}).upgrade(async (tx) => {
+    this.version(2).stores({
+      // Keep same schema as v1 (without synced index)
+      jobs: 'id, user_id, status, updated_at, client_id, scheduled_date',
+      quotes: 'id, user_id, status, updated_at, client_id',
+      invoices: 'id, user_id, status, updated_at, client_id, due_date',
+      clients: 'id, user_id, name, updated_at',
+      syncQueue: '++id, entity_type, entity_id, created_at',
+      metadata: 'key, updated_at',
+    }).upgrade(async (tx) => {
       try {
         console.log('[DB] Upgrading to v2: Clearing sync queue to fix corruption');
         await tx.table('syncQueue').clear();
       } catch (error) {
         console.error('[DB] Error during upgrade:', error);
+      }
+    });
+
+    // Version 3: Add stricter validation and clear corrupted queue
+    this.version(3).stores({
+      // Keep same schema but force migration (without synced index)
+      jobs: 'id, user_id, status, updated_at, client_id, scheduled_date',
+      quotes: 'id, user_id, status, updated_at, client_id',
+      invoices: 'id, user_id, status, updated_at, client_id, due_date',
+      clients: 'id, user_id, name, updated_at',
+      syncQueue: '++id, entity_type, entity_id, created_at',
+      metadata: 'key, updated_at',
+    }).upgrade(async (tx) => {
+      try {
+        console.log('[DB] Upgrading to v3: Clearing corrupted sync queue');
+        const syncQueueTable = tx.table('syncQueue');
+        if (syncQueueTable) {
+          const count = await syncQueueTable.count();
+          console.log(`[DB] Found ${count} items in sync queue, clearing...`);
+          await syncQueueTable.clear();
+          console.log('[DB] Sync queue cleared successfully');
+        }
+      } catch (error) {
+        console.error('[DB] Error during v3 upgrade (non-fatal):', error);
+      }
+    });
+
+    // Version 4: Complete cleanup - delete and recreate sync queue
+    this.version(4).stores({
+      // Keep same schema but force migration (without synced index)
+      jobs: 'id, user_id, status, updated_at, client_id, scheduled_date',
+      quotes: 'id, user_id, status, updated_at, client_id',
+      invoices: 'id, user_id, status, updated_at, client_id, due_date',
+      clients: 'id, user_id, name, updated_at',
+      syncQueue: '++id, entity_type, entity_id, created_at',
+      metadata: 'key, updated_at',
+    }).upgrade(async (tx) => {
+      try {
+        console.log('[DB] Upgrading to v4: Complete sync queue cleanup');
+        const syncQueueTable = tx.table('syncQueue');
+        if (syncQueueTable) {
+          try {
+            await syncQueueTable.clear();
+            console.log('[DB] Sync queue cleared in v4 upgrade');
+          } catch (clearError) {
+            console.error('[DB] Error clearing sync queue in v4:', clearError);
+            try {
+              const allItems = await syncQueueTable.toArray();
+              console.log(`[DB] Attempting to delete ${allItems.length} items individually`);
+              for (const item of allItems) {
+                if (item.id) {
+                  await syncQueueTable.delete(item.id);
+                }
+              }
+              console.log('[DB] Individual deletion complete');
+            } catch (deleteError) {
+              console.error('[DB] Individual deletion also failed:', deleteError);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[DB] Error during v4 upgrade (non-fatal):', error);
+      }
+    });
+
+    // Version 5: Remove boolean index from syncQueue to fix IDBKeyRange errors
+    this.version(5).stores({
+      // ✅ CRITICAL FIX: Removed 'synced' from index to prevent IDBKeyRange errors
+      jobs: 'id, user_id, status, updated_at, client_id, scheduled_date',
+      quotes: 'id, user_id, status, updated_at, client_id',
+      invoices: 'id, user_id, status, updated_at, client_id, due_date',
+      clients: 'id, user_id, name, updated_at',
+      syncQueue: '++id, entity_type, entity_id, created_at',
+      metadata: 'key, updated_at',
+    }).upgrade(async (tx) => {
+      try {
+        console.log('[DB] Upgrading to v5: Removing boolean index from syncQueue');
+        // Clear and rebuild sync queue with new schema (no synced index)
+        await tx.table('syncQueue').clear();
+        console.log('[DB] v5 upgrade complete - sync queue rebuilt without boolean index');
+      } catch (error) {
+        console.error('[DB] Error during v5 upgrade (non-fatal):', error);
       }
     });
   }
@@ -192,10 +284,16 @@ class TradieMateDB extends Dexie {
     let pendingSyncCount = 0;
 
     try {
-      pendingSyncCount = await this.syncQueue.where('synced').equals(false).count();
+      // ✅ FIX: Don't use .where('synced') index - filter in memory instead
+      const allItems = await this.syncQueue.toArray();
+      pendingSyncCount = allItems.filter(item => !item.synced).length;
     } catch (error) {
       console.error('[DB] Error counting sync queue, clearing:', error);
-      await this.syncQueue.clear();
+      try {
+        await this.syncQueue.clear();
+      } catch (clearError) {
+        console.error('[DB] Failed to clear sync queue:', clearError);
+      }
       pendingSyncCount = 0;
     }
 
