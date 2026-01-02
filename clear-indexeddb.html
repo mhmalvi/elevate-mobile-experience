@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear IndexedDB - TradieMate</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #059669;
+        }
+        .danger {
+            background: #ef4444;
+        }
+        .danger:hover {
+            background: #dc2626;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        .success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+        h1 {
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+        p {
+            color: #6b7280;
+            line-height: 1.6;
+        }
+        .warning {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .warning strong {
+            color: #92400e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Clear IndexedDB Database</h1>
+        <p>This will clear the corrupted offline database that's causing errors on the invoice payment page.</p>
+
+        <div class="warning">
+            <strong>⚠️ Note:</strong> This will clear all offline data including jobs, quotes, invoices, and clients stored locally. The data will be re-synced from Supabase when you next log in.
+        </div>
+
+        <div>
+            <button onclick="clearTradieMateDB()">Clear TradieMate Database</button>
+            <button onclick="clearAllIndexedDB()" class="danger">Clear ALL IndexedDB Databases</button>
+        </div>
+
+        <div id="result" class="result"></div>
+
+        <h2 style="margin-top: 30px;">Current Databases:</h2>
+        <div id="databases" style="background: #f9fafb; padding: 15px; border-radius: 6px; margin-top: 10px;">
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <script>
+        async function listDatabases() {
+            const div = document.getElementById('databases');
+            try {
+                const databases = await indexedDB.databases();
+                if (databases.length === 0) {
+                    div.innerHTML = '<p style="color: #6b7280;">No IndexedDB databases found.</p>';
+                } else {
+                    div.innerHTML = '<ul style="list-style: none; padding: 0;">' +
+                        databases.map(db => `
+                            <li style="padding: 8px; margin: 5px 0; background: white; border-radius: 4px;">
+                                <strong>${db.name}</strong> (Version: ${db.version})
+                            </li>
+                        `).join('') +
+                        '</ul>';
+                }
+            } catch (error) {
+                div.innerHTML = `<p style="color: #ef4444;">Error: ${error.message}</p>`;
+            }
+        }
+
+        async function clearTradieMateDB() {
+            const result = document.getElementById('result');
+            try {
+                result.style.display = 'block';
+                result.className = 'result';
+                result.innerHTML = '<p>⏳ Clearing TradieMateDB...</p>';
+
+                const request = indexedDB.deleteDatabase('TradieMateDB');
+
+                request.onsuccess = function() {
+                    result.className = 'result success';
+                    result.innerHTML = '<strong>✅ Success!</strong><p>TradieMateDB has been cleared. Please refresh the invoice page and try paying again.</p>';
+                    listDatabases();
+                };
+
+                request.onerror = function(event) {
+                    result.className = 'result error';
+                    result.innerHTML = `<strong>❌ Error!</strong><p>${event.target.error}</p>`;
+                };
+
+                request.onblocked = function() {
+                    result.className = 'result error';
+                    result.innerHTML = '<strong>⚠️ Blocked!</strong><p>Please close all TradieMate tabs and try again.</p>';
+                };
+
+            } catch (error) {
+                result.style.display = 'block';
+                result.className = 'result error';
+                result.innerHTML = `<strong>❌ Error!</strong><p>${error.message}</p>`;
+            }
+        }
+
+        async function clearAllIndexedDB() {
+            if (!confirm('⚠️ This will delete ALL IndexedDB databases. Are you sure?')) {
+                return;
+            }
+
+            const result = document.getElementById('result');
+            try {
+                result.style.display = 'block';
+                result.className = 'result';
+                result.innerHTML = '<p>⏳ Clearing all databases...</p>';
+
+                const databases = await indexedDB.databases();
+                let cleared = 0;
+                let errors = 0;
+
+                for (const db of databases) {
+                    try {
+                        const request = indexedDB.deleteDatabase(db.name);
+                        await new Promise((resolve, reject) => {
+                            request.onsuccess = resolve;
+                            request.onerror = reject;
+                        });
+                        cleared++;
+                    } catch (error) {
+                        console.error(`Failed to delete ${db.name}:`, error);
+                        errors++;
+                    }
+                }
+
+                result.className = 'result success';
+                result.innerHTML = `<strong>✅ Complete!</strong><p>Cleared ${cleared} database(s). ${errors > 0 ? `Failed: ${errors}` : ''}</p><p>Please refresh the page.</p>`;
+
+                setTimeout(listDatabases, 1000);
+
+            } catch (error) {
+                result.style.display = 'block';
+                result.className = 'result error';
+                result.innerHTML = `<strong>❌ Error!</strong><p>${error.message}</p>`;
+            }
+        }
+
+        // Load databases on page load
+        listDatabases();
+    </script>
+</body>
+</html>

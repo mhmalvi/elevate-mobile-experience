@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -19,28 +19,7 @@ export default function PublicInvoice() {
   const [error, setError] = useState<string | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
 
-  // Check for payment status in URL
-  useEffect(() => {
-    const paymentStatus = searchParams.get('payment');
-    if (paymentStatus === 'success') {
-      toast({ 
-        title: 'Payment Successful!', 
-        description: 'Thank you for your payment. The invoice has been updated.'
-      });
-    } else if (paymentStatus === 'cancelled') {
-      toast({ 
-        title: 'Payment Cancelled', 
-        description: 'Your payment was cancelled. You can try again anytime.',
-        variant: 'destructive'
-      });
-    }
-  }, [searchParams, toast]);
-
-  useEffect(() => {
-    if (id) fetchInvoice();
-  }, [id]);
-
-  const fetchInvoice = async () => {
+  const fetchInvoice = useCallback(async () => {
     try {
       const { data: invoiceData, error: invoiceError } = await supabase
         .from('invoices')
@@ -93,7 +72,99 @@ export default function PublicInvoice() {
       setError('Failed to load invoice');
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  // Check for payment status in URL and poll for updates
+  useEffect(() => {
+    const paymentStatus = searchParams.get('payment');
+
+    if (paymentStatus === 'cancelled') {
+      toast({
+        title: 'Payment Cancelled',
+        description: 'Your payment was cancelled. You can try again anytime.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (paymentStatus === 'success') {
+      toast({
+        title: 'Payment Successful!',
+        description: 'Thank you for your payment. Updating invoice status...'
+      });
+
+      // Poll for invoice status updates
+      // Webhooks can take 1-10 seconds, so we poll every 2 seconds for up to 20 seconds
+      let pollAttempts = 0;
+      const maxPolls = 10;
+      const pollInterval = 2000; // 2 seconds
+      let pollTimeoutId: NodeJS.Timeout;
+
+      const pollForUpdate = async () => {
+        pollAttempts++;
+        console.log(`Polling for invoice update, attempt ${pollAttempts}/${maxPolls}`);
+
+        try {
+          // Refetch the invoice
+          const { data: invoiceData, error } = await supabase
+            .from('invoices')
+            .select('status, amount_paid, total')
+            .eq('id', id)
+            .single();
+
+          if (error) {
+            console.error('Error polling invoice:', error);
+          }
+
+          if (invoiceData) {
+            const isPaid = invoiceData.status === 'paid';
+            const isPartiallyPaid = invoiceData.status === 'partially_paid';
+
+            if (isPaid || isPartiallyPaid) {
+              // Payment status updated! Refetch full invoice data
+              fetchInvoice();
+              toast({
+                title: 'Invoice Updated',
+                description: isPaid ? 'Payment confirmed! Invoice is now marked as paid.' : 'Partial payment received.',
+                duration: 5000
+              });
+              return; // Stop polling
+            }
+          }
+
+          if (pollAttempts < maxPolls) {
+            // Continue polling
+            pollTimeoutId = setTimeout(() => pollForUpdate(), pollInterval);
+          } else {
+            // Max attempts reached, do final refetch
+            fetchInvoice();
+            toast({
+              title: 'Status Update Pending',
+              description: 'Payment was received. If status does not update, please refresh the page.',
+              variant: 'default',
+              duration: 7000
+            });
+          }
+        } catch (err) {
+          console.error('Error in polling:', err);
+        }
+      };
+
+      // Start polling after 1 second (give webhook initial time)
+      pollTimeoutId = setTimeout(() => pollForUpdate(), 1000);
+
+      // Cleanup function
+      return () => {
+        if (pollTimeoutId) {
+          clearTimeout(pollTimeoutId);
+        }
+      };
+    }
+  }, [searchParams, id]); // Removed toast and fetchInvoice from dependencies to avoid infinite loop
+
+  useEffect(() => {
+    if (id) fetchInvoice();
+  }, [id, fetchInvoice]);
 
   if (loading) {
     return (
@@ -127,11 +198,14 @@ export default function PublicInvoice() {
   const handlePayNow = async () => {
     setProcessingPayment(true);
     try {
+      // Construct base URL without query parameters
+      const baseUrl = window.location.origin + window.location.pathname;
+
       const { data, error } = await supabase.functions.invoke('create-payment', {
         body: {
           invoice_id: id,
-          success_url: window.location.href,
-          cancel_url: window.location.href,
+          success_url: `${baseUrl}?payment=success`,
+          cancel_url: `${baseUrl}?payment=cancelled`,
         }
       });
 

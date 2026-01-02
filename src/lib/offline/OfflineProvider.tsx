@@ -9,6 +9,12 @@ interface OfflineContextValue {
   isOnline: boolean;
   pendingSyncCount: number;
   syncing: boolean;
+  syncProgress: {
+    percentage: number;
+    current: number;
+    total: number;
+    currentEntity: string;
+  } | null;
   prefetchData: () => Promise<void>;
   processQueue: () => Promise<void>;
 }
@@ -22,6 +28,12 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [prefetched, setPrefetched] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{
+    percentage: number;
+    current: number;
+    total: number;
+    currentEntity: string;
+  } | null>(null);
 
   // Update online status
   useEffect(() => {
@@ -43,12 +55,89 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       });
     };
 
+    // ✅ FIX #2: Handle quota exceeded errors
+    const handleQuotaExceeded = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      toast({
+        title: 'Storage Full',
+        description: 'Your device storage is full. Please free up space or clear old data.',
+        variant: 'destructive',
+        duration: 10000,
+      });
+    };
+
+    // ✅ FIX #3: Handle auth errors during sync
+    const handleAuthError = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      toast({
+        title: 'Authentication Error',
+        description: 'Your session expired. Please log in again to sync your data.',
+        variant: 'destructive',
+        duration: 10000,
+      });
+    };
+
+    // ✅ FIX #5: Handle queue corruption notifications
+    const handleQueueCorrupted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      toast({
+        title: 'Sync Data Corrupted',
+        description: customEvent.detail?.message || 'Some pending changes may be lost. Please contact support if this persists.',
+        variant: 'destructive',
+        duration: 15000,
+      });
+    };
+
+    // ✅ MEDIUM PRIORITY FIX #1: Handle conflict notifications
+    const handleConflictDetected = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { entityType, entityId, conflictingFields } = customEvent.detail;
+
+      const fieldsList = conflictingFields
+        .map((f: any) => f.field)
+        .join(', ');
+
+      toast({
+        title: '⚠️ Data Conflict Detected',
+        description: `This ${entityType} was modified on another device. Conflicting fields: ${fieldsList}. Using newest version.`,
+        variant: 'default',
+        duration: 8000,
+      });
+    };
+
+    // ✅ MEDIUM PRIORITY FIX #2: Handle sync progress updates
+    const handleSyncProgress = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { percentage, completed, total, currentEntity, phase } = customEvent.detail;
+
+      if (phase === 'syncing' && total > 0) {
+        setSyncProgress({
+          percentage,
+          current: completed,
+          total,
+          currentEntity,
+        });
+      } else {
+        setSyncProgress(null);
+      }
+    };
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('indexeddb-quota-exceeded', handleQuotaExceeded);
+    window.addEventListener('sync-auth-error', handleAuthError);
+    window.addEventListener('sync-queue-corrupted', handleQueueCorrupted);
+    window.addEventListener('sync-conflict-detected', handleConflictDetected);
+    window.addEventListener('sync-progress', handleSyncProgress);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('indexeddb-quota-exceeded', handleQuotaExceeded);
+      window.removeEventListener('sync-auth-error', handleAuthError);
+      window.removeEventListener('sync-queue-corrupted', handleQueueCorrupted);
+      window.removeEventListener('sync-conflict-detected', handleConflictDetected);
+      window.removeEventListener('sync-progress', handleSyncProgress);
     };
   }, [toast]);
 
@@ -159,6 +248,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
         isOnline,
         pendingSyncCount,
         syncing,
+        syncProgress,
         prefetchData,
         processQueue,
       }}
@@ -173,12 +263,26 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      {/* Syncing indicator */}
+      {/* Syncing indicator with progress */}
       {syncing && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-blue-500 text-white px-4 py-2 text-center text-sm font-medium">
-          <div className="flex items-center justify-center gap-2">
-            <RefreshCw className="w-4 h-4 animate-spin" />
-            <span>Syncing your data...</span>
+          <div className="flex flex-col items-center justify-center gap-1">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>
+                {syncProgress
+                  ? `Syncing ${syncProgress.currentEntity || 'data'}... ${syncProgress.percentage}%`
+                  : 'Syncing your data...'}
+              </span>
+            </div>
+            {syncProgress && syncProgress.total > 0 && (
+              <div className="w-full max-w-md bg-blue-600 rounded-full h-1.5">
+                <div
+                  className="bg-white rounded-full h-1.5 transition-all duration-300"
+                  style={{ width: `${syncProgress.percentage}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

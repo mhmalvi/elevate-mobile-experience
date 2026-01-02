@@ -8,10 +8,11 @@ const corsHeaders = {
 };
 
 // Map Stripe price IDs to tier names
+// These are the actual price IDs from .env file
 const PRICE_TO_TIER: Record<string, string> = {
-  'price_solo_monthly': 'solo',
-  'price_crew_monthly': 'crew',
-  'price_pro_monthly': 'pro',
+  'price_1SiyYiHfG2W0TmGhQDHUiQkt': 'solo',
+  'price_1SiybGHfG2W0TmGh4QYBj996': 'crew',
+  'price_1SiybvHfG2W0TmGh0DdDE5xt': 'pro',
 };
 
 const logStep = (step: string, details?: Record<string, unknown>) => {

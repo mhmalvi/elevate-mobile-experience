@@ -107,8 +107,17 @@ serve(async (req) => {
       );
     }
 
-    // Create Stripe Checkout session with Connect account
-    // CRITICAL: Payment goes directly to tradie's Stripe account
+    console.log(`Creating Checkout session for account: ${stripeAccountId}, balance: $${balance}`);
+
+    // Calculate platform fee: 0.15% of transaction
+    const platformFeeAmount = Math.round(balance * 100 * 0.0015); // 0.15% platform fee
+
+    console.log(`Platform fee (0.15%): $${platformFeeAmount / 100}`);
+
+    // Create Stripe Checkout session with direct charges
+    // CRITICAL: Uses direct charges to Express Connect account
+    // Payment goes directly to tradie's account, platform takes application fee
+    // This requires the Connect account to be type "express" (not "standard")
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [
@@ -134,12 +143,10 @@ serve(async (req) => {
         business_name: businessName,
       },
       payment_intent_data: {
-        // Platform fee: 0.25% of transaction (configurable)
-        // To disable, set to 0
-        application_fee_amount: Math.round(balance * 100 * 0.0025), // 0.25% platform fee
+        application_fee_amount: platformFeeAmount, // 0.15% platform fee
       },
     }, {
-      stripeAccount: stripeAccountId, // CRITICAL: Routes payment to tradie's account
+      stripeAccount: stripeAccountId, // CRITICAL: Routes payment to tradie's Express account
     });
 
     console.log(`Stripe session created: ${session.id}`);
@@ -156,6 +163,14 @@ serve(async (req) => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("Error creating payment session:", errorMessage);
+    console.error("Full error object:", JSON.stringify(error, null, 2));
+
+    // Check if it's a Stripe error with more details
+    if (error && typeof error === 'object' && 'type' in error) {
+      console.error("Stripe error type:", (error as any).type);
+      console.error("Stripe error code:", (error as any).code);
+    }
+
     return new Response(
       JSON.stringify({ error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -125,7 +125,7 @@ function AppRoutes() {
       <Route path="/settings/business" element={<ProtectedRoute><BusinessSettings /></ProtectedRoute>} />
       <Route path="/settings/branding" element={<ProtectedRoute><BrandingSettings /></ProtectedRoute>} />
       <Route path="/settings/team" element={<ProtectedRoute><TeamSettings /></ProtectedRoute>} />
-      <Route path="/settings/payment" element={<ProtectedRoute><PaymentSettings /></ProtectedRoute>} />
+      <Route path="/settings/payments" element={<ProtectedRoute><PaymentSettings /></ProtectedRoute>} />
       <Route path="/settings/subscription" element={<ProtectedRoute><SubscriptionSettings /></ProtectedRoute>} />
       <Route path="/settings/integrations" element={<ProtectedRoute><IntegrationsSettings /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />

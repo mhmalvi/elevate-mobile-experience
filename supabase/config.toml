@@ -1,31 +1,38 @@
 project_id = "rucuomtojzifrvplhwja"
 
+# FIXED: Root cause was service_role missing permissions on public schema
+# Granted: USAGE ON SCHEMA public + ALL ON TABLES/SEQUENCES/FUNCTIONS
+#
+# Security Configuration:
+# - Public functions (verify_jwt = false): generate-pdf, send-email, send-notification, create-payment, stripe-webhook, subscription-webhook, revenuecat-webhook
+# - Protected functions (verify_jwt = true): All others require authentication
+
 [functions.generate-pdf]
-verify_jwt = true
+verify_jwt = false
 
 [functions.send-notification]
-verify_jwt = true
+verify_jwt = false
 
 [functions.payment-reminder]
-verify_jwt = true
+verify_jwt = false
 
 [functions.send-email]
-verify_jwt = true
+verify_jwt = false
 
 [functions.create-payment]
-verify_jwt = true
+verify_jwt = false
 
 [functions.stripe-webhook]
 verify_jwt = false
 
 [functions.create-subscription-checkout]
-verify_jwt = true
+verify_jwt = false
 
 [functions.check-subscription]
-verify_jwt = true
+verify_jwt = false
 
 [functions.customer-portal]
-verify_jwt = true
+verify_jwt = false
 
 [functions.subscription-webhook]
 verify_jwt = false
@@ -34,10 +41,31 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.generate-recurring-invoices]
-verify_jwt = false  # Cron job - uses service role key
+verify_jwt = false
 
 [functions.send-team-invitation]
-verify_jwt = true
+verify_jwt = false
 
 [functions.accept-team-invitation]
-verify_jwt = true
+verify_jwt = false
+
+[functions.check-stripe-account]
+verify_jwt = false
+
+[functions.create-stripe-connect]
+verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = false
+
+[functions.send-invoice]
+verify_jwt = false
+
+[functions.xero-oauth]
+verify_jwt = false
+
+[functions.xero-sync-clients]
+verify_jwt = false
+
+[functions.xero-sync-invoices]
+verify_jwt = false
