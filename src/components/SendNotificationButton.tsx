@@ -69,22 +69,35 @@ export function SendNotificationButton({
 
       // Handle response - check if SMS was sent directly via Twilio
       if (method === 'sms' && data.directSend) {
-        toast({ 
-          title: 'SMS Sent!', 
+        toast({
+          title: 'SMS Sent!',
           description: 'Your SMS has been delivered successfully.'
         });
       } else if (method === 'email' && data.mailto) {
         window.location.href = data.mailto;
-        toast({ 
-          title: 'Ready to send!', 
+        toast({
+          title: 'Ready to send!',
           description: 'Your email app will open now.'
         });
       } else if (method === 'sms' && data.smsUrl) {
-        window.location.href = data.smsUrl;
-        toast({ 
-          title: 'Ready to send!', 
-          description: 'Your SMS app will open now.'
-        });
+        // Check if on mobile device
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        if (isMobile) {
+          // On mobile, try to open SMS app
+          window.location.href = data.smsUrl;
+          toast({
+            title: 'Ready to send!',
+            description: 'Your SMS app will open now.'
+          });
+        } else {
+          // On desktop, inform user that Twilio isn't configured
+          toast({
+            title: 'SMS on Desktop',
+            description: 'SMS sending requires Twilio integration on desktop. Please configure Twilio in your environment or use a mobile device.',
+            variant: 'destructive'
+          });
+        }
       }
 
       onSent?.();
@@ -95,7 +108,11 @@ export function SendNotificationButton({
       let errorTitle = 'Error';
       let errorDescription = error.message || 'Failed to send notification';
 
-      if (error.message?.includes('JWT') || error.message?.includes('auth')) {
+      // Handle FunctionsHttpError with status code
+      if (error.context?.status === 429 || error.message?.includes('429')) {
+        errorTitle = 'Monthly Limit Reached';
+        errorDescription = `You've reached your monthly ${method === 'sms' ? 'SMS' : 'email'} limit. Please upgrade your subscription plan for more notifications.`;
+      } else if (error.message?.includes('JWT') || error.message?.includes('auth')) {
         errorTitle = 'Authentication error';
         errorDescription = 'Please sign out and sign in again to refresh your session.';
       } else if (error.message?.includes('not configured')) {

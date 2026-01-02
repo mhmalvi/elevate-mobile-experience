@@ -41,19 +41,11 @@ export function useOfflineJobs(userId: string) {
   );
 
   // Fetch fresh data from Supabase when online
+  // Note: Using syncManager.fetchAndStore instead to protect local unsynced changes
   useEffect(() => {
     if (userId && isOnline) {
       const fetchJobs = async () => {
-        const { data } = await supabase
-          .from('jobs')
-          .select('*')
-          .eq('user_id', userId)
-          .is('deleted_at', null)
-          .order('updated_at', { ascending: false });
-
-        if (data && data.length > 0) {
-          await db.jobs.bulkPut(data);
-        }
+        await syncManager.fetchAndStore(userId);
       };
       fetchJobs();
     }
@@ -69,10 +61,7 @@ export function useOfflineJobs(userId: string) {
       ...jobData,
     } as OfflineJob;
 
-    // Save to IndexedDB immediately
-    await db.jobs.put(newJob);
-
-    // Queue for sync
+    // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('job', newJob.id, 'create', newJob);
 
     return newJob;
@@ -88,10 +77,7 @@ export function useOfflineJobs(userId: string) {
       updated_at: new Date().toISOString(),
     };
 
-    // Save to IndexedDB
-    await db.jobs.put(updatedJob);
-
-    // Queue for sync
+    // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('job', jobId, 'update', updatedJob);
 
     return updatedJob;
@@ -108,7 +94,7 @@ export function useOfflineJobs(userId: string) {
       updated_at: new Date().toISOString(),
     };
 
-    await db.jobs.put(deletedJob);
+    // Queue for sync (queueSync now handles optimistic soft delete automatically)
     await syncManager.queueSync('job', jobId, 'delete', deletedJob);
   }, []);
 
@@ -142,7 +128,7 @@ export function useOfflineJob(jobId: string) {
       updated_at: new Date().toISOString(),
     };
 
-    await db.jobs.put(updatedJob);
+    // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('job', jobId, 'update', updatedJob);
 
     return updatedJob;
@@ -168,19 +154,11 @@ export function useOfflineQuotes(userId: string) {
   );
 
   // Fetch fresh data from Supabase when online
+  // Note: Using syncManager.fetchAndStore instead to protect local unsynced changes
   useEffect(() => {
     if (userId && isOnline) {
       const fetchQuotes = async () => {
-        const { data } = await supabase
-          .from('quotes')
-          .select('*')
-          .eq('user_id', userId)
-          .is('deleted_at', null)
-          .order('updated_at', { ascending: false });
-
-        if (data && data.length > 0) {
-          await db.quotes.bulkPut(data);
-        }
+        await syncManager.fetchAndStore(userId);
       };
       fetchQuotes();
     }
@@ -199,7 +177,7 @@ export function useOfflineQuotes(userId: string) {
       ...quoteData,
     } as OfflineQuote;
 
-    await db.quotes.put(newQuote);
+    // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('quote', newQuote.id, 'create', newQuote);
 
     return newQuote;
@@ -215,7 +193,7 @@ export function useOfflineQuotes(userId: string) {
       updated_at: new Date().toISOString(),
     };
 
-    await db.quotes.put(updatedQuote);
+    // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('quote', quoteId, 'update', updatedQuote);
 
     return updatedQuote;
@@ -231,7 +209,7 @@ export function useOfflineQuotes(userId: string) {
       updated_at: new Date().toISOString(),
     };
 
-    await db.quotes.put(deletedQuote);
+    // Queue for sync (queueSync now handles optimistic soft delete automatically)
     await syncManager.queueSync('quote', quoteId, 'delete', deletedQuote);
   }, []);
 
@@ -257,19 +235,11 @@ export function useOfflineInvoices(userId: string) {
   );
 
   // Fetch fresh data from Supabase when online
+  // Note: Using syncManager.fetchAndStore instead to protect local unsynced changes
   useEffect(() => {
     if (userId && isOnline) {
       const fetchInvoices = async () => {
-        const { data } = await supabase
-          .from('invoices')
-          .select('*')
-          .eq('user_id', userId)
-          .is('deleted_at', null)
-          .order('updated_at', { ascending: false });
-
-        if (data && data.length > 0) {
-          await db.invoices.bulkPut(data);
-        }
+        await syncManager.fetchAndStore(userId);
       };
       fetchInvoices();
     }
@@ -289,7 +259,7 @@ export function useOfflineInvoices(userId: string) {
       ...invoiceData,
     } as OfflineInvoice;
 
-    await db.invoices.put(newInvoice);
+    // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('invoice', newInvoice.id, 'create', newInvoice);
 
     return newInvoice;
@@ -305,7 +275,7 @@ export function useOfflineInvoices(userId: string) {
       updated_at: new Date().toISOString(),
     };
 
-    await db.invoices.put(updatedInvoice);
+    // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('invoice', invoiceId, 'update', updatedInvoice);
 
     return updatedInvoice;
@@ -321,7 +291,7 @@ export function useOfflineInvoices(userId: string) {
       updated_at: new Date().toISOString(),
     };
 
-    await db.invoices.put(deletedInvoice);
+    // Queue for sync (queueSync now handles optimistic soft delete automatically)
     await syncManager.queueSync('invoice', invoiceId, 'delete', deletedInvoice);
   }, []);
 
@@ -347,19 +317,11 @@ export function useOfflineClients(userId: string) {
   );
 
   // Fetch fresh data from Supabase when online
+  // Note: Using syncManager.fetchAndStore instead to protect local unsynced changes
   useEffect(() => {
     if (userId && isOnline) {
       const fetchClients = async () => {
-        const { data } = await supabase
-          .from('clients')
-          .select('*')
-          .eq('user_id', userId)
-          .is('deleted_at', null)
-          .order('name', { ascending: true });
-
-        if (data && data.length > 0) {
-          await db.clients.bulkPut(data);
-        }
+        await syncManager.fetchAndStore(userId);
       };
       fetchClients();
     }
@@ -374,7 +336,7 @@ export function useOfflineClients(userId: string) {
       ...clientData,
     } as OfflineClient;
 
-    await db.clients.put(newClient);
+    // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('client', newClient.id, 'create', newClient);
 
     return newClient;
@@ -390,7 +352,7 @@ export function useOfflineClients(userId: string) {
       updated_at: new Date().toISOString(),
     };
 
-    await db.clients.put(updatedClient);
+    // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('client', clientId, 'update', updatedClient);
 
     return updatedClient;
@@ -406,7 +368,7 @@ export function useOfflineClients(userId: string) {
       updated_at: new Date().toISOString(),
     };
 
-    await db.clients.put(deletedClient);
+    // Queue for sync (queueSync now handles optimistic soft delete automatically)
     await syncManager.queueSync('client', clientId, 'delete', deletedClient);
   }, []);
 

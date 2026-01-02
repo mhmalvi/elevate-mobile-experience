@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -44,6 +44,7 @@ const statusFlow: Invoice['status'][] = ['draft', 'sent', 'viewed', 'paid'];
 export default function InvoiceDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [client, setClient] = useState<Client | null>(null);
@@ -58,6 +59,94 @@ export default function InvoiceDetail() {
       fetchInvoice();
     }
   }, [id]);
+
+  // Check for payment status in URL and poll for webhook updates
+  useEffect(() => {
+    const paymentStatus = searchParams.get('payment');
+
+    if (paymentStatus === 'cancelled') {
+      toast({
+        title: 'Payment Cancelled',
+        description: 'Your payment was cancelled. You can try again anytime.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (paymentStatus === 'success') {
+      toast({
+        title: 'Payment Successful!',
+        description: 'Thank you for your payment. Updating invoice status...'
+      });
+
+      // Poll for invoice status updates
+      // Webhooks can take 1-10 seconds, so we poll every 2 seconds for up to 20 seconds
+      let pollAttempts = 0;
+      const maxPolls = 10;
+      const pollInterval = 2000; // 2 seconds
+      let pollTimeoutId: NodeJS.Timeout;
+
+      const pollForUpdate = async () => {
+        pollAttempts++;
+        console.log(`[InvoiceDetail] Polling for invoice update, attempt ${pollAttempts}/${maxPolls}`);
+
+        try {
+          // Refetch the invoice
+          const { data: invoiceData, error } = await supabase
+            .from('invoices')
+            .select('status, amount_paid, total')
+            .eq('id', id)
+            .single();
+
+          if (error) {
+            console.error('[InvoiceDetail] Error polling invoice:', error);
+          }
+
+          if (invoiceData) {
+            const isPaid = invoiceData.status === 'paid';
+            const isPartiallyPaid = invoiceData.status === 'partially_paid';
+
+            if (isPaid || isPartiallyPaid) {
+              // Payment status updated! Refetch full invoice data
+              fetchInvoice();
+              toast({
+                title: 'Invoice Updated',
+                description: isPaid ? 'Payment confirmed! Invoice is now marked as paid.' : 'Partial payment received.',
+                duration: 5000
+              });
+              return; // Stop polling
+            }
+          }
+
+          if (pollAttempts < maxPolls) {
+            // Continue polling
+            pollTimeoutId = setTimeout(() => pollForUpdate(), pollInterval);
+          } else {
+            // Max attempts reached, do final refetch
+            fetchInvoice();
+            toast({
+              title: 'Status Update Pending',
+              description: 'Payment was received. If status does not update, please refresh the page.',
+              variant: 'default',
+              duration: 7000
+            });
+          }
+        } catch (err) {
+          console.error('[InvoiceDetail] Error in polling:', err);
+        }
+      };
+
+      // Start polling after 1 second (give webhook initial time)
+      pollTimeoutId = setTimeout(() => pollForUpdate(), 1000);
+
+      // Cleanup function
+      return () => {
+        if (pollTimeoutId) {
+          clearTimeout(pollTimeoutId);
+        }
+      };
+    }
+  }, [searchParams, id]); // Removed toast and fetchInvoice from dependencies to avoid infinite loop
 
   const fetchInvoice = async () => {
     const { data: invoiceData, error } = await supabase
@@ -185,7 +274,7 @@ export default function InvoiceDetail() {
 
   return (
     <MobileLayout>
-      <PageHeader 
+      <PageHeader
         title={invoice.invoice_number}
         showBack
         action={{
@@ -193,6 +282,22 @@ export default function InvoiceDetail() {
           onClick: () => navigate(`/invoices/${id}/edit`)
         }}
       />
+
+      {/* Manual Refresh Button - helps when webhook updates haven't synced yet */}
+      <div className="px-4 pt-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => {
+            fetchInvoice();
+            toast({ title: 'Refreshed', description: 'Invoice data updated from server.' });
+          }}
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh Invoice
+        </Button>
+      </div>
 
       <div className="p-4 space-y-4 animate-fade-in">
         {/* Status & Header */}
