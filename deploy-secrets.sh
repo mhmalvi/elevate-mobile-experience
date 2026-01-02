@@ -1,43 +1,96 @@
 #!/bin/bash
+# TradieMate - Deploy Supabase Edge Function Secrets
+# This script reads secrets from .env and deploys them to Supabase
 
-# Deploy all secrets to Supabase Edge Functions
-# This ensures all functions have access to required API keys
-
-PROJECT_REF="rucuomtojzifrvplhwja"
-
-echo "🚀 Deploying secrets to Supabase Edge Functions..."
+echo "========================================"
+echo "TradieMate - Deploying Supabase Secrets"
+echo "========================================"
 echo ""
 
-# Read secrets from .env and deploy to Supabase
-npx supabase secrets set ENCRYPTION_KEY="$(grep ENCRYPTION_KEY .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set RESEND_API_KEY="$(grep RESEND_API_KEY .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set STRIPE_SECRET_KEY="$(grep STRIPE_SECRET_KEY .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set STRIPE_WEBHOOK_SECRET="$(grep STRIPE_WEBHOOK_SECRET .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set TWILIO_ACCOUNT_SID="$(grep TWILIO_ACCOUNT_SID .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set TWILIO_AUTH_TOKEN="$(grep TWILIO_AUTH_TOKEN .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set TWILIO_PHONE_NUMBER="$(grep TWILIO_PHONE_NUMBER .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set XERO_CLIENT_ID="$(grep XERO_CLIENT_ID .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set XERO_CLIENT_SECRET="$(grep XERO_CLIENT_SECRET .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set XERO_REDIRECT_URI="$(grep XERO_REDIRECT_URI .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set APP_URL="$(grep APP_URL .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
-npx supabase secrets set REVENUECAT_WEBHOOK_SECRET="$(grep REVENUECAT_WEBHOOK_SECRET .env | cut -d'=' -f2 | tr -d '\"')" --project-ref $PROJECT_REF
+# Check if .env exists
+if [ ! -f ".env" ]; then
+    echo "ERROR: .env file not found!"
+    exit 1
+fi
 
-echo ""
-echo "✅ All secrets deployed!"
-echo ""
-echo "🔄 Redeploying critical Edge Functions with new secrets..."
+# Load .env file
+echo "Reading secrets from .env..."
+export $(grep -v '^#' .env | xargs)
+
+if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+    echo "ERROR: SUPABASE_ACCESS_TOKEN not found in .env!"
+    exit 1
+fi
+
+echo "✅ Access token found"
 echo ""
 
-# Redeploy critical functions to pick up new secrets
-npx supabase functions deploy send-email --project-ref $PROJECT_REF
-npx supabase functions deploy send-notification --project-ref $PROJECT_REF
-npx supabase functions deploy create-payment --project-ref $PROJECT_REF
-npx supabase functions deploy xero-oauth --project-ref $PROJECT_REF
-npx supabase functions deploy xero-sync-invoices --project-ref $PROJECT_REF
-npx supabase functions deploy xero-sync-clients --project-ref $PROJECT_REF
-npx supabase functions deploy generate-pdf --project-ref $PROJECT_REF
+# Define secrets to deploy
+secrets=(
+    "RESEND_API_KEY"
+    "EMAIL_FROM_DOMAIN"
+    "TWILIO_ACCOUNT_SID"
+    "TWILIO_AUTH_TOKEN"
+    "TWILIO_PHONE_NUMBER"
+    "STRIPE_SECRET_KEY"
+    "STRIPE_WEBHOOK_SECRET"
+    "ENCRYPTION_KEY"
+    "XERO_CLIENT_ID"
+    "XERO_CLIENT_SECRET"
+    "APP_URL"
+    "REVENUECAT_WEBHOOK_SECRET"
+)
+
+echo "Deploying secrets to Supabase..."
+echo ""
+
+success_count=0
+fail_count=0
+skip_count=0
+
+for secret_key in "${secrets[@]}"; do
+    # Get the value from environment
+    secret_value="${!secret_key}"
+    
+    if [ -z "$secret_value" ]; then
+        echo "⚠️  Skipped: $secret_key (not found in .env)"
+        ((skip_count++))
+        continue
+    fi
+    
+    # Deploy the secret
+    echo -n "Deploying: $secret_key..."
+    
+    if npx supabase secrets set "$secret_key=$secret_value" --project-ref rucuomtojzifrvplhwja >/dev/null 2>&1; then
+        echo " ✅ Success"
+        ((success_count++))
+    else
+        echo " ❌ Failed"
+        ((fail_count++))
+    fi
+done
 
 echo ""
-echo "✅ Deployment complete! All features should now be functional."
+echo "========================================"
+echo "Deployment Summary"
+echo "========================================"
+echo "✅ Successful: $success_count"
+echo "❌ Failed: $fail_count"
+echo "⚠️  Skipped: $skip_count"
 echo ""
-echo "🧪 Next step: Test the features in your app"
+
+if [ $fail_count -eq 0 ]; then
+    echo "🎉 All secrets deployed successfully!"
+    echo ""
+    echo "Next steps:"
+    echo "1. Test PDF generation in your app"
+    echo "2. Test email sending functionality"
+    echo "3. Test SMS sending functionality"
+    echo ""
+    echo "To verify deployed secrets, run:"
+    echo "  npx supabase secrets list --project-ref rucuomtojzifrvplhwja"
+else
+    echo "⚠️  Some secrets failed to deploy. Please review errors above."
+fi
+
+echo ""

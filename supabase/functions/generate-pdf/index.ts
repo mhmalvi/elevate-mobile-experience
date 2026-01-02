@@ -29,6 +29,7 @@ serve(async (req) => {
     let lineItems: any[] = [];
     let profile: any = null;
     let client: any = null;
+    let branding: any = null;
 
     if (type === "quote") {
       // Fetch quote with client
@@ -71,7 +72,7 @@ serve(async (req) => {
         .select("*")
         .eq("user_id", quote.user_id)
         .single();
-      const branding = brandingData;
+      branding = brandingData;
 
     } else if (type === "invoice") {
       // Fetch invoice with client
@@ -114,7 +115,7 @@ serve(async (req) => {
         .select("*")
         .eq("user_id", invoice.user_id)
         .single();
-      const branding = brandingData;
+      branding = brandingData;
     }
 
     // Generate HTML for PDF
