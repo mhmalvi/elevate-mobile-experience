@@ -107,3 +107,75 @@ export function isEncryptionConfigured(): boolean {
   const key = Deno.env.get('ENCRYPTION_KEY');
   return !!(key && key.length >= 32);
 }
+
+/**
+ * Bank Account Details Interface
+ */
+export interface BankAccountDetails {
+  bank_name?: string;
+  bank_bsb?: string;
+  bank_account_number?: string;
+  bank_account_name?: string;
+}
+
+/**
+ * Encrypted Bank Account Details Interface
+ */
+export interface EncryptedBankAccountDetails {
+  bank_name_encrypted?: string;
+  bank_bsb_encrypted?: string;
+  bank_account_number_encrypted?: string;
+  bank_account_name_encrypted?: string;
+}
+
+/**
+ * Encrypts bank account details
+ * @param details - Plaintext bank account details
+ * @returns Encrypted bank account details
+ */
+export async function encryptBankDetails(
+  details: BankAccountDetails
+): Promise<EncryptedBankAccountDetails> {
+  const encrypted: EncryptedBankAccountDetails = {};
+
+  if (details.bank_name) {
+    encrypted.bank_name_encrypted = await encryptToken(details.bank_name);
+  }
+  if (details.bank_bsb) {
+    encrypted.bank_bsb_encrypted = await encryptToken(details.bank_bsb);
+  }
+  if (details.bank_account_number) {
+    encrypted.bank_account_number_encrypted = await encryptToken(details.bank_account_number);
+  }
+  if (details.bank_account_name) {
+    encrypted.bank_account_name_encrypted = await encryptToken(details.bank_account_name);
+  }
+
+  return encrypted;
+}
+
+/**
+ * Decrypts bank account details
+ * @param encrypted - Encrypted bank account details
+ * @returns Decrypted bank account details
+ */
+export async function decryptBankDetails(
+  encrypted: EncryptedBankAccountDetails
+): Promise<BankAccountDetails> {
+  const decrypted: BankAccountDetails = {};
+
+  if (encrypted.bank_name_encrypted) {
+    decrypted.bank_name = await decryptToken(encrypted.bank_name_encrypted);
+  }
+  if (encrypted.bank_bsb_encrypted) {
+    decrypted.bank_bsb = await decryptToken(encrypted.bank_bsb_encrypted);
+  }
+  if (encrypted.bank_account_number_encrypted) {
+    decrypted.bank_account_number = await decryptToken(encrypted.bank_account_number_encrypted);
+  }
+  if (encrypted.bank_account_name_encrypted) {
+    decrypted.bank_account_name = await decryptToken(encrypted.bank_account_name_encrypted);
+  }
+
+  return decrypted;
+}
