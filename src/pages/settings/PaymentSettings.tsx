@@ -50,14 +50,29 @@ export default function PaymentSettings() {
   });
 
   useEffect(() => {
+    // SECURITY: Load encrypted bank details from secure edge function
+    const loadPaymentSettings = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('get-payment-settings');
+
+        if (error) {
+          console.error('Error loading payment settings:', error);
+        } else if (data) {
+          setForm({
+            bank_name: data.bank_name || '',
+            bank_bsb: data.bank_bsb || '',
+            bank_account_number: data.bank_account_number || '',
+            bank_account_name: data.bank_account_name || '',
+            payment_terms: data.payment_terms || 14
+          });
+        }
+      } catch (error) {
+        console.error('Error loading payment settings:', error);
+      }
+    };
+
     if (profile) {
-      setForm({
-        bank_name: profile.bank_name || '',
-        bank_bsb: profile.bank_bsb || '',
-        bank_account_number: profile.bank_account_number || '',
-        bank_account_name: profile.bank_account_name || '',
-        payment_terms: profile.payment_terms || 14
-      });
+      loadPaymentSettings();
     }
   }, [profile]);
 
@@ -124,21 +139,36 @@ export default function PaymentSettings() {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await updateProfile(form);
+    try {
+      // SECURITY: Use encrypted edge function to save bank details
+      const { data, error } = await supabase.functions.invoke('update-payment-settings', {
+        body: form
+      });
 
-    if (error) {
+      if (error) {
+        toast({
+          title: 'Error saving',
+          description: error.message,
+          variant: 'destructive'
+        });
+      } else {
+        toast({
+          title: 'Settings saved',
+          description: 'Your payment details have been securely encrypted and saved.'
+        });
+
+        // Refresh profile to get latest data
+        window.location.reload();
+      }
+    } catch (error) {
       toast({
-        title: 'Error saving',
-        description: error.message,
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to save payment settings',
         variant: 'destructive'
       });
-    } else {
-      toast({
-        title: 'Settings saved',
-        description: 'Your payment details have been updated.'
-      });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   if (profileLoading) {

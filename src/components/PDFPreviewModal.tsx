@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Drawer,
@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Eye, Loader2, Download, X, Printer } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import DOMPurify from 'dompurify';
 
 interface PDFPreviewModalProps {
   type: 'quote' | 'invoice';
@@ -99,20 +100,31 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
     }
   };
 
+  // SECURITY: Sanitize HTML to prevent XSS attacks
+  const sanitizedHtml = useMemo(() => {
+    if (!html) return null;
+    return DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ['html', 'head', 'body', 'style', 'div', 'p', 'span', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'br', 'hr', 'strong', 'em', 'ul', 'ol', 'li'],
+      ALLOWED_ATTR: ['class', 'style', 'src', 'alt', 'width', 'height', 'colspan', 'rowspan'],
+      ALLOW_DATA_ATTR: false,
+    });
+  }, [html]);
+
   const handlePrint = () => {
-    if (!html) return;
+    if (!sanitizedHtml) return;
     const printWindow = window.open('', '_blank');
     if (printWindow) {
-      printWindow.document.write(html);
+      // SECURITY: Write sanitized HTML instead of raw HTML
+      printWindow.document.write(sanitizedHtml);
       printWindow.document.close();
       printWindow.print();
     }
   };
 
   const handleDownloadPDF = async () => {
-    if (!html) return;
+    if (!sanitizedHtml) return;
     setDownloading(true);
-    
+
     try {
       // Create a temporary container for rendering
       const container = document.createElement('div');
@@ -120,7 +132,8 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
       container.style.left = '-9999px';
       container.style.top = '0';
       container.style.width = '794px'; // A4 width in pixels at 96 DPI
-      container.innerHTML = html;
+      // SECURITY: Use sanitized HTML to prevent XSS
+      container.innerHTML = sanitizedHtml;
       document.body.appendChild(container);
 
       // Wait for content to render
@@ -193,13 +206,14 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
             <div className="flex items-center justify-center h-full">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
-          ) : html ? (
+          ) : sanitizedHtml ? (
             <div className="bg-background rounded-lg shadow-lg overflow-hidden">
               <iframe
                 ref={iframeRef}
-                srcDoc={html}
+                srcDoc={sanitizedHtml}
                 className="w-full h-[500px] border-0"
                 title={`Preview ${documentNumber}`}
+                sandbox="allow-same-origin"
               />
             </div>
           ) : (
@@ -211,11 +225,11 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
 
         <DrawerFooter className="border-t">
           <div className="flex gap-2 w-full">
-            <Button onClick={handleDownloadPDF} disabled={!html || loading || downloading} className="flex-1">
+            <Button onClick={handleDownloadPDF} disabled={!sanitizedHtml || loading || downloading} className="flex-1">
               {downloading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
               Download PDF
             </Button>
-            <Button variant="outline" onClick={handlePrint} disabled={!html || loading}>
+            <Button variant="outline" onClick={handlePrint} disabled={!sanitizedHtml || loading}>
               <Printer className="w-4 h-4 mr-2" />
               Print
             </Button>

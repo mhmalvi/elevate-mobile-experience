@@ -7,8 +7,9 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   server: {
     androidScheme: 'https',
-    // Allow clear text traffic for local development
-    cleartext: true,
+    // SECURITY: Only allow cleartext in development, NEVER in production
+    // Production builds MUST use HTTPS only to prevent MITM attacks
+    cleartext: process.env.NODE_ENV === 'development' ? true : false,
   },
   plugins: {
     SplashScreen: {
@@ -47,10 +48,13 @@ const config: CapacitorConfig = {
       keystorePassword: undefined,
       keystoreAlias: undefined,
       keystoreAliasPassword: undefined,
-      releaseType: 'APK',
+      // CHANGED: Use AAB (Android App Bundle) format required by Play Store
+      // APK format is deprecated since August 2021
+      releaseType: 'AAB',
     },
-    // Allow mixed content for development
-    allowMixedContent: true,
+    // SECURITY: Disable mixed content to prevent HTTP resources in HTTPS app
+    // This prevents downgrade attacks and ensures all resources are encrypted
+    allowMixedContent: false,
     // Use new Capacitor 4+ Android plugin API
     captureInput: true,
   },

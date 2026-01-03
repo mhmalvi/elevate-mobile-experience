@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.21.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 
 interface PaymentRequest {
   invoice_id: string;
@@ -14,9 +10,12 @@ interface PaymentRequest {
 }
 
 serve(async (req) => {
+  // SECURITY: Get secure CORS headers
+  const corsHeaders = getCorsHeaders(req);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return createCorsResponse(req);
   }
 
   try {
@@ -109,8 +108,9 @@ serve(async (req) => {
 
     console.log(`Creating Checkout session for account: ${stripeAccountId}, balance: $${balance}`);
 
-    // Calculate platform fee: 0.15% of transaction
-    const platformFeeAmount = Math.round(balance * 100 * 0.0015); // 0.15% platform fee
+    // SECURITY: Calculate platform fee server-side (NEVER trust client input)
+    // 0.15% platform fee calculated from server-verified balance
+    const platformFeeAmount = Math.round(balance * 100 * 0.0015);
 
     console.log(`Platform fee (0.15%): $${platformFeeAmount / 100}`);
 
