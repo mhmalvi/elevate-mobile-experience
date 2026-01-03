@@ -1,11 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/encryption.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { signState, verifyState } from "../_shared/oauth-security.ts";
 
 interface XeroTokenResponse {
   access_token: string;
@@ -24,9 +21,12 @@ interface XeroConnection {
 }
 
 serve(async (req) => {
+  // SECURITY: Get secure CORS headers
+  const corsHeaders = getCorsHeaders(req);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return createCorsResponse(req);
   }
 
   try {
@@ -72,8 +72,8 @@ serve(async (req) => {
         );
       }
 
-      // Generate state parameter with user ID for callback
-      const stateParam = btoa(JSON.stringify({ userId: user.id }));
+      // SECURITY: Generate signed state parameter to prevent CSRF attacks
+      const stateParam = await signState({ userId: user.id });
 
       const xeroAuthUrl =
         `https://login.xero.com/identity/connect/authorize?` +
@@ -98,18 +98,21 @@ serve(async (req) => {
     if (action === "callback" && code && state) {
       console.log("Processing Xero OAuth callback");
 
-      // Decode state to get user ID
-      let userId: string;
-      try {
-        const stateData = JSON.parse(atob(state));
-        userId = stateData.userId;
-      } catch (e) {
-        console.error("Invalid state parameter:", e);
+      // SECURITY: Verify signed state parameter to prevent CSRF attacks
+      const stateVerification = await verifyState(state);
+
+      if (!stateVerification.valid) {
+        console.error("State verification failed:", stateVerification.error);
         return new Response(
-          JSON.stringify({ error: "Invalid state parameter" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            error: "Invalid or expired OAuth state",
+            details: stateVerification.error
+          }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      const userId = stateVerification.data!.userId;
 
       // Exchange authorization code for tokens
       const basicAuth = btoa(`${xeroClientId}:${xeroClientSecret}`);

@@ -1,19 +1,25 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// SECURITY: Load Stripe price IDs from environment variables
+// These should NEVER be hardcoded in the source code
+function getPriceTierMap(): Record<string, string> {
+  const soloPrice = Deno.env.get('STRIPE_PRICE_ID_SOLO');
+  const crewPrice = Deno.env.get('STRIPE_PRICE_ID_CREW');
+  const proPrice = Deno.env.get('STRIPE_PRICE_ID_PRO');
 
-// Map Stripe price IDs to tier names
-// These are the actual price IDs from .env file
-const PRICE_TO_TIER: Record<string, string> = {
-  'price_1SiyYiHfG2W0TmGhQDHUiQkt': 'solo',
-  'price_1SiybGHfG2W0TmGh4QYBj996': 'crew',
-  'price_1SiybvHfG2W0TmGh0DdDE5xt': 'pro',
-};
+  if (!soloPrice || !crewPrice || !proPrice) {
+    throw new Error('STRIPE_PRICE_ID_* environment variables not configured');
+  }
+
+  return {
+    [soloPrice]: 'solo',
+    [crewPrice]: 'crew',
+    [proPrice]: 'pro',
+  };
+}
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -21,12 +27,19 @@ const logStep = (step: string, details?: Record<string, unknown>) => {
 };
 
 serve(async (req) => {
+  // SECURITY: Get secure CORS headers
+  const corsHeaders = getCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return createCorsResponse(req);
   }
 
   try {
     logStep('Function started');
+
+    // Load price-to-tier mapping from environment
+    const PRICE_TO_TIER = getPriceTierMap();
+    logStep('Price mappings loaded from environment');
 
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
     if (!stripeKey) throw new Error('STRIPE_SECRET_KEY is not set');

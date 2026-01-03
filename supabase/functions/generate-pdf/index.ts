@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 
 interface PDFRequest {
   type: "quote" | "invoice";
@@ -12,18 +8,37 @@ interface PDFRequest {
 }
 
 serve(async (req) => {
+  // SECURITY: Get secure CORS headers
+  const corsHeaders = getCorsHeaders(req);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return createCorsResponse(req);
   }
 
   try {
+    // SECURITY: Require authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return createErrorResponse(req, "Unauthorized - Missing authorization header", 401);
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // SECURITY: Validate user token
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
+
+    if (authError || !user) {
+      console.error("[generate-pdf] Auth error:", authError);
+      return createErrorResponse(req, "Unauthorized - Invalid token", 401);
+    }
+
     const { type, id }: PDFRequest = await req.json();
-    console.log(`Generating PDF for ${type}: ${id}`);
+    console.log(`[generate-pdf] Generating PDF for ${type}: ${id} (user: ${user.id})`);
 
     let documentData: any;
     let lineItems: any[] = [];
@@ -32,11 +47,12 @@ serve(async (req) => {
     let branding: any = null;
 
     if (type === "quote") {
-      // Fetch quote with client
+      // SECURITY: Fetch quote with user ownership validation
       const { data: quote, error: quoteError } = await supabase
         .from("quotes")
         .select("*, clients(*)")
         .eq("id", id)
+        .eq("user_id", user.id)  // ADDED: Verify user owns this quote
         .single();
 
       if (quoteError || !quote) {
@@ -75,11 +91,12 @@ serve(async (req) => {
       branding = brandingData;
 
     } else if (type === "invoice") {
-      // Fetch invoice with client
+      // SECURITY: Fetch invoice with user ownership validation
       const { data: invoice, error: invoiceError } = await supabase
         .from("invoices")
         .select("*, clients(*)")
         .eq("id", id)
+        .eq("user_id", user.id)  // ADDED: Verify user owns this invoice
         .single();
 
       if (invoiceError || !invoice) {
