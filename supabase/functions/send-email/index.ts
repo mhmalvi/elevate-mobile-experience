@@ -412,16 +412,13 @@ serve(async (req) => {
     const appUrl = Deno.env.get("APP_URL") || "";
     const isProduction = appUrl.includes("tradiemate.com.au") || appUrl.includes("production");
 
-    // In production, require custom domain. In dev/test, allow onboarding@resend.dev
+    // Use custom domain or default to TradieMate domain
     let fromEmail: string;
     if (customEmailDomain) {
       fromEmail = customEmailDomain;
-    } else if (isProduction) {
-      console.warn("Production environment detected but EMAIL_FROM_DOMAIN not configured!");
-      fromEmail = `${businessName} <onboarding@resend.dev>`;
     } else {
-      // Dev/test mode - use Resend's test email
-      fromEmail = `${businessName} <onboarding@resend.dev>`;
+      // Use TradieMate domain (must be verified in Resend dashboard)
+      fromEmail = `${businessName} <noreply@tradiemate.com.au>`;
     }
 
     console.log(`[${isProduction ? 'PRODUCTION' : 'DEV'}] Sending email from: ${fromEmail} to: ${recipient_email}`);

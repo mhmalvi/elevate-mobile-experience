@@ -4,6 +4,7 @@ import { syncManager } from './syncManager';
 import { db } from './db';
 import { useToast } from '@/hooks/use-toast';
 import { WifiOff, RefreshCw } from 'lucide-react';
+import { migrateToEncryptedStorage } from './migrateEncryption';
 
 interface OfflineContextValue {
   isOnline: boolean;
@@ -140,6 +141,19 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('sync-progress', handleSyncProgress);
     };
   }, [toast]);
+
+  // SECURITY: Migrate to encrypted storage on first load
+  useEffect(() => {
+    const runMigration = async () => {
+      try {
+        await migrateToEncryptedStorage();
+      } catch (error) {
+        console.error('[OfflineProvider] Encryption migration failed:', error);
+        // Continue anyway - encryption is best-effort
+      }
+    };
+    runMigration();
+  }, []); // Run once on mount
 
   // Prefetch data when user logs in
   useEffect(() => {

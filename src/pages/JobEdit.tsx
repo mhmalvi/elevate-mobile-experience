@@ -185,7 +185,7 @@ export default function JobEdit() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label htmlFor="scheduled_date">Scheduled Date</Label>
             <Input
@@ -212,7 +212,7 @@ export default function JobEdit() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label htmlFor="actual_hours">Hours Worked</Label>
             <Input

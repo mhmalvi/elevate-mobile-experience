@@ -106,7 +106,13 @@
       "Bash(if grep -q \"STRIPE_WEBHOOK_SECRET=\" .env)",
       "Bash(then echo \"✅ STRIPE_WEBHOOK_SECRET found in .env\")",
       "Bash(else echo \"❌ STRIPE_WEBHOOK_SECRET not found in .env\")",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(\"https://api.supabase.com/v1/projects/rucuomtojzifrvplhwja/config/auth\" )",
+      "mcp__supabase__get_organization",
+      "Bash(Select-String -Pattern \"\\(error|Error|ERROR|warning|built|✓\\)\")",
+      "Bash(Select-Object -First 30)",
+      "Bash(netlify:*)",
+      "Bash(vercel:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

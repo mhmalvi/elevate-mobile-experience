@@ -138,7 +138,7 @@ export default function ClientDetail() {
 
         {/* Revenue Summary */}
         {(totalRevenue > 0 || outstandingAmount > 0) && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-4 bg-success/10 border border-success/30 rounded-xl text-center">
               <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
               <p className="text-lg font-bold text-success">${totalRevenue.toLocaleString()}</p>
