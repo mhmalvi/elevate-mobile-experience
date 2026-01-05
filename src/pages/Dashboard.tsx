@@ -228,7 +228,7 @@ export default function Dashboard() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="animate-fade-in stagger-1">
             <StatCard
               label="Outstanding"

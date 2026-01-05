@@ -1,4 +1,5 @@
 import { db, SyncQueueItem } from './db';
+import { encryptedDb } from './encryptedDb';
 import { supabase } from '@/integrations/supabase/client';
 import { resolveConflict, hasConflict } from './conflictResolver';
 
@@ -403,13 +404,14 @@ export class SyncManager {
 
   /**
    * Get local IndexedDB table for entity type
+   * SECURITY: Uses encrypted tables for sensitive data (clients, invoices, quotes)
    */
   private getLocalTable(entityType: string) {
     const tableMap: Record<string, any> = {
-      job: db.jobs,
-      quote: db.quotes,
-      invoice: db.invoices,
-      client: db.clients,
+      job: encryptedDb.jobs,
+      quote: encryptedDb.quotes,
+      invoice: encryptedDb.invoices,
+      client: encryptedDb.clients,
     };
     return tableMap[entityType];
   }
@@ -1070,7 +1072,7 @@ export class SyncManager {
         userId,
         pendingIds.quote,
         pageSize,
-        db.quotes
+        encryptedDb.quotes
       );
       totalFetched++;
       options?.onProgress?.(totalFetched / totalExpected);
@@ -1081,7 +1083,7 @@ export class SyncManager {
         userId,
         pendingIds.invoice,
         pageSize,
-        db.invoices
+        encryptedDb.invoices
       );
       totalFetched++;
       options?.onProgress?.(totalFetched / totalExpected);
@@ -1092,7 +1094,7 @@ export class SyncManager {
         userId,
         pendingIds.client,
         pageSize,
-        db.clients
+        encryptedDb.clients
       );
       totalFetched++;
       options?.onProgress?.(totalFetched / totalExpected);

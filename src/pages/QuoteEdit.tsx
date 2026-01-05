@@ -264,7 +264,7 @@ export default function QuoteEdit() {
                 onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
               />
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                 <div>
                   <Label className="text-xs">Qty</Label>
                   <Input

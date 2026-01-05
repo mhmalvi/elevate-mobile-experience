@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Wrench, ArrowLeft } from 'lucide-react';
+import { PasswordStrengthIndicator } from '@/components/PasswordStrengthIndicator';
+import { validatePassword } from '@/lib/passwordSecurity';
 
 type AuthMode = 'login' | 'signup' | 'forgot-password';
 
@@ -43,6 +45,20 @@ export default function Auth() {
       }
       setLoading(false);
       return;
+    }
+
+    // Validate password on signup
+    if (mode === 'signup') {
+      const validation = validatePassword(password);
+      if (!validation.valid) {
+        toast({
+          title: "Weak Password",
+          description: validation.errors[0],
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
     }
 
     const { error } = mode === 'login'
@@ -142,8 +158,14 @@ export default function Auth() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={8}
               />
+              {mode === 'signup' && (
+                <PasswordStrengthIndicator
+                  password={password}
+                  showFeedback={true}
+                />
+              )}
             </div>
           )}
           
