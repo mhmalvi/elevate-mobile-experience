@@ -1,10 +1,10 @@
 {
-  "appId": "app.lovable.29b56e3ce10143329011635f02c5ef86",
+  "appId": "com.tradiemate.app",
   "appName": "TradieMate",
   "webDir": "dist",
   "server": {
-    "url": "https://29b56e3c-e101-4332-9011-635f02c5ef86.lovableproject.com?forceHideBadge=true",
-    "cleartext": true
+    "url": "https://app.tradiemate.com.au",
+    "cleartext": false
   },
   "plugins": {
     "PurchasesPlugin": {
