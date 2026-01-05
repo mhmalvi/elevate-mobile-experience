@@ -223,7 +223,7 @@ export default function Onboarding() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 flex-1 content-start">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1 content-start">
               {TRADES.map((trade, index) => (
                 <button
                   key={trade.value}

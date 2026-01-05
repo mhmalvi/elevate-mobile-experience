@@ -312,7 +312,7 @@ export default function InvoiceDetail() {
             <StatusBadge status={invoice.status || 'draft'} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <div>
               <span className="text-muted-foreground">Created</span>
               <p className="font-medium">{format(new Date(invoice.created_at), 'dd MMM yyyy')}</p>
@@ -339,7 +339,7 @@ export default function InvoiceDetail() {
                 <p className="text-xs text-muted-foreground">Auto-generated and sent on schedule</p>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div>
                 <span className="text-muted-foreground">Frequency</span>
                 <p className="font-medium capitalize">{invoice.recurring_interval}</p>

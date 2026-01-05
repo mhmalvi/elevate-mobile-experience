@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { checkWebhookIdempotency, markWebhookProcessed } from "../_shared/webhook-idempotency.ts";
 
 serve(async (req) => {
   // SECURITY: Get secure CORS headers based on request origin
@@ -97,6 +98,23 @@ serve(async (req) => {
       console.log(`Connect event from account: ${connectedAccountId}`);
     }
 
+    // SECURITY: Check idempotency to prevent duplicate processing
+    const idempotencyCheck = await checkWebhookIdempotency(supabase, event.id);
+    if (idempotencyCheck.isProcessed) {
+      console.log(`Skipping already processed event: ${event.id}`);
+      return new Response(
+        JSON.stringify({
+          received: true,
+          duplicate: true,
+          previousResult: idempotencyCheck.previousResult
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
     // Handle checkout.session.completed event
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -168,7 +186,7 @@ serve(async (req) => {
 
               // Send notification email directly via Resend
               await resend.emails.send({
-                from: "TradieMate <onboarding@resend.dev>",
+                from: "TradieMate <noreply@tradiemate.com.au>",
                 to: [ownerEmail],
                 subject: `💰 Payment Received - Invoice ${invoiceNumber}`,
                 html: `
@@ -325,6 +343,18 @@ serve(async (req) => {
       }
     }
 
+    // SECURITY: Mark webhook as successfully processed
+    await markWebhookProcessed(
+      supabase,
+      {
+        event_id: event.id,
+        event_type: event.type,
+        source: webhookSource as 'connect' | 'platform',
+        raw_event: event as any,
+      },
+      'success'
+    );
+
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -332,6 +362,27 @@ serve(async (req) => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("Webhook error:", error);
+
+    // SECURITY: Mark webhook as processed with error
+    // Note: We only have event info if signature verification succeeded
+    try {
+      if (typeof event !== 'undefined' && event?.id) {
+        await markWebhookProcessed(
+          supabase,
+          {
+            event_id: event.id,
+            event_type: event.type,
+            source: webhookSource as 'connect' | 'platform',
+            raw_event: event as any,
+          },
+          'error',
+          errorMessage
+        );
+      }
+    } catch (markError) {
+      console.error('Failed to mark webhook as errored:', markError);
+    }
+
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
