@@ -16,6 +16,7 @@ const ALLOWED_ORIGINS = [
   'https://www.tradiemate.com.au',
   'https://app.tradiemate.com.au',
   // Vercel deployment URLs
+  'https://elevate-mobile-experience.vercel.app',
   'https://dist-six-fawn.vercel.app',
   'https://dist-oyrj5nl90-info-quadquetechs-projects.vercel.app',
   // Add staging/preview URLs if needed
