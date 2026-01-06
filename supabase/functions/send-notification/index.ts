@@ -126,9 +126,12 @@ async function sendTwilioSms(to: string, body: string): Promise<{ success: boole
 }
 
 serve(async (req) => {
+  // SECURITY: Get secure CORS headers
+  const corsHeaders = getCorsHeaders(req);
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return createCorsResponse(req);
   }
 
   try {

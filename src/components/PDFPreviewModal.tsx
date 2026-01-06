@@ -131,46 +131,85 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
       container.style.position = 'absolute';
       container.style.left = '-9999px';
       container.style.top = '0';
-      container.style.width = '794px'; // A4 width in pixels at 96 DPI
+      container.style.width = '210mm'; // A4 width
+      container.style.maxWidth = '210mm';
+      container.style.padding = '0';
+      container.style.margin = '0';
+      container.style.backgroundColor = '#ffffff';
+      container.style.boxSizing = 'border-box';
       // SECURITY: Use sanitized HTML to prevent XSS
       container.innerHTML = sanitizedHtml;
       document.body.appendChild(container);
 
-      // Wait for content to render
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for content to fully render (including images and fonts)
+      await new Promise(resolve => setTimeout(resolve, 500));
 
+      // Load any images in the container
+      const images = container.getElementsByTagName('img');
+      const imagePromises = Array.from(images).map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = () => resolve(null);
+          img.onerror = () => resolve(null);
+        });
+      });
+      await Promise.all(imagePromises);
+
+      // Capture with html2canvas
       const canvas = await html2canvas(container, {
-        scale: 2,
+        scale: 3, // Higher quality
         useCORS: true,
+        allowTaint: false,
         logging: false,
         backgroundColor: '#ffffff',
+        windowWidth: container.scrollWidth,
+        windowHeight: container.scrollHeight,
+        onclone: (clonedDoc) => {
+          const clonedContainer = clonedDoc.querySelector('div');
+          if (clonedContainer) {
+            clonedContainer.style.display = 'block';
+            clonedContainer.style.position = 'relative';
+          }
+        }
       });
 
       document.body.removeChild(container);
 
+      // Create PDF with better sizing
       const imgWidth = 210; // A4 width in mm
       const pageHeight = 297; // A4 height in mm
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
+
       const pdf = new jsPDF('p', 'mm', 'a4');
-      let heightLeft = imgHeight;
-      let position = 0;
 
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      if (imgHeight <= pageHeight) {
+        // Single page
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgWidth, imgHeight);
+      } else {
+        // Multiple pages
+        let heightLeft = imgHeight;
+        let position = 0;
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
         pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
+
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
+        }
       }
 
       pdf.save(`${documentNumber}.pdf`);
       toast({ title: 'PDF downloaded', description: `${documentNumber}.pdf saved successfully` });
     } catch (error) {
       console.error('PDF download error:', error);
-      toast({ title: 'Download failed', description: 'Please try printing instead.', variant: 'destructive' });
+      toast({
+        title: 'Download failed',
+        description: error instanceof Error ? error.message : 'Please try printing instead.',
+        variant: 'destructive'
+      });
     } finally {
       setDownloading(false);
     }

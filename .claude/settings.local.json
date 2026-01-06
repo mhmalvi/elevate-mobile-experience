@@ -118,7 +118,9 @@
       "Bash(npm:*)",
       "Bash(if [ -d \"node_modules\" ])",
       "Bash(then echo \"✅ node_modules exists\")",
-      "Bash(else echo \"❌ node_modules missing - run npm install\")"
+      "Bash(else echo \"❌ node_modules missing - run npm install\")",
+      "Bash(do echo \"$dir\")",
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_08470f9134209d5aa87366467ba53eeebbde19c8\" npx supabase db push:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

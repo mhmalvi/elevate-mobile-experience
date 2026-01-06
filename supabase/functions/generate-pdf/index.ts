@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { generateProfessionalPDFHTML } from "./improved-template.ts";
 
 interface PDFRequest {
   type: "quote" | "invoice";
@@ -135,8 +136,8 @@ serve(async (req) => {
       branding = brandingData;
     }
 
-    // Generate HTML for PDF
-    const html = generatePDFHTML({
+    // Generate HTML for PDF using new professional template
+    const html = generateProfessionalPDFHTML({
       type,
       document: documentData,
       lineItems,
