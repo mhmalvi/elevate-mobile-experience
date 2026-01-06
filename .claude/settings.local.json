@@ -112,7 +112,13 @@
       "Bash(Select-String -Pattern \"\\(error|Error|ERROR|warning|built|✓\\)\")",
       "Bash(Select-Object -First 30)",
       "Bash(netlify:*)",
-      "Bash(vercel:*)"
+      "Bash(vercel:*)",
+      "Bash($env:SUPABASE_ACCESS_TOKEN=\"sbp_08470f9134209d5aa87366467ba53eeebbde19c8\")",
+      "Bash(node --version:*)",
+      "Bash(npm:*)",
+      "Bash(if [ -d \"node_modules\" ])",
+      "Bash(then echo \"✅ node_modules exists\")",
+      "Bash(else echo \"❌ node_modules missing - run npm install\")"
     ]
   },
   "enableAllProjectMcpServers": true,

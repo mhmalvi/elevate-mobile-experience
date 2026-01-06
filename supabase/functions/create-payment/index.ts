@@ -73,7 +73,7 @@ serve(async (req) => {
       );
     }
 
-    // Fetch profile for business name and Stripe account
+    // Fetch profile for business name and Stripe Connect account
     const { data: profile } = await supabase
       .from("profiles")
       .select("business_name, stripe_account_id, stripe_charges_enabled")
@@ -106,18 +106,11 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Creating Checkout session for account: ${stripeAccountId}, balance: $${balance}`);
+    console.log(`Creating Checkout session for tradie account: ${stripeAccountId}, balance: $${balance}`);
 
-    // SECURITY: Calculate platform fee server-side (NEVER trust client input)
-    // 0.15% platform fee calculated from server-verified balance
-    const platformFeeAmount = Math.round(balance * 100 * 0.0015);
-
-    console.log(`Platform fee (0.15%): $${platformFeeAmount / 100}`);
-
-    // Create Stripe Checkout session with direct charges
-    // CRITICAL: Uses direct charges to Express Connect account
-    // Payment goes directly to tradie's account, platform takes application fee
-    // This requires the Connect account to be type "express" (not "standard")
+    // ✅ NO PLATFORM FEE - Tradie receives 100% of invoice amount
+    // Payment goes directly to tradie's Stripe Express Connect account
+    // Only Stripe's processing fee (2.9% + $0.30) is deducted
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [
@@ -142,11 +135,10 @@ serve(async (req) => {
         invoice_number: invoice.invoice_number,
         business_name: businessName,
       },
-      payment_intent_data: {
-        application_fee_amount: platformFeeAmount, // 0.15% platform fee
-      },
+      // ✅ NO application_fee_amount - Platform takes 0% fee
+      // Payment goes 100% to tradie (minus Stripe's processing fee)
     }, {
-      stripeAccount: stripeAccountId, // CRITICAL: Routes payment to tradie's Express account
+      stripeAccount: stripeAccountId, // Routes payment to tradie's Express Connect account
     });
 
     console.log(`Stripe session created: ${session.id}`);
