@@ -66,9 +66,12 @@ async function checkAndIncrementUsage(
 }
 
 serve(async (req) => {
+  // SECURITY: Get secure CORS headers
+  const corsHeaders = getCorsHeaders(req);
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return createCorsResponse(req);
   }
 
   try {
@@ -407,18 +410,19 @@ serve(async (req) => {
 </html>
     `;
 
-    // Get sender email - use custom domain if configured, otherwise use test email for dev
+    // Get sender email - use custom domain if configured, otherwise use Resend's default
     const customEmailDomain = Deno.env.get("EMAIL_FROM_DOMAIN"); // e.g., "noreply@tradiemate.com.au"
     const appUrl = Deno.env.get("APP_URL") || "";
     const isProduction = appUrl.includes("tradiemate.com.au") || appUrl.includes("production");
 
-    // Use custom domain or default to TradieMate domain
+    // Use custom domain or default to Resend's onboarding domain (no verification needed)
     let fromEmail: string;
     if (customEmailDomain) {
       fromEmail = customEmailDomain;
     } else {
-      // Use TradieMate domain (must be verified in Resend dashboard)
-      fromEmail = `${businessName} <noreply@tradiemate.com.au>`;
+      // Use Resend's default onboarding domain (pre-verified, works immediately)
+      // Can upgrade to custom domain later: https://resend.com/docs/dashboard/domains/introduction
+      fromEmail = `${businessName} <onboarding@resend.dev>`;
     }
 
     console.log(`[${isProduction ? 'PRODUCTION' : 'DEV'}] Sending email from: ${fromEmail} to: ${recipient_email}`);
