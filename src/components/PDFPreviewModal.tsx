@@ -142,7 +142,8 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
       document.body.appendChild(container);
 
       // Wait for content to fully render (including images and fonts)
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Increased timeout to allow Google Fonts and images to fully load
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Load any images in the container
       const images = container.getElementsByTagName('img');
