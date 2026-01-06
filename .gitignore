@@ -30,3 +30,11 @@ dist-ssr
 
 # Configuration values (contains API keys)
 CONFIG_VALUES.md
+.vercel
+
+# Test artifacts
+coverage/
+test-results/
+playwright-report/
+e2e-screenshots/
+.playwright/
