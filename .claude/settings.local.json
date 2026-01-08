@@ -1,24 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cat:*)",
-      "Bash(wc:*)",
-      "Bash(git -C /i/CYBERPUNK/TradieMate log --oneline)",
-      "Bash(npm audit:*)",
-      "Bash(npm outdated:*)",
-      "Bash(git checkout:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(git reset:*)",
-      "Bash(test:*)",
-      "Bash(npm install:*)",
-      "Bash(npm run build:*)",
-      "Bash(NODE_ENV=production npm run build:*)",
-      "Bash(npx supabase --version)",
-      "Bash(npx supabase status)",
       "Bash(npx supabase:*)",
-      "Bash(npm run dev:*)"
+      "Bash(supabase functions deploy:*)",
+      "Bash(npm install:*)"
     ]
   }
 }
