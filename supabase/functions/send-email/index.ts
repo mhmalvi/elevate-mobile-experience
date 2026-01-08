@@ -435,13 +435,23 @@ serve(async (req) => {
       html: emailHtml,
     });
 
-    console.log("Email sent successfully:", emailResponse);
+    console.log("Email response:", JSON.stringify(emailResponse));
+
+    // Resend v2 returns { data: { id: '...' }, error: null } on success
+    // or { data: null, error: { message: '...' } } on failure
+    if (emailResponse.error) {
+      console.error("Resend API error:", emailResponse.error);
+      throw new Error(emailResponse.error.message || "Failed to send email");
+    }
 
     // Check if email was actually sent (Resend returns id on success)
-    if (!emailResponse.id && !emailResponse.data?.id) {
+    const emailId = emailResponse.data?.id || emailResponse.id;
+    if (!emailId) {
       console.error("Email may not have been sent - no ID returned:", emailResponse);
       throw new Error("Email service did not confirm delivery");
     }
+
+    console.log("Email sent successfully with ID:", emailId);
 
     // Update document status to 'sent' if it was in draft
     if (documentData.status === 'draft') {
