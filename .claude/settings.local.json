@@ -120,11 +120,18 @@
       "Bash(then echo \"✅ node_modules exists\")",
       "Bash(else echo \"❌ node_modules missing - run npm install\")",
       "Bash(do echo \"$dir\")",
-      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_08470f9134209d5aa87366467ba53eeebbde19c8\" npx supabase db push:*)"
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_08470f9134209d5aa87366467ba53eeebbde19c8\" npx supabase db push:*)",
+      "Bash(node test-production-fixes.js:*)",
+      "mcp__supabase__apply_migration",
+      "Bash(node e2e-production-test.js:*)",
+      "Bash(wc:*)",
+      "Bash(node comprehensive-production-test.js:*)",
+      "Bash(node test-email-sms.js:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"
-  ]
+  ],
+  "outputStyle": "default"
 }
