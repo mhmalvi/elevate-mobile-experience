@@ -29,7 +29,7 @@ import {
 
 export default function TeamSettings() {
   const { toast } = useToast();
-  const { team, userRole, teamMembers, canManageTeam, refetch } = useTeam();
+  const { team, userRole, teamMembers, canManageTeam, refetch, loading, error } = useTeam();
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
   const [inviting, setInviting] = useState(false);
@@ -140,12 +140,68 @@ export default function TeamSettings() {
     }
   };
 
+  // Show loading state
+  if (loading) {
+    return (
+      <MobileLayout>
+        <PageHeader title="Team" showBack />
+        <div className="flex-1 flex items-center justify-center p-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MobileLayout>
+    );
+  }
+
+  // No team membership found
+  if (!team && !error) {
+    return (
+      <MobileLayout>
+        <PageHeader title="Team" showBack />
+        <div className="p-4 text-center space-y-4">
+          <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10 flex items-center justify-center shadow-lg shadow-primary/5">
+            <Users className="w-8 h-8 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">No Team Yet</h2>
+            <p className="text-muted-foreground mt-1">
+              You're not part of a team yet. Ask a team owner to invite you, or create your own team.
+            </p>
+          </div>
+        </div>
+      </MobileLayout>
+    );
+  }
+
+  // Error loading team
+  if (error) {
+    return (
+      <MobileLayout>
+        <PageHeader title="Team" showBack />
+        <div className="p-4 text-center space-y-4">
+          <p className="text-muted-foreground">Unable to load team settings.</p>
+          <p className="text-sm text-destructive">{error}</p>
+          <Button variant="outline" onClick={refetch}>Try Again</Button>
+        </div>
+      </MobileLayout>
+    );
+  }
+
+  // User doesn't have permission (member or viewer role)
   if (!canManageTeam) {
     return (
       <MobileLayout>
         <PageHeader title="Team" showBack />
-        <div className="p-4 text-center">
-          <p className="text-muted-foreground">You don't have permission to manage team settings.</p>
+        <div className="p-4 text-center space-y-4">
+          <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-yellow-500/10 to-yellow-500/5 border border-yellow-500/10 flex items-center justify-center shadow-lg shadow-yellow-500/5">
+            <Shield className="w-8 h-8 text-yellow-500" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">Limited Access</h2>
+            <p className="text-muted-foreground mt-1">
+              Your current role ({userRole}) doesn't have permission to manage team settings.
+              Contact a team admin or owner for access.
+            </p>
+          </div>
         </div>
       </MobileLayout>
     );
@@ -159,7 +215,7 @@ export default function TeamSettings() {
         {/* Team Info */}
         <div className="p-4 bg-card rounded-xl border">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10 flex items-center justify-center shadow-sm">
               <Users className="w-6 h-6 text-primary" />
             </div>
             <div>

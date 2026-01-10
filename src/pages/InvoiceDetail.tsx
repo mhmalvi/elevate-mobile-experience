@@ -10,9 +10,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { copyToClipboard } from '@/lib/utils/clipboard';
-import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2, Eye, Bell, RefreshCw } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Phone, Mail, MapPin, Calendar, DollarSign, FileText, Download, Share2, Loader2, Bell, RefreshCw, User, Clock } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
-import { RecurringInvoiceHistory } from '@/components/invoices/RecurringInvoiceHistory';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -207,7 +207,7 @@ export default function InvoiceDetail() {
 
   const handleRecordPayment = async () => {
     if (!invoice) return;
-    
+
     const amount = parseFloat(paymentAmount);
     if (isNaN(amount) || amount <= 0) {
       toast({ title: 'Please enter a valid amount', variant: 'destructive' });
@@ -231,8 +231,8 @@ export default function InvoiceDetail() {
     if (error) {
       toast({ title: 'Error recording payment', variant: 'destructive' });
     } else {
-      toast({ 
-        title: 'Payment recorded', 
+      toast({
+        title: 'Payment recorded',
         description: isPaidInFull ? 'Invoice marked as paid in full.' : `$${amount.toFixed(2)} recorded.`
       });
       setPaymentAmount('');
@@ -273,355 +273,311 @@ export default function InvoiceDetail() {
   const isOverdue = invoice.due_date && new Date(invoice.due_date) < new Date() && invoice.status !== 'paid';
 
   return (
-    <MobileLayout>
+    <MobileLayout showNav={false}>
       <PageHeader
         title={invoice.invoice_number}
         showBack
+        backPath="/invoices"
         action={{
           label: 'Edit',
           onClick: () => navigate(`/invoices/${id}/edit`)
         }}
       />
 
-      {/* Manual Refresh Button - helps when webhook updates haven't synced yet */}
-      <div className="px-4 pt-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={() => {
-            fetchInvoice();
-            toast({ title: 'Refreshed', description: 'Invoice data updated from server.' });
-          }}
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh Invoice
-        </Button>
-      </div>
-
-      <div className="p-4 space-y-4 animate-fade-in">
-        {/* Status & Header */}
-        <div className="p-4 bg-card rounded-xl border">
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex-1">
-              <h2 className="text-xl font-bold mb-1">{invoice.title}</h2>
-              {invoice.description && (
-                <p className="text-sm text-muted-foreground mt-1">{invoice.description}</p>
-              )}
-            </div>
-            <StatusBadge status={invoice.status || 'draft'} />
+      <div className="p-4 space-y-6 animate-fade-in pb-48 safe-bottom">
+        {/* Header Section */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">{invoice.title}</h2>
+            {client && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 px-2 py-1 rounded-md w-fit">
+                <User className="w-3.5 h-3.5" />
+                {client.name}
+              </div>
+            )}
           </div>
+          <StatusBadge status={invoice.status || 'draft'} className="mt-1" />
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            <div>
-              <span className="text-muted-foreground">Created</span>
-              <p className="font-medium">{format(new Date(invoice.created_at), 'dd MMM yyyy')}</p>
+        {/* Date Matrix Card */}
+        <div className="bg-card/40 backdrop-blur-md border border-border/40 rounded-2xl p-4 shadow-sm grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Issued</span>
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <Calendar className="w-3.5 h-3.5 text-primary" />
+              {format(new Date(invoice.created_at), 'dd MMM yyyy')}
             </div>
-            <div>
-              <span className="text-muted-foreground">Due Date</span>
-              <p className={`font-medium ${isOverdue ? 'text-destructive' : ''}`}>
-                {invoice.due_date ? format(new Date(invoice.due_date), 'dd MMM yyyy') : 'Not set'}
-                {isOverdue && ' (Overdue)'}
-              </p>
+          </div>
+          <div className="space-y-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Due Date</span>
+            <div className={cn("flex items-center gap-2 text-sm font-bold", isOverdue ? "text-destructive" : "text-foreground")}>
+              <Clock className="w-3.5 h-3.5" />
+              {invoice.due_date ? format(new Date(invoice.due_date), 'dd MMM yyyy') : 'Immediate'}
             </div>
           </div>
         </div>
 
-        {/* Recurring Invoice Info */}
+        {/* Recurring Status Alert */}
         {invoice.is_recurring && (
-          <div className="p-4 bg-gradient-to-br from-primary/10 via-primary/5 to-background rounded-xl border border-primary/30">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-                <RefreshCw className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Recurring Invoice</h3>
-                <p className="text-xs text-muted-foreground">Auto-generated and sent on schedule</p>
-              </div>
+          <div className="relative overflow-hidden p-4 rounded-2xl bg-primary/5 border border-primary/20 flex items-center gap-4 group">
+            <div className="absolute top-0 right-0 -mr-4 -mt-4 w-16 h-16 bg-primary/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700" />
+            <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+              <RefreshCw className="w-6 h-6 text-primary animate-spin-slow" />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-              <div>
-                <span className="text-muted-foreground">Frequency</span>
-                <p className="font-medium capitalize">{invoice.recurring_interval}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Next Invoice</span>
-                <p className="font-medium">
-                  {invoice.next_due_date ? format(new Date(invoice.next_due_date), 'dd MMM yyyy') : 'N/A'}
-                </p>
-              </div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-sm text-foreground">Recurring: {invoice.recurring_interval}</h3>
+              <p className="text-xs text-muted-foreground truncate">Next invoice: {invoice.next_due_date ? format(new Date(invoice.next_due_date), 'dd MMM yyyy') : 'Check schedule'}</p>
             </div>
           </div>
         )}
 
-        {/* Recurring Invoice History */}
-        {invoice.is_recurring && invoice.id && (
-          <RecurringInvoiceHistory parentInvoiceId={invoice.id} />
-        )}
-
-        {/* Client Info */}
+        {/* Client Contacts Card */}
         {client && (
-          <div className="p-4 bg-card rounded-xl border">
-            <h3 className="font-semibold mb-2">Client</h3>
-            <p className="font-medium">{client.name}</p>
-            <div className="mt-2 space-y-1 text-sm text-muted-foreground">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <div className="w-1.5 h-6 bg-primary rounded-full" />
+              <h3 className="font-bold text-lg">Recipient</h3>
+            </div>
+            <div className="p-4 bg-card/60 backdrop-blur-md rounded-2xl border border-border/40 shadow-sm space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Mail className="w-4 h-4 text-primary" />
+                </div>
+                <a href={`mailto:${client.email}`} className="text-sm font-semibold text-foreground hover:text-primary transition-colors truncate">
+                  {client.email || 'No email provided'}
+                </a>
+              </div>
               {client.phone && (
-                <a href={`tel:${client.phone}`} className="flex items-center gap-2 hover:text-primary">
-                  <Phone className="w-4 h-4" /> {client.phone}
-                </a>
-              )}
-              {client.email && (
-                <a href={`mailto:${client.email}`} className="flex items-center gap-2 hover:text-primary">
-                  <Mail className="w-4 h-4" /> {client.email}
-                </a>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Phone className="w-4 h-4 text-primary" />
+                  </div>
+                  <a href={`tel:${client.phone}`} className="text-sm font-semibold text-foreground hover:text-primary transition-colors">
+                    {client.phone}
+                  </a>
+                </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Line Items */}
-        <div className="p-4 bg-card rounded-xl border">
-          <h3 className="font-semibold mb-3">Line Items</h3>
+        {/* Line Items Container */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <div className="w-1.5 h-6 bg-primary rounded-full" />
+            <h3 className="font-bold text-lg">Services & Items</h3>
+          </div>
           <div className="space-y-3">
             {lineItems.map((item) => (
-              <div key={item.id} className="flex justify-between text-sm">
-                <div>
-                  <p className="font-medium">{item.description}</p>
-                  <p className="text-muted-foreground">
-                    {item.quantity} × ${item.unit_price.toFixed(2)}
-                  </p>
+              <div key={item.id} className="p-4 bg-card/60 backdrop-blur-md rounded-2xl border border-border/40 shadow-sm animate-scale-in">
+                <div className="flex justify-between items-start gap-3">
+                  <span className="font-semibold text-foreground flex-1">{item.description}</span>
+                  <span className="font-bold text-lg text-gradient">${Number(item.total).toFixed(2)}</span>
                 </div>
-                <p className="font-medium">${item.total.toFixed(2)}</p>
+                <div className="mt-2 text-sm text-muted-foreground font-medium">
+                  <span className="px-2 py-0.5 bg-muted/40 rounded-md">
+                    {item.quantity} × ${Number(item.unit_price).toFixed(2)}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
+        </div>
 
-          <div className="border-t mt-4 pt-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span>${(invoice.subtotal || 0).toFixed(2)}</span>
+        {/* Premium Financial Summary Card */}
+        <div className="relative overflow-hidden p-6 bg-foreground text-background dark:bg-card dark:text-foreground rounded-3xl shadow-glow transition-all duration-300 hover:shadow-glow-lg border border-border/40">
+          <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-primary/20 rounded-full blur-3xl" />
+
+          <div className="space-y-3 relative z-10 font-medium">
+            <div className="flex justify-between text-sm opacity-80">
+              <span>Subtotal</span>
+              <span>${Number(invoice.subtotal).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">GST (10%)</span>
-              <span>${(invoice.gst || 0).toFixed(2)}</span>
+            <div className="flex justify-between text-sm opacity-80">
+              <span>GST (10%)</span>
+              <span>${Number(invoice.gst).toFixed(2)}</span>
             </div>
-            <div className="flex justify-between font-bold text-lg">
-              <span>Total</span>
-              <span>${(invoice.total || 0).toFixed(2)}</span>
+            <div className="flex justify-between items-end pt-3 border-t border-muted/20 mt-3">
+              <span className="font-bold text-lg uppercase tracking-wider">Total Amount</span>
+              <span className="text-4xl font-black">${Number(invoice.total).toFixed(2)}</span>
             </div>
-            {(invoice.amount_paid || 0) > 0 && (
-              <>
-                <div className="flex justify-between text-sm text-green-600">
+
+            {invoice.amount_paid > 0 && (
+              <div className="pt-4 mt-2 space-y-2 border-t border-muted/20">
+                <div className="flex justify-between text-sm text-success font-bold">
                   <span>Amount Paid</span>
-                  <span>-${(invoice.amount_paid || 0).toFixed(2)}</span>
+                  <span>-${Number(invoice.amount_paid).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between font-bold">
-                  <span>Balance Due</span>
-                  <span className={balance > 0 ? 'text-destructive' : 'text-green-600'}>
-                    ${balance.toFixed(2)}
-                  </span>
+                <div className="flex justify-between items-end">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider opacity-60">Balance Due</span>
+                    <div className={cn("text-2xl font-black", balance > 0 ? 'text-destructive' : 'text-success')}>
+                      ${balance.toFixed(2)}
+                    </div>
+                  </div>
+                  {balance <= 0 && (
+                    <div className="px-3 py-1 rounded-full bg-success/20 text-success text-[10px] font-black uppercase tracking-widest ring-1 ring-success/30">
+                      Paid in Full
+                    </div>
+                  )}
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>
 
-        {/* Payment Recording */}
-        {invoice.status !== 'paid' && balance > 0 && (
-          <div className="p-4 bg-card rounded-xl border">
-            <h3 className="font-semibold mb-3">Record Payment</h3>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder={`Amount (max $${balance.toFixed(2)})`}
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                />
-              </div>
-              <Button onClick={handleRecordPayment}>
-                Record
-              </Button>
-            </div>
-            <Button 
-              variant="outline" 
-              className="w-full mt-2"
-              onClick={() => {
-                setPaymentAmount(balance.toString());
-                setTimeout(handleRecordPayment, 100);
-              }}
-            >
-              Mark as Paid in Full
-            </Button>
-          </div>
-        )}
-
-        {/* Primary Actions - Send to Client */}
-        {client && (
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">Send to Client</p>
-            <SendNotificationButton
-              type="invoice"
-              id={id!}
-              recipient={{
-                email: client.email,
-                phone: client.phone,
-                name: client.name,
-              }}
-              onSent={fetchInvoice}
-            />
-          </div>
-        )}
-
-        {/* PDF & Share Actions */}
-        <div className="flex gap-2">
-          <PDFPreviewModal 
-            type="invoice" 
-            id={id!} 
-            documentNumber={invoice.invoice_number} 
+        {/* Actions Grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <PDFPreviewModal
+            type="invoice"
+            id={id!}
+            documentNumber={invoice.invoice_number}
           />
-          <Button 
-            variant="outline" 
-            className="flex-1"
+          <Button
+            variant="outline"
+            className="h-14 rounded-2xl border-border/40 bg-card/40 backdrop-blur-sm"
             disabled={downloadingPDF}
             onClick={async () => {
               setDownloadingPDF(true);
               try {
-                console.log('Generating PDF for invoice:', id);
                 const response = await supabase.functions.invoke('generate-pdf', {
                   body: { type: 'invoice', id }
                 });
-
-                console.log('PDF generation response:', {
-                  error: response.error,
-                  hasData: !!response.data,
-                  dataKeys: response.data ? Object.keys(response.data) : []
-                });
-
-                if (response.error) {
-                  console.error('PDF generation API error:', response.error);
-                  throw response.error;
-                }
-
-                if (!response.data || !response.data.html) {
-                  console.error('PDF response missing HTML:', response.data);
-                  throw new Error('PDF generation failed - no HTML returned');
-                }
-
+                if (response.error) throw response.error;
                 const printWindow = window.open('', '_blank');
                 if (printWindow) {
                   printWindow.document.write(response.data.html);
                   printWindow.document.close();
                   printWindow.print();
-                } else {
-                  throw new Error('Could not open print window - popup blocked?');
                 }
               } catch (error) {
-                console.error('PDF generation error (full):', error);
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                toast({
-                  title: 'Error generating PDF',
-                  description: errorMessage,
-                  variant: 'destructive'
-                });
+                console.error('PDF generation error:', error);
+                toast({ title: 'Error generating PDF', description: 'Please try again.', variant: 'destructive' });
               } finally {
                 setDownloadingPDF(false);
               }
             }}
           >
-            {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-5 h-5 mr-2 text-primary" />}
             PDF
           </Button>
-          
+
           <Button
             variant="outline"
-            className="flex-1"
+            className="col-span-2 h-14 rounded-2xl border-border/40 bg-card/40 backdrop-blur-sm"
             onClick={async () => {
               const url = `${window.location.origin}/i/${id}`;
               const success = await copyToClipboard(url);
               if (success) {
                 toast({ title: 'Link copied!', description: 'Share this link with your client.' });
-              } else {
-                toast({
-                  title: 'Copy failed',
-                  description: 'Please copy the link manually: ' + url,
-                  variant: 'destructive'
-                });
               }
             }}
           >
-            <Share2 className="w-4 h-4 mr-2" />
-            Share
+            <Share2 className="w-5 h-5 mr-2 text-primary" />
+            Copy Share Link
+          </Button>
+
+          {/* Send to Client */}
+          {client && (
+            <div className="col-span-2">
+              <SendNotificationButton
+                type="invoice"
+                id={id!}
+                recipient={{
+                  email: client.email,
+                  phone: client.phone,
+                  name: client.name,
+                }}
+                onSent={fetchInvoice}
+              />
+            </div>
+          )}
+
+          {isOverdue && client?.phone && (
+            <Button
+              variant="outline"
+              className="col-span-2 h-14 rounded-2xl text-warning border-warning/30 bg-warning/5 hover:bg-warning/10"
+              disabled={sendingReminder}
+              onClick={async () => {
+                setSendingReminder(true);
+                try {
+                  const { error } = await supabase.functions.invoke('payment-reminder', {
+                    body: { invoice_id: id }
+                  });
+                  if (error) throw error;
+                  toast({ title: 'Reminder Sent!', description: `SMS reminder sent to ${client.name}` });
+                } catch (err) {
+                  toast({ title: 'Failed to send reminder', variant: 'destructive' });
+                } finally {
+                  setSendingReminder(false);
+                }
+              }}
+            >
+              <Bell className={cn("w-5 h-5 mr-2", sendingReminder && "animate-bounce")} />
+              Send Overdue Reminder
+            </Button>
+          )}
+        </div>
+
+        {/* Payment Recording Card */}
+        {invoice.status !== 'paid' && balance > 0 && (
+          <div className="p-5 bg-card/40 backdrop-blur-md rounded-2xl border border-border/40 shadow-sm space-y-4">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-primary" />
+              <h3 className="text-xs font-black uppercase tracking-wider text-muted-foreground">Record Payment</h3>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                step="0.01"
+                placeholder={`Amount (max $${balance.toFixed(2)})`}
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                className="h-12 bg-background/50 border-border/40"
+              />
+              <Button onClick={handleRecordPayment} className="h-12 px-6">
+                Record
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full h-12 text-xs font-bold uppercase tracking-widest border-border/40 bg-background/30 hover:bg-background/50"
+              onClick={() => {
+                setPaymentAmount(balance.toString());
+                setTimeout(handleRecordPayment, 100);
+              }}
+            >
+              Paid in Full
+            </Button>
+          </div>
+        )}
+
+        {/* Notes & Refresh */}
+        <div className="grid grid-cols-1 gap-4">
+          {invoice.notes && (
+            <div className="p-4 bg-muted/30 rounded-2xl border border-border/20">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Internal Notes</h3>
+              <p className="text-sm text-foreground/80 leading-relaxed italic">"{invoice.notes}"</p>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-muted-foreground hover:text-foreground h-10 rounded-xl"
+            onClick={() => {
+              fetchInvoice();
+              toast({ title: 'Refreshed' });
+            }}
+          >
+            <RefreshCw className="w-3.5 h-3.5 mr-2" />
+            Sync Data
           </Button>
         </div>
 
-        {/* Payment Reminder - Only for overdue invoices */}
-        {isOverdue && client?.phone && (
-          <Button 
-            variant="outline" 
-            className="w-full text-warning border-warning/50 hover:bg-warning/10"
-            disabled={sendingReminder}
-            onClick={async () => {
-              setSendingReminder(true);
-              try {
-                const { data, error } = await supabase.functions.invoke('payment-reminder', {
-                  body: { invoice_id: id }
-                });
-                if (error) throw error;
-                toast({ 
-                  title: 'Reminder Sent!', 
-                  description: `Payment reminder SMS sent to ${client.name}` 
-                });
-              } catch (err) {
-                console.error('Reminder error:', err);
-                toast({ 
-                  title: 'Failed to send reminder', 
-                  description: 'Please try again.', 
-                  variant: 'destructive' 
-                });
-              } finally {
-                setSendingReminder(false);
-              }
-            }}
-          >
-            {sendingReminder ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Bell className="w-4 h-4 mr-2" />
-            )}
-            Send Payment Reminder
-          </Button>
-        )}
-
-        {/* Status Actions - Secondary */}
-        {invoice.status !== 'paid' && (
-          <div className="space-y-2">
-            {invoice.status === 'draft' && (
-              <Button variant="outline" className="w-full" onClick={() => updateStatus('sent')}>
-                Mark as Sent
-              </Button>
-            )}
-            {invoice.status === 'sent' && (
-              <Button variant="outline" className="w-full" onClick={() => updateStatus('viewed')}>
-                Mark as Viewed
-              </Button>
-            )}
-          </div>
-        )}
-
-        {/* Notes */}
-        {invoice.notes && (
-          <div className="p-4 bg-card rounded-xl border">
-            <h3 className="font-semibold mb-2">Notes</h3>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{invoice.notes}</p>
-          </div>
-        )}
-
-        {/* Delete */}
+        {/* Danger Zone */}
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="destructive" className="w-full">
+            <Button variant="ghost" className="w-full text-destructive/40 hover:text-destructive hover:bg-destructive/5 h-10 text-xs uppercase tracking-widest font-bold">
               Delete Invoice
             </Button>
           </AlertDialogTrigger>
@@ -629,12 +585,12 @@ export default function InvoiceDetail() {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete this invoice?</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone.
+                This action cannot be undone and will remove the financial record.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+              <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">Delete Record</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

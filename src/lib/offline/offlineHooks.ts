@@ -1,10 +1,24 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, OfflineJob, OfflineQuote, OfflineInvoice, OfflineClient } from './db';
 import { syncManager } from './syncManager';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { generateUUID } from '@/lib/utils/uuid';
+import { decryptClientFields, decryptInvoiceFields, decryptQuoteFields } from './encryption';
+
+// Extended types with client data joined
+export interface OfflineJobWithClient extends OfflineJob {
+  clients?: { name: string; email?: string; phone?: string } | null;
+}
+
+export interface OfflineQuoteWithClient extends OfflineQuote {
+  clients?: { name: string; email?: string; phone?: string } | null;
+}
+
+export interface OfflineInvoiceWithClient extends OfflineInvoice {
+  clients?: { name: string; email?: string; phone?: string } | null;
+}
 
 /**
  * Hook to detect online/offline status
@@ -35,10 +49,32 @@ export function useOfflineJobs(userId: string) {
   const isOnline = useOnlineStatus();
 
   // Use Dexie's live query for reactive updates
-  const jobs = useLiveQuery(
+  const rawJobs = useLiveQuery(
     () => db.jobs.where('user_id').equals(userId).and(job => !job.deleted_at).reverse().sortBy('updated_at'),
     [userId]
   );
+
+  // Fetch clients for joining (with decryption)
+  const clients = useLiveQuery(
+    async () => {
+      const rawClients = await db.clients.where('user_id').equals(userId).toArray();
+      return Promise.all(rawClients.map(c => decryptClientFields(c)));
+    },
+    [userId]
+  );
+
+  // Join jobs with client data
+  const jobs = useMemo<OfflineJobWithClient[]>(() => {
+    if (!rawJobs) return [];
+    const clientMap = new Map(clients?.map(c => [c.id, c]) || []);
+    return rawJobs.map(job => {
+      const client = job.client_id ? clientMap.get(job.client_id) : null;
+      return {
+        ...job,
+        clients: client ? { name: client.name, email: client.email, phone: client.phone } : null,
+      };
+    });
+  }, [rawJobs, clients]);
 
   // Fetch fresh data from Supabase when online
   // Note: Using syncManager.fetchAndStore instead to protect local unsynced changes
@@ -99,8 +135,8 @@ export function useOfflineJobs(userId: string) {
   }, []);
 
   return {
-    jobs: jobs || [],
-    loading: jobs === undefined,
+    jobs,
+    loading: rawJobs === undefined,
     isOnline,
     createJob,
     updateJob,
@@ -148,10 +184,35 @@ export function useOfflineJob(jobId: string) {
 export function useOfflineQuotes(userId: string) {
   const isOnline = useOnlineStatus();
 
-  const quotes = useLiveQuery(
-    () => db.quotes.where('user_id').equals(userId).and(q => !q.deleted_at).reverse().sortBy('updated_at'),
+  const rawQuotes = useLiveQuery(
+    async () => {
+      const quotes = await db.quotes.where('user_id').equals(userId).and(q => !q.deleted_at).reverse().sortBy('updated_at');
+      return Promise.all(quotes.map(q => decryptQuoteFields(q)));
+    },
     [userId]
   );
+
+  // Fetch clients for joining (with decryption)
+  const clients = useLiveQuery(
+    async () => {
+      const rawClients = await db.clients.where('user_id').equals(userId).toArray();
+      return Promise.all(rawClients.map(c => decryptClientFields(c)));
+    },
+    [userId]
+  );
+
+  // Join quotes with client data
+  const quotes = useMemo<OfflineQuoteWithClient[]>(() => {
+    if (!rawQuotes) return [];
+    const clientMap = new Map(clients?.map(c => [c.id, c]) || []);
+    return rawQuotes.map(quote => {
+      const client = quote.client_id ? clientMap.get(quote.client_id) : null;
+      return {
+        ...quote,
+        clients: client ? { name: client.name, email: client.email, phone: client.phone } : null,
+      };
+    });
+  }, [rawQuotes, clients]);
 
   // Fetch fresh data from Supabase when online
   // Note: Using syncManager.fetchAndStore instead to protect local unsynced changes
@@ -214,8 +275,8 @@ export function useOfflineQuotes(userId: string) {
   }, []);
 
   return {
-    quotes: quotes || [],
-    loading: quotes === undefined,
+    quotes,
+    loading: rawQuotes === undefined,
     isOnline,
     createQuote,
     updateQuote,
@@ -229,10 +290,35 @@ export function useOfflineQuotes(userId: string) {
 export function useOfflineInvoices(userId: string) {
   const isOnline = useOnlineStatus();
 
-  const invoices = useLiveQuery(
-    () => db.invoices.where('user_id').equals(userId).and(i => !i.deleted_at).reverse().sortBy('updated_at'),
+  const rawInvoices = useLiveQuery(
+    async () => {
+      const invoices = await db.invoices.where('user_id').equals(userId).and(i => !i.deleted_at).reverse().sortBy('updated_at');
+      return Promise.all(invoices.map(i => decryptInvoiceFields(i)));
+    },
     [userId]
   );
+
+  // Fetch clients for joining (with decryption)
+  const clients = useLiveQuery(
+    async () => {
+      const rawClients = await db.clients.where('user_id').equals(userId).toArray();
+      return Promise.all(rawClients.map(c => decryptClientFields(c)));
+    },
+    [userId]
+  );
+
+  // Join invoices with client data
+  const invoices = useMemo<OfflineInvoiceWithClient[]>(() => {
+    if (!rawInvoices) return [];
+    const clientMap = new Map(clients?.map(c => [c.id, c]) || []);
+    return rawInvoices.map(invoice => {
+      const client = invoice.client_id ? clientMap.get(invoice.client_id) : null;
+      return {
+        ...invoice,
+        clients: client ? { name: client.name, email: client.email, phone: client.phone } : null,
+      };
+    });
+  }, [rawInvoices, clients]);
 
   // Fetch fresh data from Supabase when online
   // Note: Using syncManager.fetchAndStore instead to protect local unsynced changes
@@ -296,8 +382,8 @@ export function useOfflineInvoices(userId: string) {
   }, []);
 
   return {
-    invoices: invoices || [],
-    loading: invoices === undefined,
+    invoices,
+    loading: rawInvoices === undefined,
     isOnline,
     createInvoice,
     updateInvoice,
@@ -312,7 +398,10 @@ export function useOfflineClients(userId: string) {
   const isOnline = useOnlineStatus();
 
   const clients = useLiveQuery(
-    () => db.clients.where('user_id').equals(userId).and(c => !c.deleted_at).sortBy('name'),
+    async () => {
+      const rawClients = await db.clients.where('user_id').equals(userId).and(c => !c.deleted_at).sortBy('name');
+      return Promise.all(rawClients.map(c => decryptClientFields(c)));
+    },
     [userId]
   );
 

@@ -65,9 +65,7 @@ serve(async (req) => {
         profiles:user_id (
           business_name,
           phone,
-          email,
-          stripe_account_id,
-          stripe_charges_enabled
+          email
         )
       `)
       .eq("id", invoice_id)
