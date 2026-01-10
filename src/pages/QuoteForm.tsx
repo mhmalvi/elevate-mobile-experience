@@ -82,7 +82,7 @@ export default function QuoteForm() {
       .from('quote_templates')
       .select('*')
       .order('name');
-    
+
     // Filter to show user's trade templates first, then others
     const userTrade = profile?.trade_type;
     const sorted = (data || []).sort((a, b) => {
@@ -96,7 +96,7 @@ export default function QuoteForm() {
   const selectTemplate = (template: QuoteTemplate) => {
     setSelectedTemplate(template);
     setForm(prev => ({ ...prev, title: template.name }));
-    
+
     // Parse default items from template
     const items = template.default_items as unknown as TemplateItem[] | null;
     if (items && Array.isArray(items) && items.length > 0) {
@@ -135,7 +135,7 @@ export default function QuoteForm() {
   };
 
   const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
-    setLineItems(lineItems.map(item => 
+    setLineItems(lineItems.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ));
   };
@@ -162,15 +162,21 @@ export default function QuoteForm() {
       return;
     }
 
+    // Validate title
+    if (!form.title.trim()) {
+      toast({ title: 'Title required', description: 'Please enter a quote title', variant: 'destructive' });
+      return;
+    }
+
     const validItems = lineItems.filter(item => item.description && item.unit_price > 0);
     if (validItems.length === 0) {
-      toast({ title: 'Error', description: 'Add at least one line item', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Add at least one line item with a description and price', variant: 'destructive' });
       return;
     }
 
     setLoading(true);
     const { subtotal, gst, total } = calculateTotals();
-    
+
     const { data: quote, error: quoteError } = await supabase
       .from('quotes')
       .insert({
@@ -241,7 +247,7 @@ export default function QuoteForm() {
     return (
       <MobileLayout showNav={false}>
         <PageHeader title="New Quote" showBack backPath="/quotes" />
-        
+
         <div className="p-4 space-y-6 animate-fade-in scrollbar-hide">
           <UsageLimitBanner usageType="quotes" used={used} limit={limit} tier={tier} isUnlimited={isUnlimited} />
           <div className="text-center">
@@ -304,9 +310,9 @@ export default function QuoteForm() {
             </div>
           )}
 
-          <Button 
-            variant="outline" 
-            className="w-full h-12" 
+          <Button
+            variant="outline"
+            className="w-full h-12"
             onClick={skipTemplate}
           >
             Start from scratch
@@ -318,13 +324,13 @@ export default function QuoteForm() {
 
   return (
     <MobileLayout showNav={false}>
-      <PageHeader 
-        title={selectedTemplate ? selectedTemplate.name : "New Quote"} 
-        showBack 
-        backPath="/quotes" 
+      <PageHeader
+        title={selectedTemplate ? selectedTemplate.name : "New Quote"}
+        showBack
+        backPath="/quotes"
       />
-      
-      <form onSubmit={handleSubmit} className="p-4 space-y-6 animate-fade-in pb-32">
+
+      <form onSubmit={handleSubmit} className="p-4 space-y-6 animate-fade-in pb-48 safe-bottom">
         {/* Client Selection */}
         <div className="space-y-2">
           <Label>Client</Label>
@@ -398,9 +404,9 @@ export default function QuoteForm() {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-muted-foreground">Item {index + 1}</span>
                 {lineItems.length > 1 && (
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
+                  <Button
+                    type="button"
+                    variant="ghost"
                     size="sm"
                     onClick={() => removeLineItem(item.id)}
                   >
@@ -456,8 +462,8 @@ export default function QuoteForm() {
                 </div>
               </div>
 
-              <Select 
-                value={item.item_type} 
+              <Select
+                value={item.item_type}
                 onValueChange={(v: 'labour' | 'materials') => updateLineItem(item.id, 'item_type', v)}
               >
                 <SelectTrigger className="h-10">

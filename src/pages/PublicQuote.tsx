@@ -40,12 +40,16 @@ export default function PublicQuote() {
 
       setQuote(quoteData);
 
-      // Mark as viewed
+      // Mark as viewed (silently fails for anonymous users due to RLS - that's OK)
       if (!quoteData.viewed_at) {
-        await supabase
-          .from('quotes')
-          .update({ viewed_at: new Date().toISOString(), status: quoteData.status === 'sent' ? 'viewed' : quoteData.status })
-          .eq('id', id);
+        try {
+          await supabase
+            .from('quotes')
+            .update({ viewed_at: new Date().toISOString(), status: quoteData.status === 'sent' ? 'viewed' : quoteData.status })
+            .eq('id', id);
+        } catch {
+          // Silently ignore - anonymous users can't update, but can view
+        }
       }
 
       // Fetch line items

@@ -280,18 +280,24 @@ export default function BrandingSettings() {
               <div className="space-y-2">
                 <Label htmlFor="primaryColor">Primary Color</Label>
                 <div className="flex items-center gap-3">
-                  <Input
-                    id="primaryColor"
-                    type="color"
-                    value={form.primary_color}
-                    onChange={(e) => setForm({ ...form, primary_color: e.target.value })}
-                    className="w-16 h-10 p-1 cursor-pointer"
-                  />
+                  <div className="relative w-16 h-10 rounded-md border shadow-sm overflow-hidden transition-transform active:scale-95 group">
+                    <div
+                      className="absolute inset-0 group-hover:opacity-90 transition-opacity"
+                      style={{ backgroundColor: form.primary_color }}
+                    />
+                    <input
+                      id="primaryColor"
+                      type="color"
+                      value={form.primary_color}
+                      onChange={(e) => setForm({ ...form, primary_color: e.target.value })}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer p-0 border-0"
+                    />
+                  </div>
                   <Input
                     value={form.primary_color}
                     onChange={(e) => setForm({ ...form, primary_color: e.target.value })}
                     placeholder="#3b82f6"
-                    className="flex-1"
+                    className="flex-1 font-mono uppercase"
                   />
                 </div>
               </div>
@@ -299,18 +305,24 @@ export default function BrandingSettings() {
               <div className="space-y-2">
                 <Label htmlFor="secondaryColor">Secondary Color</Label>
                 <div className="flex items-center gap-3">
-                  <Input
-                    id="secondaryColor"
-                    type="color"
-                    value={form.secondary_color}
-                    onChange={(e) => setForm({ ...form, secondary_color: e.target.value })}
-                    className="w-16 h-10 p-1 cursor-pointer"
-                  />
+                  <div className="relative w-16 h-10 rounded-md border shadow-sm overflow-hidden transition-transform active:scale-95 group">
+                    <div
+                      className="absolute inset-0 group-hover:opacity-90 transition-opacity"
+                      style={{ backgroundColor: form.secondary_color }}
+                    />
+                    <input
+                      id="secondaryColor"
+                      type="color"
+                      value={form.secondary_color}
+                      onChange={(e) => setForm({ ...form, secondary_color: e.target.value })}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer p-0 border-0"
+                    />
+                  </div>
                   <Input
                     value={form.secondary_color}
                     onChange={(e) => setForm({ ...form, secondary_color: e.target.value })}
                     placeholder="#1d4ed8"
-                    className="flex-1"
+                    className="flex-1 font-mono uppercase"
                   />
                 </div>
               </div>
@@ -318,18 +330,24 @@ export default function BrandingSettings() {
               <div className="space-y-2">
                 <Label htmlFor="textColor">Text Color</Label>
                 <div className="flex items-center gap-3">
-                  <Input
-                    id="textColor"
-                    type="color"
-                    value={form.text_color}
-                    onChange={(e) => setForm({ ...form, text_color: e.target.value })}
-                    className="w-16 h-10 p-1 cursor-pointer"
-                  />
+                  <div className="relative w-16 h-10 rounded-md border shadow-sm overflow-hidden transition-transform active:scale-95 group">
+                    <div
+                      className="absolute inset-0 group-hover:opacity-90 transition-opacity"
+                      style={{ backgroundColor: form.text_color }}
+                    />
+                    <input
+                      id="textColor"
+                      type="color"
+                      value={form.text_color}
+                      onChange={(e) => setForm({ ...form, text_color: e.target.value })}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer p-0 border-0"
+                    />
+                  </div>
                   <Input
                     value={form.text_color}
                     onChange={(e) => setForm({ ...form, text_color: e.target.value })}
                     placeholder="#1a1a1a"
-                    className="flex-1"
+                    className="flex-1 font-mono uppercase"
                   />
                 </div>
               </div>
@@ -337,18 +355,24 @@ export default function BrandingSettings() {
               <div className="space-y-2">
                 <Label htmlFor="accentColor">Accent Color</Label>
                 <div className="flex items-center gap-3">
-                  <Input
-                    id="accentColor"
-                    type="color"
-                    value={form.accent_color}
-                    onChange={(e) => setForm({ ...form, accent_color: e.target.value })}
-                    className="w-16 h-10 p-1 cursor-pointer"
-                  />
+                  <div className="relative w-16 h-10 rounded-md border shadow-sm overflow-hidden transition-transform active:scale-95 group">
+                    <div
+                      className="absolute inset-0 group-hover:opacity-90 transition-opacity"
+                      style={{ backgroundColor: form.accent_color }}
+                    />
+                    <input
+                      id="accentColor"
+                      type="color"
+                      value={form.accent_color}
+                      onChange={(e) => setForm({ ...form, accent_color: e.target.value })}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer p-0 border-0"
+                    />
+                  </div>
                   <Input
                     value={form.accent_color}
                     onChange={(e) => setForm({ ...form, accent_color: e.target.value })}
                     placeholder="#3b82f6"
-                    className="flex-1"
+                    className="flex-1 font-mono uppercase"
                   />
                 </div>
               </div>
@@ -453,18 +477,24 @@ export default function BrandingSettings() {
             <div className="space-y-2">
               <Label htmlFor="emailHeaderColor">Email Header Color</Label>
               <div className="flex items-center gap-3">
-                <Input
-                  id="emailHeaderColor"
-                  type="color"
-                  value={form.email_header_color}
-                  onChange={(e) => setForm({ ...form, email_header_color: e.target.value })}
-                  className="w-16 h-10 p-1 cursor-pointer"
-                />
+                <div className="relative w-16 h-10 rounded-md border shadow-sm overflow-hidden transition-transform active:scale-95 group">
+                  <div
+                    className="absolute inset-0 group-hover:opacity-90 transition-opacity"
+                    style={{ backgroundColor: form.email_header_color }}
+                  />
+                  <input
+                    id="emailHeaderColor"
+                    type="color"
+                    value={form.email_header_color}
+                    onChange={(e) => setForm({ ...form, email_header_color: e.target.value })}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer p-0 border-0"
+                  />
+                </div>
                 <Input
                   value={form.email_header_color}
                   onChange={(e) => setForm({ ...form, email_header_color: e.target.value })}
                   placeholder="#3b82f6"
-                  className="flex-1"
+                  className="flex-1 font-mono uppercase"
                 />
               </div>
               <p className="text-xs text-muted-foreground">

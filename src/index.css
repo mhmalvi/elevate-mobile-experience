@@ -5,132 +5,142 @@
 @tailwind utilities;
 
 /* ============================================
-   TradieMate Design System v2.0
-   Premium Mobile-First Australian Tradie App
-   Deep Charcoal + Electric Blue Palette
+   TradieMate Design System v3.0 - "Industrial Premium"
+   Deep Navy + Metallic Gold + Turquoise
+   Target: Aussie Tradies (Strong, Reliable, Premium)
    ============================================ */
 
 @layer base {
   :root {
-    /* Light Mode - Clean & Professional */
-    --background: 220 20% 97%;
-    --foreground: 220 25% 10%;
+    /* Light Mode - "Executive Site Manager" */
+    --background: 210 40% 98%;
+    /* refined off-white */
+    --foreground: 239 94% 15%;
+    /* deep-navy */
 
     --card: 0 0% 100%;
-    --card-foreground: 220 25% 10%;
+    --card-foreground: 239 94% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 10%;
+    --popover-foreground: 239 94% 15%;
 
-    /* Primary - Electric Blue (TradieMate brand) */
-    --primary: 217 91% 50%;
+    /* Primary - Deep Navy (Professional Base) */
+    --primary: 239 94% 19%;
+    /* deep-twilight */
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Slate Gray */
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 25% 10%;
+    /* Secondary - French Blue */
+    --secondary: 214 97% 27%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 10% 46%;
+    /* Accent - Metallic Gold (Premium Touch) */
+    --accent: 45 93% 47%;
+    /* gold */
+    --accent-foreground: 239 94% 15%;
 
-    /* Accent - Warm Amber (Australian sun) */
-    --accent: 38 92% 50%;
-    --accent-foreground: 0 0% 100%;
+    --muted: 210 40% 90%;
+    --muted-foreground: 215 25% 40%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    /* Success - Money Green */
     --success: 152 69% 40%;
     --success-foreground: 0 0% 100%;
 
-    /* Warning - Amber */
-    --warning: 38 92% 50%;
-    --warning-foreground: 220 25% 10%;
+    --warning: 45 93% 47%;
+    --warning-foreground: 239 94% 15%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 217 91% 50%;
+    --border: 214 30% 85%;
+    --input: 214 30% 85%;
+    --ring: 239 94% 19%;
 
-    --radius: 0.875rem;
+    --radius: 1rem;
+    /* Modern rounded corners */
 
     /* Sidebar */
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 220 25% 10%;
-    --sidebar-primary: 217 91% 50%;
+    --sidebar-background: 210 40% 98%;
+    --sidebar-foreground: 239 94% 15%;
+    --sidebar-primary: 239 94% 19%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 14% 96%;
-    --sidebar-accent-foreground: 220 25% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217 91% 50%;
+    --sidebar-accent: 210 40% 90%;
+    --sidebar-accent-foreground: 239 94% 15%;
+    --sidebar-border: 214 30% 85%;
+    --sidebar-ring: 239 94% 19%;
 
     /* Custom TradieMate tokens */
-    --glass: 0 0% 100% / 0.85;
-    --glass-border: 220 13% 91% / 0.6;
-    --glass-subtle: 0 0% 100% / 0.6;
-    --shadow-color: 220 25% 10% / 0.08;
-    --shadow-primary: 217 91% 50% / 0.25;
-    --gradient-start: 217 91% 50%;
-    --gradient-end: 240 80% 60%;
-    --glow-primary: 217 91% 50% / 0.4;
+    --glass: 0 0% 100% / 0.9;
+    --glass-border: 239 94% 19% / 0.1;
+    --glass-subtle: 239 94% 19% / 0.05;
+    --shadow-color: 239 94% 19% / 0.1;
+    --shadow-primary: 239 94% 19% / 0.25;
+    --gradient-start: 239 94% 19%;
+    --gradient-end: 214 97% 27%;
+    --glow-primary: 214 97% 27% / 0.3;
   }
 
   .dark {
-    /* Dark Mode - Premium Deep Charcoal */
-    --background: 222 30% 6%;
+    /* Dark Mode - "Industrial Luxury" */
+    --background: 239 94% 12%;
+    /* deep-navy (darker for contrast) */
     --foreground: 210 40% 98%;
 
-    --card: 222 28% 10%;
+    /* Card - Glassy Deep Blue */
+    --card: 239 94% 15%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222 28% 10%;
+    --popover: 239 94% 15%;
     --popover-foreground: 210 40% 98%;
 
-    /* Primary - Brighter Electric Blue for dark mode */
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 30% 6%;
+    /* Primary - Turquoise Surf (Vibrant Action) */
+    --primary: 190 100% 42%;
+    --primary-foreground: 239 94% 10%;
 
-    --secondary: 222 24% 14%;
+    /* Secondary - French Blue Surface */
+    --secondary: 214 97% 27%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 222 24% 14%;
-    --muted-foreground: 215 20% 60%;
+    /* Accent - Muted Gold (The "Premium" factor) */
+    --accent: 42 70% 60%;
+    /* muted-gold */
+    --accent-foreground: 239 94% 10%;
 
-    --accent: 38 92% 55%;
-    --accent-foreground: 222 30% 6%;
+    --muted: 239 60% 20%;
+    --muted-foreground: 214 60% 70%;
 
     --destructive: 0 72% 55%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 255 255 255;
 
-    --success: 152 69% 45%;
-    --success-foreground: 222 30% 6%;
+    --success: 150 60% 45%;
+    --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 55%;
-    --warning-foreground: 222 30% 6%;
+    --warning: 42 80% 60%;
+    --warning-foreground: 239 94% 10%;
 
-    --border: 222 24% 16%;
-    --input: 222 24% 16%;
-    --ring: 217 91% 60%;
+    --border: 214 97% 27%;
+    /* french-blue */
+    --input: 239 94% 18%;
+    /* slightly lighter than bg */
+    --ring: 190 100% 42%;
 
     /* Sidebar Dark */
-    --sidebar-background: 222 30% 5%;
+    --sidebar-background: 239 94% 12%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 222 30% 6%;
-    --sidebar-accent: 222 24% 12%;
+    --sidebar-primary: 190 100% 42%;
+    --sidebar-primary-foreground: 239 94% 10%;
+    --sidebar-accent: 239 94% 15%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 24% 14%;
-    --sidebar-ring: 217 91% 60%;
+    --sidebar-border: 214 97% 27%;
+    --sidebar-ring: 190 100% 42%;
 
     /* Custom TradieMate tokens - Dark */
-    --glass: 222 28% 10% / 0.92;
-    --glass-border: 222 24% 22% / 0.5;
-    --glass-subtle: 222 28% 12% / 0.7;
-    --shadow-color: 0 0% 0% / 0.4;
-    --shadow-primary: 217 91% 60% / 0.3;
-    --gradient-start: 217 91% 60%;
-    --gradient-end: 240 80% 70%;
-    --glow-primary: 217 91% 60% / 0.5;
+    --glass: 239 94% 15% / 0.7;
+    --glass-border: 190 100% 42% / 0.2;
+    --glass-subtle: 214 97% 27% / 0.3;
+    --shadow-color: 0 0% 0% / 0.5;
+    --shadow-primary: 190 100% 42% / 0.25;
+    --gradient-start: 239 94% 12%;
+    --gradient-end: 214 97% 27%;
+    --glow-primary: 190 100% 42% / 0.4;
   }
 }
 
@@ -154,15 +164,24 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv11", "ss01";
+    /* Subtle grid pattern for industrial feel */
+    background-image: linear-gradient(to right, hsla(var(--foreground)/0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, hsla(var(--foreground)/0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
   }
 
   /* Mobile-first optimizations */
-  input, textarea, select, button {
-    font-size: 16px; /* Prevents iOS zoom on focus */
+  input,
+  textarea,
+  select,
+  button {
+    font-size: 16px;
+    /* Prevents iOS zoom on focus */
   }
 }
 
 @layer utilities {
+
   /* Premium Glass morphism effect */
   .glass {
     background: hsl(var(--glass));
@@ -187,19 +206,27 @@
   }
 
   .gradient-glow {
-    background: radial-gradient(ellipse at top, hsl(var(--primary) / 0.15), transparent 50%);
+    background: radial-gradient(ellipse at top, hsl(var(--primary) / 0.15), transparent 70%);
+  }
+
+  /* Metallic Gold Text */
+  .text-premium-gold {
+    background: linear-gradient(135deg, hsl(45 93% 55%), hsl(42 70% 45%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 
   /* Premium shadows */
   .shadow-premium {
-    box-shadow: 
+    box-shadow:
       0 1px 3px hsl(var(--shadow-color)),
       0 4px 12px hsl(var(--shadow-color)),
       0 12px 24px hsl(var(--shadow-color));
   }
 
   .shadow-premium-lg {
-    box-shadow: 
+    box-shadow:
       0 2px 4px hsl(var(--shadow-color)),
       0 8px 16px hsl(var(--shadow-color)),
       0 16px 32px hsl(var(--shadow-color)),
@@ -220,13 +247,15 @@
 
   /* Card with hover glow effect */
   .card-premium {
-    @apply rounded-xl border bg-card transition-all duration-300;
+    @apply rounded-xl border bg-card/80 transition-all duration-300;
     box-shadow: 0 2px 8px hsl(var(--shadow-color));
+    backdrop-filter: blur(10px);
   }
 
   .card-premium:hover {
-    box-shadow: 0 4px 16px hsl(var(--shadow-color)), 0 0 0 1px hsl(var(--primary) / 0.1);
+    box-shadow: 0 8px 24px hsl(var(--shadow-color)), 0 0 0 1px hsl(var(--primary) / 0.2);
     transform: translateY(-2px);
+    @apply bg-card/90;
   }
 
   /* Touch-friendly tap areas */
@@ -267,6 +296,7 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -280,13 +310,33 @@
   }
 
   /* Status colors with premium styling */
-  .status-draft { @apply bg-muted text-muted-foreground; }
-  .status-sent { @apply bg-primary/15 text-primary; }
-  .status-accepted { @apply bg-success/15 text-success; }
-  .status-declined { @apply bg-destructive/15 text-destructive; }
-  .status-pending { @apply bg-warning/15 text-warning; }
-  .status-paid { @apply bg-success/15 text-success; }
-  .status-overdue { @apply bg-destructive/15 text-destructive; }
+  .status-draft {
+    @apply bg-muted text-muted-foreground border border-muted-foreground/20;
+  }
+
+  .status-sent {
+    @apply bg-primary/15 text-primary border border-primary/20;
+  }
+
+  .status-accepted {
+    @apply bg-success/15 text-success border border-success/20;
+  }
+
+  .status-declined {
+    @apply bg-destructive/15 text-destructive border border-destructive/20;
+  }
+
+  .status-pending {
+    @apply bg-warning/10 text-warning border border-warning/20;
+  }
+
+  .status-paid {
+    @apply bg-success/15 text-success border border-success/20;
+  }
+
+  .status-overdue {
+    @apply bg-destructive/15 text-destructive border border-destructive/20;
+  }
 
   /* Interactive states */
   .interactive {
@@ -303,71 +353,167 @@
    ============================================ */
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(24px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(100%); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-24px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(24px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes slideInLeft {
-  from { opacity: 0; transform: translateX(-24px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.9); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes scaleInBounce {
-  0% { opacity: 0; transform: scale(0.8); }
-  50% { transform: scale(1.02); }
-  100% { opacity: 1; transform: scale(1); }
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  50% {
+    transform: scale(1.02);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px hsl(var(--glow-primary)); }
-  50% { box-shadow: 0 0 40px hsl(var(--glow-primary)), 0 0 60px hsl(var(--primary) / 0.3); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 20px hsl(var(--glow-primary));
+  }
+
+  50% {
+    box-shadow: 0 0 40px hsl(var(--glow-primary)), 0 0 60px hsl(var(--primary) / 0.3);
+  }
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 @keyframes wiggle {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-3deg); }
-  75% { transform: rotate(3deg); }
+
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  25% {
+    transform: rotate(-3deg);
+  }
+
+  75% {
+    transform: rotate(3deg);
+  }
 }
 
 @keyframes gradient-shift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
 /* Animation classes */
@@ -427,14 +573,37 @@
 }
 
 /* Stagger animation delays */
-.stagger-1 { animation-delay: 0.05s; }
-.stagger-2 { animation-delay: 0.1s; }
-.stagger-3 { animation-delay: 0.15s; }
-.stagger-4 { animation-delay: 0.2s; }
-.stagger-5 { animation-delay: 0.25s; }
-.stagger-6 { animation-delay: 0.3s; }
-.stagger-7 { animation-delay: 0.35s; }
-.stagger-8 { animation-delay: 0.4s; }
+.stagger-1 {
+  animation-delay: 0.05s;
+}
+
+.stagger-2 {
+  animation-delay: 0.1s;
+}
+
+.stagger-3 {
+  animation-delay: 0.15s;
+}
+
+.stagger-4 {
+  animation-delay: 0.2s;
+}
+
+.stagger-5 {
+  animation-delay: 0.25s;
+}
+
+.stagger-6 {
+  animation-delay: 0.3s;
+}
+
+.stagger-7 {
+  animation-delay: 0.35s;
+}
+
+.stagger-8 {
+  animation-delay: 0.4s;
+}
 
 /* ============================================
    Component-specific styles
@@ -463,29 +632,31 @@
 /* Bottom navigation premium styling */
 .bottom-nav {
   @apply fixed bottom-0 left-0 right-0 z-50;
-  @apply glass border-t border-border/50;
+  @apply glass border-t;
+  border-color: hsl(var(--glass-border));
   @apply safe-bottom;
 }
 
 /* Header premium styling */
 .header-premium {
   @apply sticky top-0 z-40;
-  @apply glass border-b border-border/30;
+  @apply glass border-b;
+  border-color: hsl(var(--glass-border));
   @apply px-4 py-3 safe-top;
 }
 
 /* Card interactive states */
 .card-interactive {
-  @apply rounded-xl border bg-card;
+  @apply rounded-xl border bg-card/50 backdrop-blur-sm;
   @apply transition-all duration-300;
-  @apply hover:shadow-premium hover:border-primary/20;
-  @apply active:scale-[0.99];
+  @apply hover:shadow-premium hover:border-primary/40 hover:bg-card/70;
+  @apply active:scale-[0.97];
 }
 
 /* Input focus states */
 .input-premium {
   @apply transition-all duration-200;
-  @apply focus:ring-2 focus:ring-primary/30 focus:border-primary;
+  @apply focus:ring-2 focus:ring-primary/40 focus:border-primary;
   @apply focus:shadow-glow-sm;
 }
 
@@ -495,12 +666,10 @@
 }
 
 .skeleton-shimmer {
-  background: linear-gradient(
-    90deg,
-    hsl(var(--muted)) 0%,
-    hsl(var(--muted-foreground) / 0.1) 50%,
-    hsl(var(--muted)) 100%
-  );
+  background: linear-gradient(90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.1) 50%,
+      hsl(var(--muted)) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }

@@ -23,7 +23,7 @@ export default function Clients() {
   const filteredClients = useMemo(() => {
     if (!search.trim()) return clients;
     const term = search.toLowerCase();
-    return clients.filter(client => 
+    return clients.filter(client =>
       client.name?.toLowerCase().includes(term) ||
       client.email?.toLowerCase().includes(term) ||
       client.phone?.includes(term) ||
@@ -33,13 +33,13 @@ export default function Clients() {
 
   return (
     <MobileLayout>
-      <PageHeader 
+      <PageHeader
         title="Clients"
         subtitle={`${clients.length} total`}
         showSettings
       />
 
-      <div className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+      <div className="p-4 space-y-4 animate-fade-in">
         {/* Offline indicator */}
         {!isOnline && (
           <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm text-yellow-600 dark:text-yellow-400">

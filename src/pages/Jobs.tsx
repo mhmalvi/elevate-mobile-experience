@@ -30,7 +30,7 @@ export default function Jobs() {
   const filteredJobs = useMemo(() => {
     if (!search.trim()) return jobs;
     const term = search.toLowerCase();
-    return jobs.filter(job => 
+    return jobs.filter(job =>
       job.title?.toLowerCase().includes(term) ||
       job.clients?.name?.toLowerCase().includes(term) ||
       job.site_address?.toLowerCase().includes(term)
@@ -39,13 +39,13 @@ export default function Jobs() {
 
   return (
     <MobileLayout>
-      <PageHeader 
+      <PageHeader
         title="Jobs"
         subtitle={`${jobs.length} total`}
         showSettings
       />
 
-      <div className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+      <div className="p-4 space-y-4 animate-fade-in">
         {/* Offline indicator */}
         {!isOnline && (
           <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm text-yellow-600 dark:text-yellow-400">
@@ -87,7 +87,7 @@ export default function Jobs() {
         {loading ? (
           <ListSkeleton count={5} />
         ) : viewMode === 'calendar' ? (
-          <JobCalendarView 
+          <JobCalendarView
             jobs={jobs}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
@@ -126,7 +126,7 @@ export default function Jobs() {
                   </div>
                   <StatusBadge status={job.status} />
                 </div>
-                
+
                 <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
                   {job.scheduled_date && (
                     <div className="flex items-center gap-1.5">

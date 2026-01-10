@@ -14,13 +14,13 @@ import { purchasePackage, restorePurchases, REVENUECAT_PRODUCTS } from '@/lib/pu
 import { formatLimit, SubscriptionTier } from '@/lib/tierLimits';
 import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
-import { 
-  Crown, 
-  FileText, 
-  Receipt, 
-  Briefcase, 
-  MessageSquare, 
-  Mail, 
+import {
+  Crown,
+  FileText,
+  Receipt,
+  Briefcase,
+  MessageSquare,
+  Mail,
   Users,
   Check,
   Sparkles,
@@ -97,7 +97,7 @@ export default function SubscriptionSettings() {
           toast.error('Stripe is not configured for this plan');
           return;
         }
-        
+
         const { data, error } = await supabase.functions.invoke('create-subscription-checkout', {
           body: { priceId: tier.stripePriceId, tierId: tier.id }
         });
@@ -115,7 +115,7 @@ export default function SubscriptionSettings() {
         }
 
         const result = await purchasePackage(productConfig.identifier);
-        
+
         if (result.success) {
           toast.success('Subscription activated! Welcome aboard.');
           refetchProfile?.();
@@ -151,7 +151,7 @@ export default function SubscriptionSettings() {
 
   const handleManageSubscription = async () => {
     const platform = getPlatform();
-    
+
     if (isNativeApp()) {
       // For native apps, direct users to their app store subscription settings
       if (platform === 'android') {
@@ -196,8 +196,8 @@ export default function SubscriptionSettings() {
                 <Badge variant="secondary" className="text-xs">Current Plan</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                {currentTier === 'free' ? 'Upgrade to unlock more features' : 
-                  profile?.subscription_expires_at ? 
+                {currentTier === 'free' ? 'Upgrade to unlock more features' :
+                  profile?.subscription_expires_at ?
                     `Renews ${format(new Date(profile.subscription_expires_at), 'MMM d, yyyy')}` :
                     'Active subscription'
                 }
@@ -205,9 +205,9 @@ export default function SubscriptionSettings() {
             </div>
           </div>
           {currentTier !== 'free' && (
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               className="mt-4 w-full"
               onClick={handleManageSubscription}
             >
@@ -240,33 +240,30 @@ export default function SubscriptionSettings() {
                 const isAtLimit = !data.isUnlimited && data.used >= data.limit;
 
                 return (
-                  <Card 
-                    key={type} 
+                  <Card
+                    key={type}
                     className={`p-4 animate-fade-in ${isAtLimit ? 'border-destructive/50 bg-destructive/5' : isNearLimit ? 'border-warning/50 bg-warning/5' : ''}`}
                     style={{ animationDelay: `${index * 0.05}s` }}
                   >
                     <div className="flex items-center gap-3 mb-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                        isAtLimit ? 'bg-destructive/20' : isNearLimit ? 'bg-warning/20' : 'bg-primary/10'
-                      }`}>
-                        <Icon className={`w-4 h-4 ${
-                          isAtLimit ? 'text-destructive' : isNearLimit ? 'text-warning' : 'text-primary'
-                        }`} />
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isAtLimit ? 'bg-destructive/20' : isNearLimit ? 'bg-warning/20' : 'bg-primary/10'
+                        }`}>
+                        <Icon className={`w-4 h-4 ${isAtLimit ? 'text-destructive' : isNearLimit ? 'text-warning' : 'text-primary'
+                          }`} />
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-sm">{usageLabels[type]}</span>
-                          <span className={`text-sm font-semibold ${
-                            isAtLimit ? 'text-destructive' : isNearLimit ? 'text-warning' : 'text-foreground'
-                          }`}>
+                          <span className={`text-sm font-semibold ${isAtLimit ? 'text-destructive' : isNearLimit ? 'text-warning' : 'text-foreground'
+                            }`}>
                             {data.used} / {formatLimit(data.limit)}
                           </span>
                         </div>
                       </div>
                     </div>
                     {!data.isUnlimited && (
-                      <Progress 
-                        value={percentage} 
+                      <Progress
+                        value={percentage}
                         className={`h-2 ${isAtLimit ? '[&>div]:bg-destructive' : isNearLimit ? '[&>div]:bg-warning' : ''}`}
                       />
                     )}
@@ -286,7 +283,7 @@ export default function SubscriptionSettings() {
         {/* Upgrade Plans */}
         <div className="space-y-3">
           <h4 className="font-semibold text-lg">Upgrade Your Plan</h4>
-          
+
           {isNativeApp() && (
             <div className="space-y-2">
               <Card className="p-4 bg-muted/50 border-dashed">
@@ -314,15 +311,14 @@ export default function SubscriptionSettings() {
           <div className="grid gap-3">
             {SUBSCRIPTION_TIERS.filter(tier => tier.id !== 'free').map((tier, index) => {
               const isCurrentPlan = tier.id === currentTier;
-              const isDowngrade = SUBSCRIPTION_TIERS.findIndex(t => t.id === tier.id) < 
-                                  SUBSCRIPTION_TIERS.findIndex(t => t.id === currentTier);
+              const isDowngrade = SUBSCRIPTION_TIERS.findIndex(t => t.id === tier.id) <
+                SUBSCRIPTION_TIERS.findIndex(t => t.id === currentTier);
 
               return (
-                <Card 
+                <Card
                   key={tier.id}
-                  className={`p-5 animate-fade-in transition-all ${
-                    tier.highlighted ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20' : ''
-                  } ${isCurrentPlan ? 'border-primary bg-primary/10' : ''}`}
+                  className={`p-5 animate-fade-in transition-all ${tier.highlighted ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20' : ''
+                    } ${isCurrentPlan ? 'border-primary bg-primary/10' : ''}`}
                   style={{ animationDelay: `${(index + 6) * 0.05}s` }}
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -353,9 +349,9 @@ export default function SubscriptionSettings() {
                   </ul>
 
                   {!isCurrentPlan && !isDowngrade && (
-                    <Button 
+                    <Button
                       className="w-full"
-                      variant={tier.highlighted ? 'default' : 'outline'}
+                      variant={tier.highlighted ? 'premium' : 'outline'}
                       onClick={() => handleUpgrade(tier.id)}
                       disabled={loadingTier !== null}
                     >
