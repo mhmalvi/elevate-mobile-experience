@@ -12,6 +12,7 @@ import { FileText, Calendar, WifiOff } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { useOfflineQuotes } from '@/lib/offline/offlineHooks';
+import { formatCurrency } from '@/lib/utils';
 
 export default function Quotes() {
   const navigate = useNavigate();
@@ -42,7 +43,7 @@ export default function Quotes() {
         showSettings
       />
 
-      <div className="flex-1 overflow-auto p-4 space-y-4 animate-fade-in">
+      <div className="p-4 space-y-4 animate-fade-in">
         {/* Offline indicator */}
         {!isOnline && (
           <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm text-yellow-600 dark:text-yellow-400">
@@ -98,7 +99,7 @@ export default function Quotes() {
 
                 <div className="mt-3 flex items-center justify-between">
                   <p className="text-lg font-bold text-foreground">
-                    ${Number(quote.total || 0).toLocaleString()}
+                    {formatCurrency(quote.total)}
                   </p>
                   {quote.valid_until && (
                     <div className="flex items-center gap-1.5 text-sm text-muted-foreground">

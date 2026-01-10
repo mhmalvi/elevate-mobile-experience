@@ -60,11 +60,13 @@ export function useTeam(): UseTeamReturn {
       setError(null);
 
       // Get user's team membership
-      const { data: membership, error: membershipError } = await supabase
+      const { data: memberships, error: membershipError } = await supabase
         .from('team_members')
         .select('*, teams!inner(*)')
         .eq('user_id', user.id)
-        .single();
+        .limit(1);
+
+      const membership = memberships?.[0];
 
       if (membershipError) {
         console.error('Error fetching team membership:', membershipError);

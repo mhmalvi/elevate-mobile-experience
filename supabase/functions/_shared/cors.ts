@@ -27,9 +27,18 @@ const ALLOWED_ORIGINS = [
 const DEV_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',
+  'http://localhost:8080',
   'http://127.0.0.1:5173',
+  'http://127.0.0.1:8080',
   'capacitor://localhost', // Capacitor mobile app
   'ionic://localhost',
+];
+
+// Local network IP patterns for development (192.168.x.x, 10.x.x.x, etc.)
+const LOCAL_NETWORK_PATTERNS = [
+  /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:\d+$/,
+  /^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+$/,
+  /^http:\/\/172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}:\d+$/,
 ];
 
 /**
@@ -45,8 +54,29 @@ export function getCorsHeaders(req: Request): Record<string, string> {
     ? [...ALLOWED_ORIGINS, ...DEV_ORIGINS]
     : ALLOWED_ORIGINS;
 
-  // Check if origin is whitelisted
-  const isAllowed = allowedOrigins.some(allowed => origin === allowed);
+  // Check if origin is whitelisted (exact match)
+  let isAllowed = allowedOrigins.some(allowed => origin === allowed);
+
+  // Always allow local network IPs (192.168.x.x, 10.x.x.x, etc.) for testing/hybrid usage
+  if (!isAllowed && origin) {
+    isAllowed = LOCAL_NETWORK_PATTERNS.some(pattern => pattern.test(origin));
+  }
+
+  // Also allow any Vercel deployment URL for this project
+  // Vercel preview URLs follow patterns like: project-name-xxx-team.vercel.app
+  if (!isAllowed && origin) {
+    const vercelPatterns = [
+      /^https:\/\/elevate-mobile-experience.*\.vercel\.app$/,
+      /^https:\/\/dist-.*\.vercel\.app$/,
+      /^https:\/\/.*-info-quadquetechs-projects\.vercel\.app$/,
+    ];
+    isAllowed = vercelPatterns.some(pattern => pattern.test(origin));
+  }
+
+  // Log for debugging CORS issues
+  if (!isAllowed && origin) {
+    console.warn(`[CORS] Origin not allowed: ${origin}`);
+  }
 
   return {
     'Access-Control-Allow-Origin': isAllowed ? origin : ALLOWED_ORIGINS[0],

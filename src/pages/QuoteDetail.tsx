@@ -59,7 +59,7 @@ export default function QuoteDetail() {
 
   const convertToJob = async () => {
     if (!quote) return;
-    
+
     const { data: job, error } = await supabase.from('jobs').insert({
       user_id: user?.id,
       client_id: quote.client_id,
@@ -79,9 +79,9 @@ export default function QuoteDetail() {
 
   const convertToInvoice = async () => {
     if (!quote) return;
-    
+
     const invoiceNumber = `INV${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-    
+
     const { data: invoice, error: invoiceError } = await supabase.from('invoices').insert({
       user_id: user?.id,
       client_id: quote.client_id,
@@ -113,7 +113,7 @@ export default function QuoteDetail() {
     }));
 
     await supabase.from('invoice_line_items').insert(invoiceItems);
-    
+
     toast({ title: 'Invoice created from quote' });
     navigate(`/invoices/${invoice.id}`);
   };
@@ -132,27 +132,27 @@ export default function QuoteDetail() {
   return (
     <MobileLayout showNav={false}>
       <PageHeader title={quote.quote_number} showBack backPath="/quotes" />
-      
-      <div className="p-4 space-y-6 animate-fade-in pb-32">
-        {/* Header */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold">{quote.title}</h2>
-            <StatusBadge status={quote.status} />
+
+      <div className="p-4 space-y-6 animate-fade-in pb-48 safe-bottom">
+        {/* Header Section */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">{quote.title}</h2>
+            {quote.clients && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 px-2 py-1 rounded-md w-fit">
+                <User className="w-3.5 h-3.5" />
+                {quote.clients.name}
+              </div>
+            )}
           </div>
-          {quote.clients && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <User className="w-4 h-4" />
-              {quote.clients.name}
-            </div>
-          )}
+          <StatusBadge status={quote.status} className="mt-1" />
         </div>
 
-        {/* Status Selector */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Status</label>
+        {/* Status Selector Card */}
+        <div className="bg-card/40 backdrop-blur-sm border border-border/40 rounded-2xl p-4 shadow-sm">
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3 block">Update Status</label>
           <Select value={quote.status} onValueChange={updateStatus}>
-            <SelectTrigger>
+            <SelectTrigger className="h-12 bg-background/50 border-border/40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -163,141 +163,146 @@ export default function QuoteDetail() {
           </Select>
         </div>
 
-        {/* Line Items */}
-        <div className="space-y-2">
-          <h3 className="font-semibold">Line Items</h3>
-          <div className="space-y-2">
+        {/* Line Items Container */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <div className="w-1.5 h-6 bg-primary rounded-full" />
+            <h3 className="font-bold text-lg">Line Items</h3>
+          </div>
+          <div className="space-y-3">
             {lineItems.map((item) => (
-              <div key={item.id} className="p-3 bg-card rounded-lg border">
-                <div className="flex justify-between">
-                  <span className="font-medium">{item.description}</span>
-                  <span className="font-semibold">${Number(item.total).toFixed(2)}</span>
+              <div key={item.id} className="p-4 bg-card/60 backdrop-blur-md rounded-2xl border border-border/40 shadow-sm animate-scale-in">
+                <div className="flex justify-between items-start gap-3">
+                  <span className="font-semibold text-foreground flex-1">{item.description}</span>
+                  <span className="font-bold text-lg text-gradient">${Number(item.total).toFixed(2)}</span>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  {item.quantity} × ${Number(item.unit_price).toFixed(2)} / {item.unit}
-                </p>
+                <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="px-2 py-0.5 bg-muted/40 rounded-md">
+                    {item.quantity} × ${Number(item.unit_price).toFixed(2)} / {item.unit}
+                  </span>
+                  <span className="capitalize px-2 py-0.5 bg-primary/5 text-primary/70 rounded-md font-medium">
+                    {item.item_type}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Totals */}
-        <div className="p-4 bg-muted rounded-xl space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Subtotal</span>
-            <span>${Number(quote.subtotal).toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>GST (10%)</span>
-            <span>${Number(quote.gst).toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between font-bold text-lg pt-2 border-t">
-            <span>Total</span>
-            <span>${Number(quote.total).toFixed(2)}</span>
+        {/* Premium Totals Card */}
+        <div className="relative overflow-hidden p-6 bg-primary text-primary-foreground rounded-3xl shadow-glow transition-all duration-300 hover:shadow-glow-lg">
+          <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 -ml-8 -mb-8 w-32 h-32 bg-black/10 rounded-full blur-2xl" />
+
+          <div className="space-y-3 relative z-10">
+            <div className="flex justify-between text-sm font-medium opacity-80">
+              <span>Subtotal</span>
+              <span>${Number(quote.subtotal).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm font-medium opacity-80">
+              <span>GST (10%)</span>
+              <span>${Number(quote.gst).toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-end pt-3 border-t border-white/20 mt-3">
+              <span className="font-bold text-lg uppercase tracking-wider">Total Amount</span>
+              <span className="text-4xl font-black">${Number(quote.total).toFixed(2)}</span>
+            </div>
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="space-y-2">
-          {/* PDF Preview & Download */}
-          <div className="flex gap-2">
-            <PDFPreviewModal 
-              type="quote" 
-              id={id!} 
-              documentNumber={quote.quote_number} 
-            />
-            <Button 
-              variant="outline" 
-              className="flex-1"
-              disabled={downloadingPDF}
-              onClick={async () => {
-                setDownloadingPDF(true);
-                try {
-                  const response = await supabase.functions.invoke('generate-pdf', {
-                    body: { type: 'quote', id }
-                  });
-                  
-                  if (response.error) throw response.error;
-                  
-                  const printWindow = window.open('', '_blank');
-                  if (printWindow) {
-                    printWindow.document.write(response.data.html);
-                    printWindow.document.close();
-                    printWindow.print();
-                  }
-                } catch (error) {
-                  console.error('PDF generation error:', error);
-                  toast({ title: 'Error generating PDF', description: 'Please try again.', variant: 'destructive' });
-                } finally {
-                  setDownloadingPDF(false);
-                }
-              }}
-            >
-              {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-              PDF
-            </Button>
-          </div>
-          
+        {/* Actions Grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <PDFPreviewModal
+            type="quote"
+            id={id!}
+            documentNumber={quote.quote_number}
+          />
           <Button
             variant="outline"
-            className="w-full"
+            className="h-14 rounded-2xl border-border/40 bg-card/40 backdrop-blur-sm"
+            disabled={downloadingPDF}
+            onClick={async () => {
+              setDownloadingPDF(true);
+              try {
+                const response = await supabase.functions.invoke('generate-pdf', {
+                  body: { type: 'quote', id }
+                });
+                if (response.error) throw response.error;
+                const printWindow = window.open('', '_blank');
+                if (printWindow) {
+                  printWindow.document.write(response.data.html);
+                  printWindow.document.close();
+                  printWindow.print();
+                }
+              } catch (error) {
+                console.error('PDF generation error:', error);
+                toast({ title: 'Error generating PDF', description: 'Please try again.', variant: 'destructive' });
+              } finally {
+                setDownloadingPDF(false);
+              }
+            }}
+          >
+            {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-5 h-5 mr-2 text-primary" />}
+            PDF
+          </Button>
+
+          <Button
+            variant="outline"
+            className="col-span-2 h-14 rounded-2xl border-border/40 bg-card/40 backdrop-blur-sm"
             onClick={async () => {
               const url = `${window.location.origin}/q/${id}`;
               const success = await copyToClipboard(url);
               if (success) {
                 toast({ title: 'Link copied!', description: 'Share this link with your client.' });
-              } else {
-                toast({
-                  title: 'Copy failed',
-                  description: 'Please copy the link manually: ' + url,
-                  variant: 'destructive'
-                });
               }
             }}
           >
-            <Share2 className="w-4 h-4 mr-2" />
+            <Share2 className="w-5 h-5 mr-2 text-primary" />
             Copy Share Link
           </Button>
 
           {/* Send to Client */}
           {quote.clients && (
-            <SendNotificationButton
-              type="quote"
-              id={id!}
-              recipient={{
-                email: quote.clients.email,
-                phone: quote.clients.phone,
-                name: quote.clients.name,
-              }}
-              onSent={fetchQuote}
-            />
+            <div className="col-span-2">
+              <SendNotificationButton
+                type="quote"
+                id={id!}
+                recipient={{
+                  email: quote.clients.email,
+                  phone: quote.clients.phone,
+                  name: quote.clients.name,
+                }}
+                onSent={fetchQuote}
+              />
+            </div>
           )}
-          
+
           {quote.status === 'accepted' && (
-            <>
-              <Button onClick={convertToJob} className="w-full">
+            <div className="col-span-2 grid grid-cols-2 gap-3 mt-4">
+              <Button onClick={convertToJob} className="h-12 rounded-xl bg-gradient-to-r from-success to-success/80 border-none shadow-premium">
                 <Briefcase className="w-4 h-4 mr-2" />
-                Convert to Job
+                Job
               </Button>
-              <Button onClick={convertToInvoice} variant="outline" className="w-full">
+              <Button onClick={convertToInvoice} variant="outline" className="h-12 rounded-xl border-success/30 text-success hover:bg-success/5">
                 <Receipt className="w-4 h-4 mr-2" />
-                Convert to Invoice
+                Invoice
               </Button>
-            </>
+            </div>
           )}
+
           {quote.status === 'draft' && (
-            <Button onClick={() => updateStatus('sent')} className="w-full">
-              <Send className="w-4 h-4 mr-2" />
-              Mark as Sent
+            <Button onClick={() => updateStatus('sent')} className="col-span-2 h-14 rounded-2xl gradient-primary shadow-glow mt-4">
+              <Send className="w-5 h-5 mr-2" />
+              Mark as Sent & Send to Client
             </Button>
           )}
         </div>
 
-        {/* Notes */}
+        {/* Notes Section */}
         {quote.notes && (
-          <div className="space-y-2">
-            <h3 className="font-semibold">Notes</h3>
-            <p className="text-sm text-muted-foreground">{quote.notes}</p>
+          <div className="p-4 bg-muted/30 rounded-2xl border border-border/20">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Internal Notes</h3>
+            <p className="text-sm text-foreground/80 leading-relaxed italic">"{quote.notes}"</p>
           </div>
         )}
       </div>

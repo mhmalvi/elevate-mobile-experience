@@ -101,12 +101,23 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
   };
 
   // SECURITY: Sanitize HTML to prevent XSS attacks
+  // Allow essential document structure tags for proper PDF rendering
   const sanitizedHtml = useMemo(() => {
     if (!html) return null;
     return DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: ['html', 'head', 'body', 'style', 'div', 'p', 'span', 'table', 'tr', 'td', 'th', 'thead', 'tbody', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'br', 'hr', 'strong', 'em', 'ul', 'ol', 'li'],
-      ALLOWED_ATTR: ['class', 'style', 'src', 'alt', 'width', 'height', 'colspan', 'rowspan'],
+      ALLOWED_TAGS: [
+        'html', 'head', 'body', 'style', 'meta', 'title', 'link',
+        'div', 'p', 'span', 'table', 'tr', 'td', 'th', 'thead', 'tbody',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'br', 'hr',
+        'strong', 'em', 'b', 'i', 'ul', 'ol', 'li', 'a'
+      ],
+      ALLOWED_ATTR: [
+        'class', 'style', 'src', 'alt', 'width', 'height', 'colspan', 'rowspan',
+        'href', 'target', 'rel', 'charset', 'name', 'content', 'lang'
+      ],
       ALLOW_DATA_ATTR: false,
+      // Allow @import in styles for Google Fonts
+      FORCE_BODY: false,
     });
   }, [html]);
 

@@ -3,6 +3,9 @@
  *
  * SECURITY: Encrypts sensitive PII in IndexedDB to protect against device compromise
  * Uses Web Crypto API with AES-GCM encryption
+ *
+ * NOTE: crypto.subtle is only available in secure contexts (HTTPS or localhost).
+ * In non-secure contexts (HTTP), encryption is disabled and data is stored as-is.
  */
 
 import { Preferences } from '@capacitor/preferences';
@@ -12,10 +15,37 @@ const ALGORITHM = 'AES-GCM';
 const KEY_LENGTH = 256;
 
 /**
+ * Check if we're in a secure context where crypto.subtle is available
+ */
+function isSecureContext(): boolean {
+  // crypto.subtle is only available in secure contexts
+  return typeof crypto !== 'undefined' &&
+         typeof crypto.subtle !== 'undefined' &&
+         typeof crypto.subtle.generateKey === 'function';
+}
+
+// Cache the secure context check
+let _isSecureContextCached: boolean | null = null;
+function getIsSecureContext(): boolean {
+  if (_isSecureContextCached === null) {
+    _isSecureContextCached = isSecureContext();
+    if (!_isSecureContextCached) {
+      console.warn('[Encryption] crypto.subtle not available (non-secure context). Encryption disabled.');
+    }
+  }
+  return _isSecureContextCached;
+}
+
+/**
  * Get or generate encryption key
  * Stored securely in Capacitor Preferences (encrypted storage on mobile)
  */
-async function getOrCreateEncryptionKey(): Promise<CryptoKey> {
+async function getOrCreateEncryptionKey(): Promise<CryptoKey | null> {
+  // Check if encryption is available
+  if (!getIsSecureContext()) {
+    return null;
+  }
+
   try {
     // Try to get existing key from secure storage
     const { value: keyData } = await Preferences.get({ key: ENCRYPTION_KEY_NAME });
@@ -36,34 +66,48 @@ async function getOrCreateEncryptionKey(): Promise<CryptoKey> {
   }
 
   // Generate new key
-  const key = await crypto.subtle.generateKey(
-    { name: ALGORITHM, length: KEY_LENGTH },
-    true,
-    ['encrypt', 'decrypt']
-  );
-
-  // Store for future use
   try {
-    const keyBuffer = await crypto.subtle.exportKey('raw', key);
-    const keyData = arrayBufferToBase64(keyBuffer);
-    await Preferences.set({ key: ENCRYPTION_KEY_NAME, value: keyData });
-  } catch (error) {
-    console.error('[Encryption] Failed to store encryption key:', error);
-  }
+    const key = await crypto.subtle.generateKey(
+      { name: ALGORITHM, length: KEY_LENGTH },
+      true,
+      ['encrypt', 'decrypt']
+    );
 
-  return key;
+    // Store for future use
+    try {
+      const keyBuffer = await crypto.subtle.exportKey('raw', key);
+      const keyData = arrayBufferToBase64(keyBuffer);
+      await Preferences.set({ key: ENCRYPTION_KEY_NAME, value: keyData });
+    } catch (error) {
+      console.error('[Encryption] Failed to store encryption key:', error);
+    }
+
+    return key;
+  } catch (error) {
+    console.error('[Encryption] Failed to generate encryption key:', error);
+    return null;
+  }
 }
 
 /**
  * Encrypt a string value
+ * In non-secure contexts, returns the plaintext as-is
  */
 export async function encryptField(plaintext: string | null | undefined): Promise<string | null> {
   if (!plaintext || plaintext.trim() === '') {
     return null;
   }
 
+  // If encryption is not available, return plaintext
+  if (!getIsSecureContext()) {
+    return plaintext;
+  }
+
   try {
     const key = await getOrCreateEncryptionKey();
+    if (!key) {
+      return plaintext; // Fallback to plaintext if key creation fails
+    }
 
     // Generate random IV (Initialization Vector)
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -85,21 +129,30 @@ export async function encryptField(plaintext: string | null | undefined): Promis
     return arrayBufferToBase64(combined.buffer);
   } catch (error) {
     console.error('[Encryption] Failed to encrypt field:', error);
-    // SECURITY: Don't store unencrypted on failure
-    return null;
+    // In case of error, return plaintext to prevent data loss
+    return plaintext;
   }
 }
 
 /**
  * Decrypt a string value
+ * In non-secure contexts, returns the ciphertext as-is (assuming it's plaintext)
  */
 export async function decryptField(ciphertext: string | null | undefined): Promise<string | null> {
   if (!ciphertext || ciphertext.trim() === '') {
     return null;
   }
 
+  // If encryption is not available, return as-is (data was stored as plaintext)
+  if (!getIsSecureContext()) {
+    return ciphertext;
+  }
+
   try {
     const key = await getOrCreateEncryptionKey();
+    if (!key) {
+      return ciphertext; // Fallback - treat as plaintext
+    }
 
     // Decode from base64
     const combined = base64ToArrayBuffer(ciphertext);
@@ -119,9 +172,10 @@ export async function decryptField(ciphertext: string | null | undefined): Promi
     const decoder = new TextDecoder();
     return decoder.decode(decrypted);
   } catch (error) {
-    console.error('[Encryption] Failed to decrypt field:', error);
-    // Return null if decryption fails (corrupted data)
-    return null;
+    // If decryption fails, the data might have been stored as plaintext
+    // (e.g., from a previous non-secure session)
+    console.warn('[Encryption] Decryption failed, treating as plaintext:', error);
+    return ciphertext;
   }
 }
 
@@ -167,12 +221,12 @@ export async function encryptInvoiceFields(invoice: any): Promise<any> {
 
   const encrypted = { ...invoice };
 
-  // Encrypt financial amounts (convert to string first)
-  if (invoice.total !== undefined) {
-    encrypted.total = await encryptField(invoice.total.toString());
+  // Encrypt financial amounts (convert to string first, handle null/undefined)
+  if (invoice.total !== undefined && invoice.total !== null) {
+    encrypted.total = await encryptField(String(invoice.total));
   }
-  if (invoice.amount_paid !== undefined) {
-    encrypted.amount_paid = await encryptField(invoice.amount_paid.toString());
+  if (invoice.amount_paid !== undefined && invoice.amount_paid !== null) {
+    encrypted.amount_paid = await encryptField(String(invoice.amount_paid));
   }
 
   return encrypted;
@@ -207,9 +261,9 @@ export async function encryptQuoteFields(quote: any): Promise<any> {
 
   const encrypted = { ...quote };
 
-  // Encrypt financial amounts
-  if (quote.total !== undefined) {
-    encrypted.total = await encryptField(quote.total.toString());
+  // Encrypt financial amounts (handle null/undefined)
+  if (quote.total !== undefined && quote.total !== null) {
+    encrypted.total = await encryptField(String(quote.total));
   }
 
   return encrypted;

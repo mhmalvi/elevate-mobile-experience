@@ -73,44 +73,22 @@ serve(async (req) => {
       );
     }
 
-    // Fetch profile for business name and Stripe Connect account
+    // Fetch profile for business name only (no Stripe Connect required)
     const { data: profile } = await supabase
       .from("profiles")
-      .select("business_name, stripe_account_id, stripe_charges_enabled")
+      .select("business_name")
       .eq("user_id", invoice.user_id)
       .single();
 
     const businessName = profile?.business_name || "TradieMate";
     const baseUrl = success_url?.split('/i/')[0] || 'https://app.tradiemate.com.au';
 
-    // Check if tradie has connected Stripe account
-    const stripeAccountId = profile?.stripe_account_id;
+    console.log(`Creating Checkout session for platform account, invoice: ${invoice.invoice_number}, balance: $${balance}`);
 
-    if (!stripeAccountId) {
-      console.error("Tradie has not connected Stripe account");
-      return new Response(
-        JSON.stringify({
-          error: "Payment setup incomplete. Please connect your Stripe account in Settings > Payments to accept invoice payments."
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (!profile?.stripe_charges_enabled) {
-      console.error("Stripe account cannot accept charges yet");
-      return new Response(
-        JSON.stringify({
-          error: "Payment setup incomplete. Please complete your Stripe onboarding to accept payments."
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`Creating Checkout session for tradie account: ${stripeAccountId}, balance: $${balance}`);
-
-    // ✅ NO PLATFORM FEE - Tradie receives 100% of invoice amount
-    // Payment goes directly to tradie's Stripe Express Connect account
-    // Only Stripe's processing fee (2.9% + $0.30) is deducted
+    // ✅ PLATFORM MODEL - Payments go directly to YOUR Stripe account
+    // No Stripe Connect required - tradies don't need to connect their own accounts
+    // You receive full payment (minus Stripe's 2.9% + $0.30 processing fee)
+    // You can then pay tradies manually via bank transfer or automate later
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [
@@ -134,11 +112,10 @@ serve(async (req) => {
         invoice_id: invoice_id,
         invoice_number: invoice.invoice_number,
         business_name: businessName,
+        user_id: invoice.user_id, // Track which tradie this payment is for
       },
-      // ✅ NO application_fee_amount - Platform takes 0% fee
-      // Payment goes 100% to tradie (minus Stripe's processing fee)
-    }, {
-      stripeAccount: stripeAccountId, // Routes payment to tradie's Express Connect account
+      // ✅ No application_fee_amount, no stripeAccount
+      // Payment goes directly to platform's Stripe account
     });
 
     console.log(`Stripe session created: ${session.id}`);

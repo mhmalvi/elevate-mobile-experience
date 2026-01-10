@@ -52,8 +52,8 @@ export default function ClientForm() {
   return (
     <MobileLayout showNav={false}>
       <PageHeader title="New Client" showBack backPath="/clients" />
-      
-      <form onSubmit={handleSubmit} className="p-4 space-y-4 animate-fade-in">
+
+      <form onSubmit={handleSubmit} className="p-4 space-y-4 animate-fade-in pb-48 safe-bottom">
         <div className="space-y-2">
           <Label htmlFor="name">Name *</Label>
           <Input

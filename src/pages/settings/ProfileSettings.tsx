@@ -136,7 +136,7 @@ export default function ProfileSettings() {
   return (
     <MobileLayout>
       <PageHeader title="Profile" showBack />
-      
+
       <div className="p-4 space-y-6 animate-fade-in">
         {/* Email Display */}
         <div className="p-4 bg-card rounded-xl border">
@@ -187,6 +187,7 @@ export default function ProfileSettings() {
             type="submit"
             disabled={loading || !passwords.current || !passwords.new || !passwords.confirm}
             className="w-full"
+            variant="premium"
           >
             {loading ? 'Updating...' : 'Update Password'}
           </Button>
@@ -195,7 +196,7 @@ export default function ProfileSettings() {
         {/* Danger Zone */}
         <div className="pt-6 border-t">
           <h3 className="font-semibold text-destructive mb-4">Danger Zone</h3>
-          
+
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="destructive" className="w-full" disabled={loading}>

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Timer } from '@/components/ui/timer';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +23,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { User, MapPin, Calendar, Receipt, Camera, DollarSign, Loader2, X, Image, Play, CheckCircle, TrendingUp, TrendingDown, Trash2 } from 'lucide-react';
+import { User, MapPin, Calendar, Receipt, Camera, DollarSign, Loader2, Image, Play, CheckCircle, TrendingUp, TrendingDown, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const JOB_STATUSES = ['quoted', 'approved', 'scheduled', 'in_progress', 'completed', 'invoiced'] as const;
@@ -55,7 +56,7 @@ export default function JobDetail() {
       .single();
     setJob(data);
     setMaterialCost(data?.material_costs?.toString() || '');
-    
+
     // If job has a quote, fetch quote line items for costing comparison
     if (data?.quote_id) {
       const { data: items } = await supabase
@@ -64,7 +65,7 @@ export default function JobDetail() {
         .eq('quote_id', data.quote_id);
       setQuoteLineItems(items || []);
     }
-    
+
     setLoading(false);
   };
 
@@ -72,7 +73,7 @@ export default function JobDetail() {
     const { data } = await supabase.storage
       .from('job-photos')
       .list(`${id}`, { limit: 20 });
-    
+
     if (data && data.length > 0) {
       const urls = data.map(file => {
         const { data: urlData } = supabase.storage
@@ -89,7 +90,7 @@ export default function JobDetail() {
     if (!files || !id) return;
 
     setUploading(true);
-    
+
     for (const file of Array.from(files)) {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
@@ -145,7 +146,7 @@ export default function JobDetail() {
     setSavingMaterials(true);
     const cost = parseFloat(materialCost) || 0;
     const { error } = await supabase.from('jobs').update({ material_costs: cost }).eq('id', id);
-    
+
     if (error) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } else {
@@ -166,12 +167,12 @@ export default function JobDetail() {
 
   const createInvoice = async () => {
     if (!job) return;
-    
+
     const invoiceNumber = `INV${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
     const total = job.quotes?.total || 0;
     const subtotal = total / 1.1;
     const gst = total - subtotal;
-    
+
     const { data: invoice, error } = await supabase.from('invoices').insert({
       user_id: user?.id,
       client_id: job.client_id,
@@ -198,7 +199,7 @@ export default function JobDetail() {
   // Calculate job costing comparison
   const calculateCosting = () => {
     if (!job?.quotes) return null;
-    
+
     const quotedTotal = Number(job.quotes.total) || 0;
     const labourHours = job.actual_hours || 0;
     const hourlyRate = 85; // Default hourly rate - could be fetched from profile
@@ -207,7 +208,7 @@ export default function JobDetail() {
     const actualCost = labourCost + materialsCost;
     const profit = quotedTotal - actualCost;
     const profitMargin = quotedTotal > 0 ? (profit / quotedTotal) * 100 : 0;
-    
+
     return {
       quotedTotal,
       labourCost,
@@ -233,118 +234,117 @@ export default function JobDetail() {
 
   return (
     <MobileLayout showNav={false}>
-      <PageHeader title="Job Details" showBack backPath="/jobs" />
-      
-      <div className="p-4 space-y-6 animate-fade-in pb-32">
-        {/* Header */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-foreground">{job.title}</h2>
-            <StatusBadge status={job.status} />
+      <PageHeader title={`Job #${job.id.slice(0, 8)}`} showBack backPath="/jobs" />
+
+      <div className="p-4 space-y-6 animate-fade-in pb-48 safe-bottom">
+        {/* Header Section */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">{job.title}</h2>
+            {job.clients && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 px-2 py-1 rounded-md w-fit">
+                <User className="w-3.5 h-3.5" />
+                {job.clients.name}
+              </div>
+            )}
           </div>
-          {job.clients && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <User className="w-4 h-4" />
-              {job.clients.name}
-            </div>
-          )}
+          <StatusBadge status={job.status} className="mt-1" />
         </div>
 
-        {/* Quick Action Buttons for Status Workflow */}
-        <div className="flex gap-2">
+        {/* Workflow Quick Actions */}
+        <div className="grid grid-cols-1 gap-3">
           {job.status === 'approved' && (
-            <Button onClick={() => updateStatus('scheduled')} className="flex-1">
-              <Calendar className="w-4 h-4 mr-2" />
+            <Button onClick={() => updateStatus('scheduled')} className="h-16 text-lg rounded-2xl shadow-glow gradient-primary">
+              <Calendar className="w-6 h-6 mr-2" />
               Schedule Job
             </Button>
           )}
           {job.status === 'scheduled' && (
-            <Button onClick={() => updateStatus('in_progress')} className="flex-1">
-              <Play className="w-4 h-4 mr-2" />
+            <Button onClick={() => updateStatus('in_progress')} className="h-16 text-lg rounded-2xl shadow-glow gradient-primary">
+              <Play className="w-6 h-6 mr-2" />
               Start Job
             </Button>
           )}
           {job.status === 'in_progress' && (
-            <Button onClick={() => updateStatus('completed')} className="flex-1">
-              <CheckCircle className="w-4 h-4 mr-2" />
+            <Button onClick={() => updateStatus('completed')} className="h-16 text-lg rounded-2xl shadow-glow gradient-primary">
+              <CheckCircle className="w-6 h-6 mr-2" />
               Complete Job
+            </Button>
+          )}
+          {job.status === 'completed' && (
+            <Button onClick={createInvoice} className="h-16 text-lg rounded-2xl shadow-glow gradient-primary">
+              <Receipt className="w-6 h-6 mr-2" />
+              Create Invoice
             </Button>
           )}
         </div>
 
-        {/* Status Selector */}
-        <div className="space-y-2">
-          <Label>Status</Label>
-          <Select value={job.status} onValueChange={updateStatus}>
-            <SelectTrigger className="h-12">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {JOB_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Time Tracker */}
         {(job.status === 'in_progress' || job.status === 'scheduled' || job.status === 'approved') && (
-          <Timer 
-            initialSeconds={Math.round((job.actual_hours || 0) * 3600)} 
+          <Timer
+            initialSeconds={Math.round((job.actual_hours || 0) * 3600)}
             onTimeUpdate={handleTimeUpdate}
+            className="animate-scale-in"
           />
         )}
 
-        {/* Details */}
-        <div className="p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 space-y-3">
-          {job.site_address && (
-            <div className="flex items-start gap-3 text-sm">
-              <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
-              <div className="flex-1">
-                <span className="text-foreground">{job.site_address}</span>
-                <a 
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.site_address)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block text-xs text-primary hover:underline mt-1"
-                >
-                  Get Directions →
-                </a>
+        {/* Location & Schedule Card */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <div className="w-1.5 h-6 bg-primary rounded-full" />
+            <h3 className="font-bold text-lg">Work Details</h3>
+          </div>
+          <div className="p-4 bg-card/60 backdrop-blur-md rounded-2xl border border-border/40 shadow-sm space-y-4">
+            {job.site_address && (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <MapPin className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{job.site_address}</p>
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.site_address)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary font-bold hover:underline mt-1 inline-block"
+                  >
+                    Get Directions →
+                  </a>
+                </div>
               </div>
-            </div>
-          )}
-          {job.scheduled_date && (
-            <div className="flex items-center gap-3 text-sm">
-              <Calendar className="w-4 h-4 text-muted-foreground" />
-              <span className="text-foreground">{format(new Date(job.scheduled_date), 'EEEE, d MMMM yyyy')}</span>
-            </div>
-          )}
-          {job.quotes && (
-            <button 
-              onClick={() => navigate(`/quotes/${job.quote_id}`)}
-              className="flex items-center gap-3 text-sm text-primary hover:underline"
-            >
-              <Receipt className="w-4 h-4" />
-              Quote {job.quotes.quote_number} - ${Number(job.quotes.total).toLocaleString()}
-            </button>
-          )}
-          {job.actual_hours > 0 && (
-            <div className="flex items-center gap-3 text-sm text-success">
-              <DollarSign className="w-4 h-4" />
-              {job.actual_hours.toFixed(2)} hours tracked
-            </div>
-          )}
+            )}
+
+            {job.scheduled_date && (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Calendar className="w-4 h-4 text-primary" />
+                </div>
+                <p className="text-sm font-medium text-foreground">
+                  {format(new Date(job.scheduled_date), 'EEEE, d MMMM yyyy')}
+                </p>
+              </div>
+            )}
+
+            {job.quotes && (
+              <button
+                onClick={() => navigate(`/quotes/${job.quote_id}`)}
+                className="w-full flex items-center gap-3 p-3 bg-muted/40 rounded-xl hover:bg-muted/60 transition-colors"
+              >
+                <Receipt className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Link: Quote {job.quotes.quote_number}</span>
+                <span className="ml-auto font-bold">${Number(job.quotes.total).toLocaleString()}</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Map Embed */}
+        {/* Map Embed - Only if address present */}
         {job.site_address && (
-          <div className="rounded-xl overflow-hidden border border-border/50 shadow-sm">
+          <div className="rounded-2xl overflow-hidden border border-border/40 shadow-premium-lg h-48 animate-fade-in delay-100">
             <iframe
               title="Job Location"
               width="100%"
-              height="200"
+              height="100%"
               style={{ border: 0 }}
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
@@ -353,72 +353,13 @@ export default function JobDetail() {
           </div>
         )}
 
-        {/* Job Costing Comparison */}
-        {costing && (job.status === 'completed' || job.status === 'invoiced') && (
-          <div className="p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 space-y-3">
-            <h3 className="font-semibold flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              Job Costing
-            </h3>
-            
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Quoted Total</span>
-                <span className="font-medium">${costing.quotedTotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Labour Cost ({job.actual_hours?.toFixed(1) || 0}h × $85)</span>
-                <span className="font-medium">-${costing.labourCost.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Material Costs</span>
-                <span className="font-medium">-${costing.materialsCost.toFixed(2)}</span>
-              </div>
-              <div className="border-t border-border pt-2 flex justify-between font-semibold">
-                <span className="flex items-center gap-1">
-                  {costing.profit >= 0 ? (
-                    <TrendingUp className="w-4 h-4 text-success" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4 text-destructive" />
-                  )}
-                  Profit
-                </span>
-                <span className={costing.profit >= 0 ? 'text-success' : 'text-destructive'}>
-                  ${costing.profit.toFixed(2)} ({costing.profitMargin.toFixed(0)}%)
-                </span>
-              </div>
+        {/* Photo Gallery */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-6 bg-primary rounded-full" />
+              <h3 className="font-bold text-lg">Photos</h3>
             </div>
-          </div>
-        )}
-
-        {/* Material Costs */}
-        <div className="p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 space-y-3">
-          <Label className="flex items-center gap-2">
-            <DollarSign className="w-4 h-4" />
-            Material Costs
-          </Label>
-          <div className="flex gap-2">
-            <Input
-              type="number"
-              step="0.01"
-              value={materialCost}
-              onChange={(e) => setMaterialCost(e.target.value)}
-              placeholder="0.00"
-              className="h-11"
-            />
-            <Button onClick={saveMaterialCost} disabled={savingMaterials} className="px-6">
-              {savingMaterials ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
-            </Button>
-          </div>
-        </div>
-
-        {/* Job Photos */}
-        <div className="p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 space-y-3">
-          <div className="flex items-center justify-between">
-            <Label className="flex items-center gap-2">
-              <Camera className="w-4 h-4" />
-              Job Photos
-            </Label>
             <label className="cursor-pointer">
               <input
                 type="file"
@@ -428,86 +369,182 @@ export default function JobDetail() {
                 className="hidden"
                 disabled={uploading}
               />
-              <Button size="sm" variant="outline" asChild disabled={uploading}>
+              <Button size="sm" variant="outline" asChild disabled={uploading} className="rounded-full shadow-sm hover:shadow-glow-sm">
                 <span>
-                  {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Camera className="w-4 h-4 mr-1" />}
-                  Add Photos
+                  {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Camera className="w-4 h-4 mr-1 text-primary" />}
+                  Upload
                 </span>
               </Button>
             </label>
           </div>
-          
+
           {photos.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {photos.map((photo, index) => (
-                <div key={index} className="relative aspect-square group">
-                  <img 
-                    src={photo} 
+                <div key={index} className="relative aspect-video group overflow-hidden rounded-2xl shadow-sm hover:shadow-premium-lg transition-all duration-300">
+                  <img
+                    src={photo}
                     alt={`Job photo ${index + 1}`}
-                    className="w-full h-full object-cover rounded-lg"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
-                  <button
-                    onClick={() => handleDeletePhoto(photo)}
-                    className="absolute top-1 right-1 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <button
+                      onClick={() => handleDeletePhoto(photo)}
+                      className="w-10 h-10 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center transform scale-75 group-hover:scale-100 transition-transform"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="py-8 text-center text-muted-foreground">
-              <Image className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No photos yet</p>
+            <div className="p-8 text-center bg-card/40 backdrop-blur-md rounded-2xl border border-dashed border-border/60">
+              <div className="w-12 h-12 bg-muted/40 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Image className="w-6 h-6 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm text-muted-foreground font-medium">No job site photos yet</p>
             </div>
           )}
         </div>
 
-        {/* Description */}
-        {job.description && (
-          <div className="space-y-2">
-            <h3 className="font-semibold text-foreground">Description</h3>
-            <p className="text-sm text-muted-foreground">{job.description}</p>
+        {/* Costing Section (If applicable) */}
+        {costing && (job.status === 'completed' || job.status === 'invoiced') && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <div className="w-1.5 h-6 bg-success rounded-full" />
+              <h3 className="font-bold text-lg text-success">Profitability</h3>
+            </div>
+            <div className="p-5 bg-card/60 backdrop-blur-md rounded-2xl border border-border/40 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 -mr-4 -mt-4 w-20 h-20 bg-success/10 rounded-full blur-2xl" />
+              <div className="space-y-3 text-sm relative z-10">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Quoted Total</span>
+                  <span className="font-bold">${costing.quotedTotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-destructive/80 font-medium">
+                  <span>Labour ({job.actual_hours?.toFixed(1) || 0}h × $85)</span>
+                  <span>-${costing.labourCost.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-destructive/80 font-medium">
+                  <span>Material Costs</span>
+                  <span>-${costing.materialsCost.toFixed(2)}</span>
+                </div>
+                <div className="pt-3 border-t border-border/60 flex justify-between items-end">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Estimated Profit</span>
+                    <div className="flex items-center gap-2">
+                      {costing.profit >= 0 ? (
+                        <div className="w-6 h-6 rounded-full bg-success/20 flex items-center justify-center">
+                          <TrendingUp className="w-3.5 h-3.5 text-success" />
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-destructive/20 flex items-center justify-center">
+                          <TrendingDown className="w-3.5 h-3.5 text-destructive" />
+                        </div>
+                      )}
+                      <span className={cn("text-2xl font-black tracking-tight", costing.profit >= 0 ? 'text-success' : 'text-destructive')}>
+                        ${costing.profit.toFixed(0)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={cn(
+                    "px-3 py-1 rounded-full text-xs font-black ring-1 ring-inset",
+                    costing.profit >= 0 ? "bg-success/5 text-success ring-success/20" : "bg-destructive/5 text-destructive ring-destructive/20"
+                  )}>
+                    {costing.profitMargin.toFixed(0)}% MARGIN
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Notes */}
-        {job.notes && (
-          <div className="space-y-2">
-            <h3 className="font-semibold text-foreground">Notes</h3>
-            <p className="text-sm text-muted-foreground">{job.notes}</p>
+        {/* Input Fields Grid */}
+        <div className="grid grid-cols-1 gap-4">
+          <div className="p-4 bg-card/40 backdrop-blur-md rounded-2xl border border-border/40 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Update Status</Label>
+              <Select value={job.status} onValueChange={updateStatus}>
+                <SelectTrigger className="h-12 bg-background/50 border-border/40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {JOB_STATUSES.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Material Costs ($)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={materialCost}
+                  onChange={(e) => setMaterialCost(e.target.value)}
+                  placeholder="0.00"
+                  className="h-12 bg-background/50"
+                />
+                <Button onClick={saveMaterialCost} disabled={savingMaterials} className="px-6 h-12">
+                  {savingMaterials ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Notes Section */}
+        {(job.description || job.notes) && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <div className="w-1.5 h-6 bg-muted-foreground/40 rounded-full" />
+              <h3 className="font-bold text-lg">Job Notes</h3>
+            </div>
+            <div className="p-5 bg-card/40 backdrop-blur-md rounded-2xl border border-border/40 space-y-4">
+              {job.description && (
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-1">Description</h4>
+                  <p className="text-foreground/90 leading-relaxed font-medium">{job.description}</p>
+                </div>
+              )}
+              {job.notes && (
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-1">Internal Notes</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed italic">"{job.notes}"</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Actions */}
-        {job.status === 'completed' && (
-          <Button onClick={createInvoice} className="w-full h-12 shadow-premium">
-            <Receipt className="w-4 h-4 mr-2" />
-            Create Invoice
-          </Button>
-        )}
-
-        {/* Delete Button with Confirmation */}
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" className="w-full text-destructive hover:text-destructive">
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete Job
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this job?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. All job data and photos will be permanently deleted.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDeleteJob}>Delete</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {/* Danger Zone */}
+        <div className="pt-6">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" className="w-full text-destructive/60 hover:text-destructive hover:bg-destructive/10 h-12">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Job Record
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this job?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. All job data, tracked hours, and photos will be permanently deleted.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteJob} className="bg-destructive text-destructive-foreground rounded-xl">Delete Forever</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
     </MobileLayout>
   );

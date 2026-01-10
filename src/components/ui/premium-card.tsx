@@ -11,7 +11,7 @@ interface PremiumCardProps {
 
 export function PremiumCard({ children, onClick, className, interactive = true, style }: PremiumCardProps) {
   const Component = onClick ? 'button' : 'div';
-  
+
   return (
     <Component
       onClick={onClick}
@@ -21,7 +21,7 @@ export function PremiumCard({ children, onClick, className, interactive = true, 
         "bg-card/80 backdrop-blur-sm",
         "rounded-xl border border-border/50",
         "shadow-premium",
-        interactive && "hover:bg-card hover:border-border/80 hover:shadow-glow active:scale-[0.99]",
+        interactive && "hover:bg-card hover:border-border/80 hover:shadow-glow active:scale-[0.97]",
         "transition-all duration-200",
         className
       )}

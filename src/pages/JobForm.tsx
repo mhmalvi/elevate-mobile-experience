@@ -101,8 +101,8 @@ export default function JobForm() {
   return (
     <MobileLayout showNav={false}>
       <PageHeader title="New Job" showBack backPath="/jobs" />
-      
-      <form onSubmit={handleSubmit} className="p-4 space-y-4 animate-fade-in scrollbar-hide">
+
+      <form onSubmit={handleSubmit} className="p-4 space-y-4 animate-fade-in pb-48 safe-bottom scrollbar-hide">
         <UsageLimitBanner usageType="jobs" used={used} limit={limit} tier={tier} isUnlimited={isUnlimited} />
         {/* Client Selection */}
         <div className="space-y-2">

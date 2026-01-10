@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +20,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Phone, Mail, MapPin, Edit, Trash2, FileText, Briefcase, Receipt } from 'lucide-react';
+import { Phone, Mail, MapPin, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function ClientDetail() {
@@ -93,9 +94,9 @@ export default function ClientDetail() {
 
   return (
     <MobileLayout showNav={false}>
-      <PageHeader 
-        title={client.name} 
-        showBack 
+      <PageHeader
+        title={client.name}
+        showBack
         backPath="/clients"
         action={{
           label: 'Edit',
@@ -103,32 +104,58 @@ export default function ClientDetail() {
           icon: <Edit className="w-4 h-4" />
         }}
       />
-      
-      <div className="p-4 space-y-6 animate-fade-in pb-32">
-        {/* Contact Info */}
-        <div className="p-4 bg-card rounded-xl border space-y-3">
+
+      <div className="p-4 space-y-6 animate-fade-in pb-48 safe-bottom">
+        {/* Profile Card */}
+        <div className="flex flex-col items-center py-6 px-4 bg-card/40 backdrop-blur-md rounded-[2.5rem] border border-border/40 shadow-premium relative overflow-hidden">
+          <div className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 bg-primary/10 rounded-full blur-2xl" />
+          <div className="w-20 h-20 rounded-full gradient-primary flex items-center justify-center shadow-glow mb-4">
+            <span className="text-3xl font-black text-primary-foreground">{client.name.charAt(0).toUpperCase()}</span>
+          </div>
+          <h2 className="text-2xl font-black tracking-tight">{client.name}</h2>
+          <div className="flex items-center gap-2 mt-2">
+            <StatusBadge status="active" />
+          </div>
+        </div>
+
+        {/* Contact Links Grid */}
+        <div className="grid grid-cols-2 gap-3">
           {client.phone && (
-            <a 
-              href={`tel:${client.phone}`}
-              className="flex items-center gap-3 text-sm hover:text-primary transition-colors"
-            >
-              <Phone className="w-4 h-4 text-muted-foreground" />
-              {client.phone}
-            </a>
+            <Button asChild variant="outline" className="h-16 rounded-2xl bg-card/30 backdrop-blur-md border-border/40 shadow-sm">
+              <a href={`tel:${client.phone}`}>
+                <Phone className="w-5 h-5 mr-3 text-primary" />
+                <span className="font-bold">Call</span>
+              </a>
+            </Button>
           )}
           {client.email && (
-            <a 
-              href={`mailto:${client.email}`}
-              className="flex items-center gap-3 text-sm hover:text-primary transition-colors"
-            >
-              <Mail className="w-4 h-4 text-muted-foreground" />
-              {client.email}
-            </a>
+            <Button asChild variant="outline" className="h-16 rounded-2xl bg-card/30 backdrop-blur-md border-border/40 shadow-sm">
+              <a href={`mailto:${client.email}`}>
+                <Mail className="w-5 h-5 mr-3 text-primary" />
+                <span className="font-bold">Email</span>
+              </a>
+            </Button>
+          )}
+        </div>
+
+        {/* Core Info List */}
+        <div className="p-5 bg-card/40 backdrop-blur-md rounded-2xl border border-border/40 space-y-4 shadow-sm">
+          {client.email && (
+            <div className="flex items-center gap-3">
+              <Mail className="w-4 h-4 text-muted-foreground/60" />
+              <span className="text-sm font-medium">{client.email}</span>
+            </div>
+          )}
+          {client.phone && (
+            <div className="flex items-center gap-3">
+              <Phone className="w-4 h-4 text-muted-foreground/60" />
+              <span className="text-sm font-medium">{client.phone}</span>
+            </div>
           )}
           {(client.address || client.suburb) && (
-            <div className="flex items-start gap-3 text-sm">
-              <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
-              <div>
+            <div className="flex items-start gap-3">
+              <MapPin className="w-4 h-4 text-muted-foreground/60 mt-0.5" />
+              <div className="text-sm font-medium">
                 {client.address && <p>{client.address}</p>}
                 {client.suburb && <p>{client.suburb}, {client.state} {client.postcode}</p>}
               </div>
@@ -136,136 +163,138 @@ export default function ClientDetail() {
           )}
         </div>
 
-        {/* Revenue Summary */}
+        {/* Revenue Dashboard */}
         {(totalRevenue > 0 || outstandingAmount > 0) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="p-4 bg-success/10 border border-success/30 rounded-xl text-center">
-              <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
-              <p className="text-lg font-bold text-success">${totalRevenue.toLocaleString()}</p>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <div className="w-1.5 h-6 bg-primary rounded-full" />
+              <h3 className="font-bold text-lg text-foreground">Client Value</h3>
             </div>
-            <div className="p-4 bg-warning/10 border border-warning/30 rounded-xl text-center">
-              <p className="text-xs text-muted-foreground mb-1">Outstanding</p>
-              <p className="text-lg font-bold text-warning">${outstandingAmount.toLocaleString()}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-4 bg-success/5 border border-success/20 rounded-2xl overflow-hidden relative group">
+                <div className="absolute -bottom-4 -right-4 w-12 h-12 bg-success/10 rounded-full blur-xl group-hover:scale-150 transition-transform" />
+                <p className="text-[10px] font-black uppercase tracking-widest text-success/60 mb-1">Lifetime</p>
+                <p className="text-2xl font-black text-success tracking-tight">${totalRevenue.toLocaleString()}</p>
+              </div>
+              <div className="p-4 bg-warning/5 border border-warning/20 rounded-2xl overflow-hidden relative group">
+                <div className="absolute -bottom-4 -right-4 w-12 h-12 bg-warning/10 rounded-full blur-xl group-hover:scale-150 transition-transform" />
+                <p className="text-[10px] font-black uppercase tracking-widest text-warning/60 mb-1">Due</p>
+                <p className="text-2xl font-black text-warning tracking-tight">${outstandingAmount.toLocaleString()}</p>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Notes */}
-        {client.notes && (
-          <div className="space-y-2">
-            <h3 className="font-semibold">Notes</h3>
-            <p className="text-sm text-muted-foreground">{client.notes}</p>
+        {/* History Section Tabs */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 px-1">
+            <div className="w-1.5 h-6 bg-primary rounded-full" />
+            <h3 className="font-bold text-lg text-foreground">History</h3>
           </div>
-        )}
 
-        {/* History Tabs */}
-        <Tabs defaultValue="quotes" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="quotes" className="text-xs">
-              <FileText className="w-3 h-3 mr-1" />
-              Quotes ({quotes.length})
-            </TabsTrigger>
-            <TabsTrigger value="jobs" className="text-xs">
-              <Briefcase className="w-3 h-3 mr-1" />
-              Jobs ({jobs.length})
-            </TabsTrigger>
-            <TabsTrigger value="invoices" className="text-xs">
-              <Receipt className="w-3 h-3 mr-1" />
-              Invoices ({invoices.length})
-            </TabsTrigger>
-          </TabsList>
+          <Tabs defaultValue="quotes" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 h-12 bg-muted/20 p-1 rounded-xl">
+              <TabsTrigger value="quotes" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <span className="text-[10px] font-bold">QUOTES</span>
+              </TabsTrigger>
+              <TabsTrigger value="jobs" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <span className="text-[10px] font-bold">JOBS</span>
+              </TabsTrigger>
+              <TabsTrigger value="invoices" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                <span className="text-[10px] font-bold">INVOICES</span>
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="quotes" className="mt-4 space-y-2">
-            {quotes.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No quotes yet</p>
-            ) : (
-              quotes.map((quote) => (
-                <button
-                  key={quote.id}
-                  onClick={() => navigate(`/quotes/${quote.id}`)}
-                  className="w-full p-3 bg-card rounded-lg border text-left text-sm flex items-center justify-between card-interactive"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{quote.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(new Date(quote.created_at), 'd MMM yyyy')} • ${Number(quote.total).toLocaleString()}
-                    </p>
-                  </div>
-                  <StatusBadge status={quote.status} />
-                </button>
-              ))
-            )}
-          </TabsContent>
+            <TabsContent value="quotes" className="mt-4 space-y-3">
+              {quotes.length === 0 ? (
+                <EmptyState variant="minimal" title="No quotes" description="Ready for a new project?" />
+              ) : (
+                quotes.map((quote) => (
+                  <button
+                    key={quote.id}
+                    onClick={() => navigate(`/quotes/${quote.id}`)}
+                    className="w-full p-4 bg-card/60 backdrop-blur-sm rounded-2xl border border-border/40 text-left shadow-sm flex items-center justify-between hover:bg-card/80 transition-all active:scale-[0.98]"
+                  >
+                    <div className="min-w-0 flex-1 pr-4">
+                      <p className="font-bold text-foreground truncate mb-0.5">{quote.title}</p>
+                      <p className="text-xs text-muted-foreground font-medium">
+                        {format(new Date(quote.created_at), 'd MMM yyyy')} • ${Number(quote.total).toLocaleString()}
+                      </p>
+                    </div>
+                    <StatusBadge status={quote.status} />
+                  </button>
+                ))
+              )}
+            </TabsContent>
 
-          <TabsContent value="jobs" className="mt-4 space-y-2">
-            {jobs.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No jobs yet</p>
-            ) : (
-              jobs.map((job) => (
-                <button
-                  key={job.id}
-                  onClick={() => navigate(`/jobs/${job.id}`)}
-                  className="w-full p-3 bg-card rounded-lg border text-left text-sm flex items-center justify-between card-interactive"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{job.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {job.scheduled_date ? format(new Date(job.scheduled_date), 'd MMM yyyy') : 'Not scheduled'}
-                    </p>
-                  </div>
-                  <StatusBadge status={job.status} />
-                </button>
-              ))
-            )}
-          </TabsContent>
+            <TabsContent value="jobs" className="mt-4 space-y-3">
+              {jobs.length === 0 ? (
+                <EmptyState variant="minimal" title="No jobs" description="History starts here" />
+              ) : (
+                jobs.map((job) => (
+                  <button
+                    key={job.id}
+                    onClick={() => navigate(`/jobs/${job.id}`)}
+                    className="w-full p-4 bg-card/60 backdrop-blur-sm rounded-2xl border border-border/40 text-left shadow-sm flex items-center justify-between hover:bg-card/80 transition-all active:scale-[0.98]"
+                  >
+                    <div className="min-w-0 flex-1 pr-4">
+                      <p className="font-bold text-foreground truncate mb-0.5">{job.title}</p>
+                      <p className="text-xs text-muted-foreground font-medium">
+                        {job.scheduled_date ? format(new Date(job.scheduled_date), 'd MMM yyyy') : 'Draft'}
+                      </p>
+                    </div>
+                    <StatusBadge status={job.status} />
+                  </button>
+                ))
+              )}
+            </TabsContent>
 
-          <TabsContent value="invoices" className="mt-4 space-y-2">
-            {invoices.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No invoices yet</p>
-            ) : (
-              invoices.map((invoice) => (
-                <button
-                  key={invoice.id}
-                  onClick={() => navigate(`/invoices/${invoice.id}`)}
-                  className="w-full p-3 bg-card rounded-lg border text-left text-sm flex items-center justify-between card-interactive"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{invoice.invoice_number}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {format(new Date(invoice.created_at), 'd MMM yyyy')} • ${Number(invoice.total).toLocaleString()}
-                    </p>
-                  </div>
-                  <StatusBadge status={invoice.status || 'draft'} />
-                </button>
-              ))
-            )}
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="invoices" className="mt-4 space-y-3">
+              {invoices.length === 0 ? (
+                <EmptyState variant="minimal" title="No invoices" description="No financial history" />
+              ) : (
+                invoices.map((invoice) => (
+                  <button
+                    key={invoice.id}
+                    onClick={() => navigate(`/invoices/${invoice.id}`)}
+                    className="w-full p-4 bg-card/60 backdrop-blur-sm rounded-2xl border border-border/40 text-left shadow-sm flex items-center justify-between hover:bg-card/80 transition-all active:scale-[0.98]"
+                  >
+                    <div className="min-w-0 flex-1 pr-4">
+                      <p className="font-bold text-foreground truncate mb-0.5">{invoice.invoice_number}</p>
+                      <p className="text-xs text-muted-foreground font-medium">
+                        {format(new Date(invoice.created_at), 'd MMM yyyy')} • ${Number(invoice.total).toLocaleString()}
+                      </p>
+                    </div>
+                    <StatusBadge status={invoice.status || 'draft'} />
+                  </button>
+                ))
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
 
-        {/* Delete Button with Confirmation */}
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="outline"
-              className="w-full text-destructive hover:text-destructive"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete Client
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this client?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This client and all their data will be permanently deleted.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {/* Danger Zone */}
+        <div className="pt-6">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" className="w-full text-destructive/40 hover:text-destructive hover:bg-destructive/10 h-10 text-[10px] font-black uppercase tracking-[0.2em]">
+                Remove Client Record
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this client?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. All documents related to this client will lose their connection.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground rounded-xl">Confirm Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
     </MobileLayout>
   );

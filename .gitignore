@@ -36,5 +36,4 @@ CONFIG_VALUES.md
 coverage/
 test-results/
 playwright-report/
-e2e-screenshots/
 .playwright/

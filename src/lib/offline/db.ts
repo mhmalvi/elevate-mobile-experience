@@ -4,7 +4,7 @@ import Dexie, { Table } from 'dexie';
 export interface OfflineJob {
   id: string;
   user_id: string;
-  client_id: string;
+  client_id?: string;
   title: string;
   description?: string;
   status: string;
@@ -12,6 +12,7 @@ export interface OfflineJob {
   scheduled_date?: string;
   completed_date?: string;
   address?: string;
+  site_address?: string;
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -21,7 +22,7 @@ export interface OfflineJob {
 export interface OfflineQuote {
   id: string;
   user_id: string;
-  client_id: string;
+  client_id?: string;
   quote_number: string;
   title: string;
   description?: string;
@@ -37,7 +38,7 @@ export interface OfflineQuote {
 export interface OfflineInvoice {
   id: string;
   user_id: string;
-  client_id: string;
+  client_id?: string;
   invoice_number: string;
   title?: string;
   status: string;
@@ -58,6 +59,9 @@ export interface OfflineClient {
   email?: string;
   phone?: string;
   address?: string;
+  suburb?: string;
+  state?: string;
+  postcode?: string;
   notes?: string;
   created_at: string;
   updated_at: string;

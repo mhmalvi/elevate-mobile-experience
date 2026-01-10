@@ -54,13 +54,15 @@ export function generateProfessionalPDFHTML(data: {
 
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      font-size: 11px;
-      line-height: 1.6;
-      color: ${textColor};
-      background: #ffffff;
-      padding: 30px;
+      font-size: 10px;
+      line-height: 1.5;
+      color: ${textColor} !important;
+      background: #ffffff !important;
+      padding: 20px;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
 
     .container {
@@ -74,9 +76,9 @@ export function generateProfessionalPDFHTML(data: {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      padding-bottom: 30px;
-      margin-bottom: 30px;
-      border-bottom: 3px solid ${primaryColor};
+      padding-bottom: 15px;
+      margin-bottom: 15px;
+      border-bottom: 2px solid ${primaryColor};
     }
 
     .business-info {
@@ -84,28 +86,28 @@ export function generateProfessionalPDFHTML(data: {
     }
 
     .business-logo {
-      margin-bottom: 15px;
+      margin-bottom: 8px;
     }
 
     .business-logo img {
-      max-width: 160px;
-      max-height: 70px;
+      max-width: 120px;
+      max-height: 50px;
       object-fit: contain;
       display: block;
     }
 
     .business-name {
-      font-size: 22px;
+      font-size: 18px;
       font-weight: 700;
       color: ${textColor};
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       letter-spacing: -0.5px;
     }
 
     .business-details {
-      font-size: 10px;
+      font-size: 9px;
       color: ${mutedColor};
-      line-height: 1.7;
+      line-height: 1.5;
     }
 
     .business-details p {
@@ -121,25 +123,25 @@ export function generateProfessionalPDFHTML(data: {
       display: inline-block;
       background: linear-gradient(135deg, ${primaryColor}, ${secondaryColor});
       color: white;
-      padding: 8px 20px;
-      border-radius: 6px;
-      font-size: 16px;
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: 13px;
       font-weight: 700;
       letter-spacing: 1px;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
 
     .document-number {
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 600;
       color: ${textColor};
-      margin-bottom: 15px;
+      margin-bottom: 8px;
     }
 
     .document-meta {
-      font-size: 10px;
+      font-size: 9px;
       color: ${mutedColor};
-      line-height: 1.8;
+      line-height: 1.5;
     }
 
     .document-meta strong {
@@ -151,57 +153,57 @@ export function generateProfessionalPDFHTML(data: {
     .details-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 25px;
-      margin-bottom: 35px;
+      gap: 15px;
+      margin-bottom: 15px;
     }
 
     .detail-card {
       background: #f9fafb;
       border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 18px;
+      border-radius: 6px;
+      padding: 12px;
     }
 
     .detail-card-title {
-      font-size: 9px;
+      font-size: 8px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 1.2px;
+      letter-spacing: 1px;
       color: ${primaryColor};
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
 
     .client-name {
-      font-size: 15px;
+      font-size: 12px;
       font-weight: 600;
       color: ${textColor};
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .detail-card p {
-      font-size: 10px;
+      font-size: 9px;
       color: ${mutedColor};
-      line-height: 1.7;
-      margin: 3px 0;
+      line-height: 1.5;
+      margin: 2px 0;
     }
 
     /* Description */
     .description {
-      margin-bottom: 25px;
-      padding: 15px;
+      margin-bottom: 12px;
+      padding: 10px;
       background: #fef3c7;
-      border-left: 4px solid #f59e0b;
-      border-radius: 4px;
-      font-size: 11px;
+      border-left: 3px solid #f59e0b;
+      border-radius: 3px;
+      font-size: 9px;
       color: #78350f;
-      line-height: 1.6;
+      line-height: 1.4;
     }
 
     /* Line Items Table */
     .line-items {
-      margin-bottom: 30px;
+      margin-bottom: 15px;
       border: 1px solid #e5e7eb;
-      border-radius: 8px;
+      border-radius: 6px;
       overflow: hidden;
     }
 
@@ -215,14 +217,14 @@ export function generateProfessionalPDFHTML(data: {
     }
 
     th {
-      padding: 12px 15px;
+      padding: 8px 10px;
       text-align: left;
-      font-size: 9px;
+      font-size: 8px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 0.8px;
       color: ${mutedColor};
-      border-bottom: 2px solid #e5e7eb;
+      border-bottom: 1px solid #e5e7eb;
     }
 
     th:last-child {
@@ -242,8 +244,8 @@ export function generateProfessionalPDFHTML(data: {
     }
 
     td {
-      padding: 14px 15px;
-      font-size: 10px;
+      padding: 8px 10px;
+      font-size: 9px;
       vertical-align: top;
     }
 
@@ -255,40 +257,40 @@ export function generateProfessionalPDFHTML(data: {
     .item-description {
       font-weight: 500;
       color: ${textColor};
-      margin-bottom: 3px;
+      margin-bottom: 2px;
     }
 
     .item-type {
-      font-size: 9px;
+      font-size: 8px;
       color: ${mutedColor};
       text-transform: capitalize;
     }
 
     .item-quantity {
       color: ${mutedColor};
-      font-size: 10px;
+      font-size: 9px;
     }
 
     /* Totals Section */
     .totals-section {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 30px;
+      margin-bottom: 15px;
     }
 
     .totals-card {
-      min-width: 320px;
+      min-width: 280px;
       background: #f9fafb;
       border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 20px;
+      border-radius: 6px;
+      padding: 12px;
     }
 
     .total-line {
       display: flex;
       justify-content: space-between;
-      padding: 8px 0;
-      font-size: 11px;
+      padding: 5px 0;
+      font-size: 10px;
     }
 
     .total-line.subtotal {
@@ -298,31 +300,31 @@ export function generateProfessionalPDFHTML(data: {
     .total-line.tax {
       color: ${mutedColor};
       border-bottom: 1px solid #e5e7eb;
-      padding-bottom: 12px;
-      margin-bottom: 8px;
+      padding-bottom: 8px;
+      margin-bottom: 5px;
     }
 
     .total-line.grand {
       background: linear-gradient(135deg, ${primaryColor}, ${secondaryColor});
       color: white;
-      font-size: 18px;
+      font-size: 14px;
       font-weight: 700;
-      padding: 15px 20px;
-      margin: 0 -20px -20px -20px;
-      border-radius: 0 0 8px 8px;
+      padding: 10px 12px;
+      margin: 0 -12px -12px -12px;
+      border-radius: 0 0 6px 6px;
     }
 
     .total-line.paid {
       color: ${accentColor};
       font-weight: 600;
-      border-top: 2px dashed #e5e7eb;
-      padding-top: 12px;
-      margin-top: 12px;
+      border-top: 1px dashed #e5e7eb;
+      padding-top: 8px;
+      margin-top: 8px;
     }
 
     .total-line.balance {
       color: ${primaryColor};
-      font-size: 15px;
+      font-size: 12px;
       font-weight: 700;
     }
 
@@ -330,37 +332,37 @@ export function generateProfessionalPDFHTML(data: {
     .payment-details {
       background: linear-gradient(to right, #eff6ff, #dbeafe);
       border: 1px solid #bfdbfe;
-      border-radius: 8px;
-      padding: 20px;
-      margin-bottom: 25px;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
     }
 
     .payment-details-title {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
       color: ${primaryColor};
-      margin-bottom: 15px;
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
     }
 
     .payment-details-title::before {
       content: "💳";
-      margin-right: 8px;
-      font-size: 14px;
+      margin-right: 6px;
+      font-size: 12px;
     }
 
     .bank-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px 20px;
+      gap: 6px 15px;
     }
 
     .bank-item {
       display: flex;
       justify-content: space-between;
-      font-size: 10px;
-      padding: 5px 0;
+      font-size: 9px;
+      padding: 3px 0;
     }
 
     .bank-label {
@@ -374,10 +376,10 @@ export function generateProfessionalPDFHTML(data: {
     }
 
     .payment-note {
-      margin-top: 12px;
-      padding-top: 12px;
+      margin-top: 8px;
+      padding-top: 8px;
       border-top: 1px dashed #bfdbfe;
-      font-size: 9px;
+      font-size: 8px;
       color: #1e40af;
       font-style: italic;
     }
@@ -386,47 +388,47 @@ export function generateProfessionalPDFHTML(data: {
     .notes-section {
       background: #fef9f5;
       border: 1px solid #fed7aa;
-      border-radius: 8px;
-      padding: 18px;
-      margin-bottom: 25px;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 12px;
     }
 
     .notes-title {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 600;
       color: #c2410c;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
     .notes-content {
-      font-size: 10px;
+      font-size: 9px;
       color: #7c2d12;
-      line-height: 1.7;
+      line-height: 1.4;
       white-space: pre-line;
     }
 
     /* Terms & Conditions */
     .terms-section {
       background: white;
-      border: 2px solid #f3f4f6;
-      border-radius: 8px;
-      padding: 18px;
-      margin-bottom: 25px;
+      border: 1px solid #f3f4f6;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 12px;
     }
 
     .terms-title {
-      font-size: 11px;
+      font-size: 9px;
       font-weight: 600;
       color: ${textColor};
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
 
     .terms-content {
-      font-size: 9px;
+      font-size: 8px;
       color: ${mutedColor};
-      line-height: 1.8;
+      line-height: 1.5;
       white-space: pre-line;
     }
 
@@ -473,11 +475,25 @@ export function generateProfessionalPDFHTML(data: {
     @media print {
       body {
         padding: 0;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
       }
 
       .container {
         max-width: 100%;
       }
+
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+    }
+
+    /* Ensure colors render in PDF generation */
+    @page {
+      margin: 20mm;
     }
   </style>
 </head>

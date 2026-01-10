@@ -126,7 +126,8 @@
       "Bash(node e2e-production-test.js:*)",
       "Bash(wc:*)",
       "Bash(node comprehensive-production-test.js:*)",
-      "Bash(node test-email-sms.js:*)"
+      "Bash(node test-email-sms.js:*)",
+      "Bash(xargs:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
