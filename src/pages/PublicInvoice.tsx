@@ -35,12 +35,16 @@ export default function PublicInvoice() {
 
       setInvoice(invoiceData);
 
-      // Mark as viewed
+      // Mark as viewed (silently fails for anonymous users due to RLS - that's OK)
       if (!invoiceData.viewed_at) {
-        await supabase
-          .from('invoices')
-          .update({ viewed_at: new Date().toISOString(), status: invoiceData.status === 'sent' ? 'viewed' : invoiceData.status })
-          .eq('id', id);
+        try {
+          await supabase
+            .from('invoices')
+            .update({ viewed_at: new Date().toISOString(), status: invoiceData.status === 'sent' ? 'viewed' : invoiceData.status })
+            .eq('id', id);
+        } catch {
+          // Silently ignore - anonymous users can't update, but can view
+        }
       }
 
       // Fetch line items

@@ -55,19 +55,19 @@ export default function Dashboard() {
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user?.id)
         .in('status', ['approved', 'scheduled', 'in_progress']),
-      
+
       supabase
         .from('quotes')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user?.id)
         .in('status', ['sent', 'viewed']),
-      
+
       supabase
         .from('invoices')
         .select('total, amount_paid')
         .eq('user_id', user?.id)
         .in('status', ['sent', 'viewed', 'partially_paid', 'overdue']),
-      
+
       supabase
         .from('invoices')
         .select('amount_paid, paid_at')
@@ -76,10 +76,10 @@ export default function Dashboard() {
         .gte('paid_at', startOfMonth),
     ]);
 
-    const outstanding = outstandingRes.data?.reduce((sum, inv) => 
+    const outstanding = outstandingRes.data?.reduce((sum, inv) =>
       sum + (Number(inv.total) - Number(inv.amount_paid || 0)), 0) || 0;
 
-    const monthlyRevenue = paidRes.data?.reduce((sum, inv) => 
+    const monthlyRevenue = paidRes.data?.reduce((sum, inv) =>
       sum + Number(inv.amount_paid || 0), 0) || 0;
 
     setStats({
@@ -92,7 +92,7 @@ export default function Dashboard() {
 
   const fetchOverdueInvoices = async () => {
     const today = new Date().toISOString().split('T')[0];
-    
+
     const { data: overdue } = await supabase
       .from('invoices')
       .select('id, total, amount_paid')
@@ -102,7 +102,7 @@ export default function Dashboard() {
       .not('status', 'eq', 'cancelled');
 
     if (overdue) {
-      const total = overdue.reduce((sum, inv) => 
+      const total = overdue.reduce((sum, inv) =>
         sum + (Number(inv.total) - Number(inv.amount_paid || 0)), 0);
       setOverdueStats({ count: overdue.length, total });
     }
@@ -132,7 +132,7 @@ export default function Dashboard() {
         title: 'Reminders sent!',
         description: `Payment reminders sent to ${data?.sent || 0} clients`,
       });
-      
+
       fetchOverdueInvoices();
     } catch (error: any) {
       console.error('Error sending reminders:', error);
@@ -155,13 +155,13 @@ export default function Dashboard() {
 
   return (
     <MobileLayout>
-      <PageHeader 
+      <PageHeader
         title={`${greeting()}, ${profile?.business_name || 'Mate'}!`}
         subtitle="Here's how your business is tracking"
         showSettings
       />
-      
-      <div {...containerProps} className="flex-1 overflow-auto p-4 space-y-6">
+
+      <div {...containerProps} className="p-4 pb-48 space-y-6 scrollbar-hide">
         <RefreshIndicator />
 
         {/* Overdue Invoices Alert */}
@@ -184,8 +184,8 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 variant="destructive"
                 onClick={handleSendReminders}
                 disabled={sendingReminders}
@@ -194,8 +194,8 @@ export default function Dashboard() {
                 <Bell className="w-4 h-4 mr-1" />
                 {sendingReminders ? 'Sending...' : 'Send Reminders'}
               </Button>
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 variant="outline"
                 onClick={() => navigate('/invoices')}
                 className="flex-1"
@@ -209,7 +209,7 @@ export default function Dashboard() {
 
         {/* Quick Actions */}
         <div className="flex gap-3 animate-fade-in">
-          <Button 
+          <Button
             onClick={() => navigate('/quotes/new')}
             className="flex-1 h-14"
             variant="premium"
@@ -217,7 +217,7 @@ export default function Dashboard() {
             <Plus className="w-5 h-5" />
             New Quote
           </Button>
-          <Button 
+          <Button
             onClick={() => navigate('/jobs/new')}
             variant="outline"
             className="flex-1 h-14"

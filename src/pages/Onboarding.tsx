@@ -6,9 +6,9 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { 
-  Zap, Droplets, Hammer, HardHat, Paintbrush, 
-  Trees, Wind, Home, Grid3X3, Wrench, 
+import {
+  Zap, Droplets, Hammer, HardHat, Paintbrush,
+  Trees, Wind, Home, Grid3X3, Wrench,
   ArrowRight, ArrowLeft, Check, Sparkles
 } from 'lucide-react';
 
@@ -150,64 +150,70 @@ export default function Onboarding() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Progress bar */}
       <div className="h-1 bg-muted">
-        <div 
+        <div
           className="h-full bg-primary transition-all duration-500 ease-out"
           style={{ width: `${(step / totalSteps) * 100}%` }}
         />
       </div>
 
-      <div className="flex-1 flex flex-col p-6 max-w-md mx-auto w-full">
+      <div className="flex-1 flex flex-col p-6 max-w-md mx-auto w-full relative overflow-hidden">
         {/* Step 1: Welcome */}
         {step === 1 && (
-          <div className="flex-1 flex flex-col justify-center animate-fade-in">
-            <div className="text-center mb-8">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center mx-auto mb-6 shadow-glow animate-pulse-glow">
-                <Sparkles className="w-10 h-10 text-primary-foreground" />
+          <div className="flex-1 flex flex-col justify-center animate-fade-in relative z-10">
+            <div className="absolute -top-20 -left-20 w-64 h-64 bg-primary/10 rounded-full blur-3xl animate-pulse" />
+            <div className="absolute top-40 -right-20 w-48 h-48 bg-accent/10 rounded-full blur-3xl" />
+
+            <div className="text-center mb-10 relative">
+              <div className="relative inline-block mb-6">
+                <div className="absolute inset-0 bg-primary/30 blur-2xl rounded-full scale-110 animate-pulse-glow" />
+                <div className="relative w-24 h-24 rounded-[2rem] gradient-primary flex items-center justify-center shadow-glow-lg rotate-3 animate-float">
+                  <Sparkles className="w-12 h-12 text-primary-foreground" />
+                </div>
               </div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">
-                G'day, mate! 👋
+              <h1 className="text-4xl font-extrabold text-foreground mb-3 tracking-tight">
+                G'day, <span className="text-gradient">mate!</span> 👋
               </h1>
-              <p className="text-lg text-muted-foreground">
-                Welcome to TradieMate. Let's get you set up in under a minute.
+              <p className="text-xl text-muted-foreground font-medium px-4">
+                Welcome to TradieMate. Let's get your business sorted.
               </p>
             </div>
 
-            <div className="space-y-4 mb-8">
-              <div className="flex items-center gap-3 p-4 bg-card/50 rounded-xl border border-border/50">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Check className="w-5 h-5 text-primary" />
+            <div className="space-y-4 mb-10">
+              <div className="group flex items-center gap-4 p-5 bg-card/40 backdrop-blur-md rounded-2xl border border-border/40 hover:bg-card/60 transition-all duration-300 shadow-premium">
+                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <Check className="w-6 h-6 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Professional quotes in 60 seconds</p>
-                  <p className="text-sm text-muted-foreground">No more paper quotes or spreadsheets</p>
+                  <p className="font-bold text-foreground">Fast Quotes</p>
+                  <p className="text-sm text-muted-foreground">Professional quotes in 60 seconds</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-4 bg-card/50 rounded-xl border border-border/50">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Check className="w-5 h-5 text-primary" />
+              <div className="group flex items-center gap-4 p-5 bg-card/40 backdrop-blur-md rounded-2xl border border-border/40 hover:bg-card/60 transition-all duration-300 shadow-premium">
+                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <Check className="w-6 h-6 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Track jobs from quote to payment</p>
-                  <p className="text-sm text-muted-foreground">Everything in one place</p>
+                  <p className="font-bold text-foreground">Workflow Tracking</p>
+                  <p className="text-sm text-muted-foreground">From quote to paid in one place</p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-4 bg-card/50 rounded-xl border border-border/50">
-                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                  <Check className="w-5 h-5 text-primary" />
+              <div className="group flex items-center gap-4 p-5 bg-card/40 backdrop-blur-md rounded-2xl border border-border/40 hover:bg-card/60 transition-all duration-300 shadow-premium">
+                <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <Check className="w-6 h-6 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Made for Aussie tradies 🇦🇺</p>
-                  <p className="text-sm text-muted-foreground">ABN, GST, and bank details sorted</p>
+                  <p className="font-bold text-foreground">Local & Ready</p>
+                  <p className="text-sm text-muted-foreground">Built for Aussie tradies 🇦🇺</p>
                 </div>
               </div>
             </div>
 
-            <Button 
-              onClick={handleNext} 
-              size="lg" 
-              className="w-full h-14 text-lg shadow-premium"
+            <Button
+              onClick={handleNext}
+              size="lg"
+              className="w-full h-16 text-xl font-bold shadow-glow hover:shadow-glow-lg transition-all duration-300 rounded-2xl gradient-primary"
             >
-              Let's Go <ArrowRight className="ml-2 w-5 h-5" />
+              Let's Go! <ArrowRight className="ml-2 w-6 h-6" />
             </Button>
           </div>
         )}
@@ -228,11 +234,10 @@ export default function Onboarding() {
                 <button
                   key={trade.value}
                   onClick={() => handleTradeSelect(trade.value)}
-                  className={`p-4 rounded-xl border-2 transition-all duration-200 animate-fade-in ${
-                    formData.trade_type === trade.value
+                  className={`p-4 rounded-xl border-2 transition-all duration-200 animate-fade-in ${formData.trade_type === trade.value
                       ? 'border-primary bg-primary/10 shadow-glow'
                       : 'border-border/50 bg-card/50 hover:border-border hover:bg-card'
-                  }`}
+                    }`}
                   style={{ animationDelay: `${index * 50}ms` }}
                 >
                   <div className={`mb-2 ${formData.trade_type === trade.value ? 'text-primary' : 'text-muted-foreground'}`}>
@@ -249,9 +254,9 @@ export default function Onboarding() {
               <Button variant="outline" onClick={handleBack} size="lg" className="flex-1 h-12">
                 <ArrowLeft className="mr-2 w-4 h-4" /> Back
               </Button>
-              <Button 
-                onClick={handleNext} 
-                size="lg" 
+              <Button
+                onClick={handleNext}
+                size="lg"
                 className="flex-1 h-12"
                 disabled={!formData.trade_type}
               >
@@ -312,9 +317,9 @@ export default function Onboarding() {
               <Button variant="outline" onClick={handleBack} size="lg" className="flex-1 h-12">
                 <ArrowLeft className="mr-2 w-4 h-4" /> Back
               </Button>
-              <Button 
-                onClick={handleComplete} 
-                size="lg" 
+              <Button
+                onClick={handleComplete}
+                size="lg"
                 className="flex-1 h-12 shadow-premium"
                 disabled={loading}
               >

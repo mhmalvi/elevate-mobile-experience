@@ -58,9 +58,9 @@ export default function InvoiceForm() {
 
   useEffect(() => {
     if (profile?.payment_terms) {
-      setForm(f => ({ 
-        ...f, 
-        due_date: format(addDays(new Date(), profile.payment_terms), 'yyyy-MM-dd') 
+      setForm(f => ({
+        ...f,
+        due_date: format(addDays(new Date(), profile.payment_terms), 'yyyy-MM-dd')
       }));
     }
   }, [profile]);
@@ -92,7 +92,7 @@ export default function InvoiceForm() {
   };
 
   const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
-    setLineItems(lineItems.map(item => 
+    setLineItems(lineItems.map(item =>
       item.id === id ? { ...item, [field]: value } : item
     ));
   };
@@ -196,8 +196,8 @@ export default function InvoiceForm() {
   return (
     <MobileLayout showNav={false}>
       <PageHeader title="New Invoice" showBack backPath="/invoices" />
-      
-      <form onSubmit={handleSubmit} className="p-4 space-y-6 animate-fade-in pb-32 scrollbar-hide">
+
+      <form onSubmit={handleSubmit} className="p-4 space-y-6 animate-fade-in pb-48 safe-bottom scrollbar-hide">
         <UsageLimitBanner usageType="invoices" used={used} limit={limit} tier={tier} isUnlimited={isUnlimited} />
         {/* Client Selection */}
         <div className="space-y-2">
@@ -255,9 +255,9 @@ export default function InvoiceForm() {
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-muted-foreground">Item {index + 1}</span>
                 {lineItems.length > 1 && (
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
+                  <Button
+                    type="button"
+                    variant="ghost"
                     size="sm"
                     onClick={() => removeLineItem(item.id)}
                   >
