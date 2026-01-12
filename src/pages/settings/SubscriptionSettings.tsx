@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { MobileLayout } from '@/components/layout/MobileLayout';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +12,7 @@ import { getPlatform, getPaymentProvider, isNativeApp } from '@/lib/platformPaym
 import { purchasePackage, restorePurchases, REVENUECAT_PRODUCTS } from '@/lib/purchases';
 import { formatLimit, SubscriptionTier } from '@/lib/tierLimits';
 import { toast } from 'sonner';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Crown,
   FileText,
@@ -26,7 +25,8 @@ import {
   Sparkles,
   Loader2,
   ExternalLink,
-  RotateCcw
+  RotateCcw,
+  ArrowLeft
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -175,215 +175,240 @@ export default function SubscriptionSettings() {
     }
   };
 
-  // Get the first day of next month for reset date
   const now = new Date();
   const resetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const navigate = useNavigate();
 
   return (
     <MobileLayout>
-      <PageHeader title="Subscription" showBack />
+      <div className="min-h-screen scrollbar-hide">
+        {/* Hero Section */}
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
-      <div className="p-4 space-y-6 pb-24 scrollbar-hide">
-        {/* Current Plan Banner */}
-        <Card className="p-5 bg-gradient-to-br from-primary/20 via-primary/10 to-background border-primary/30 animate-fade-in">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl gradient-primary flex items-center justify-center shadow-glow-sm">
-              <Crown className="w-7 h-7 text-primary-foreground" />
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-xl">{currentTierConfig?.name || 'Free'}</h3>
-                <Badge variant="secondary" className="text-xs">Current Plan</Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {currentTier === 'free' ? 'Upgrade to unlock more features' :
-                  profile?.subscription_expires_at ?
-                    `Renews ${format(new Date(profile.subscription_expires_at), 'MMM d, yyyy')}` :
-                    'Active subscription'
-                }
-              </p>
-            </div>
-          </div>
-          {currentTier !== 'free' && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-4 w-full"
-              onClick={handleManageSubscription}
+          <div className="relative px-4 pt-8 pb-6">
+            <button
+              onClick={() => navigate('/settings')}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
             >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Manage Subscription
-            </Button>
-          )}
-        </Card>
+              <ArrowLeft className="w-4 h-4" />
+              <span className="text-sm font-medium">Back to Settings</span>
+            </button>
 
-        {/* Usage Dashboard */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-lg">This Month's Usage</h4>
-            <span className="text-xs text-muted-foreground">
-              Resets {format(resetDate, 'MMM d')}
-            </span>
+            <div className="flex items-center gap-2 mb-1">
+              <Crown className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-primary">Plan & Billing</span>
+            </div>
+            <h1 className="text-3xl font-bold text-foreground">Subscription</h1>
+            <p className="text-muted-foreground mt-1">
+              Manage your plan and usage limits
+            </p>
+          </div>
+        </div>
+
+        <div className="px-4 pb-24 space-y-6 scrollbar-hide">
+          {/* Current Plan Banner */}
+          <Card className="p-5 bg-gradient-to-br from-primary/20 via-primary/10 to-background border-primary/30 animate-fade-in">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl gradient-primary flex items-center justify-center shadow-glow-sm">
+                <Crown className="w-7 h-7 text-primary-foreground" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-xl">{currentTierConfig?.name || 'Free'}</h3>
+                  <Badge variant="secondary" className="text-xs">Current Plan</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {currentTier === 'free' ? 'Upgrade to unlock more features' :
+                    profile?.subscription_expires_at ?
+                      `Renews ${format(new Date(profile.subscription_expires_at), 'MMM d, yyyy')}` :
+                      'Active subscription'
+                  }
+                </p>
+              </div>
+            </div>
+            {currentTier !== 'free' && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4 w-full"
+                onClick={handleManageSubscription}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Manage Subscription
+              </Button>
+            )}
+          </Card>
+
+          {/* Usage Dashboard */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-lg">This Month's Usage</h4>
+              <span className="text-xs text-muted-foreground">
+                Resets {format(resetDate, 'MMM d')}
+              </span>
+            </div>
+
+            {usage.loading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {(['quotes', 'invoices', 'jobs', 'sms', 'emails', 'clients'] as const).map((type, index) => {
+                  const Icon = usageIcons[type];
+                  const data = usage[type];
+                  const percentage = data.isUnlimited ? 0 : Math.min((data.used / data.limit) * 100, 100);
+                  const isNearLimit = !data.isUnlimited && percentage >= 80;
+                  const isAtLimit = !data.isUnlimited && data.used >= data.limit;
+
+                  return (
+                    <Card
+                      key={type}
+                      className={`p-4 animate-fade-in ${isAtLimit ? 'border-destructive/50 bg-destructive/5' : isNearLimit ? 'border-warning/50 bg-warning/5' : ''}`}
+                      style={{ animationDelay: `${index * 0.05}s` }}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isAtLimit ? 'bg-destructive/20' : isNearLimit ? 'bg-warning/20' : 'bg-primary/10'
+                          }`}>
+                          <Icon className={`w-4 h-4 ${isAtLimit ? 'text-destructive' : isNearLimit ? 'text-warning' : 'text-primary'
+                            }`} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-sm">{usageLabels[type]}</span>
+                            <span className={`text-sm font-semibold ${isAtLimit ? 'text-destructive' : isNearLimit ? 'text-warning' : 'text-foreground'
+                              }`}>
+                              {data.used} / {formatLimit(data.limit)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      {!data.isUnlimited && (
+                        <Progress
+                          value={percentage}
+                          className={`h-2 ${isAtLimit ? '[&>div]:bg-destructive' : isNearLimit ? '[&>div]:bg-warning' : ''}`}
+                        />
+                      )}
+                      {data.isUnlimited && (
+                        <div className="flex items-center gap-1 text-xs text-primary">
+                          <Sparkles className="w-3 h-3" />
+                          <span>Unlimited</span>
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {usage.loading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
+          {/* Upgrade Plans */}
+          <div className="space-y-3">
+            <h4 className="font-semibold text-lg">Upgrade Your Plan</h4>
+
+            {isNativeApp() && (
+              <div className="space-y-2">
+                <Card className="p-4 bg-muted/50 border-dashed">
+                  <p className="text-sm text-muted-foreground text-center">
+                    Subscriptions are managed through the app store on mobile devices.
+                  </p>
+                </Card>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleRestorePurchases}
+                  disabled={isRestoring}
+                >
+                  {isRestoring ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                  )}
+                  Restore Purchases
+                </Button>
+              </div>
+            )}
+
             <div className="grid gap-3">
-              {(['quotes', 'invoices', 'jobs', 'sms', 'emails', 'clients'] as const).map((type, index) => {
-                const Icon = usageIcons[type];
-                const data = usage[type];
-                const percentage = data.isUnlimited ? 0 : Math.min((data.used / data.limit) * 100, 100);
-                const isNearLimit = !data.isUnlimited && percentage >= 80;
-                const isAtLimit = !data.isUnlimited && data.used >= data.limit;
+              {SUBSCRIPTION_TIERS.filter(tier => tier.id !== 'free').map((tier, index) => {
+                const isCurrentPlan = tier.id === currentTier;
+                const isDowngrade = SUBSCRIPTION_TIERS.findIndex(t => t.id === tier.id) <
+                  SUBSCRIPTION_TIERS.findIndex(t => t.id === currentTier);
 
                 return (
                   <Card
-                    key={type}
-                    className={`p-4 animate-fade-in ${isAtLimit ? 'border-destructive/50 bg-destructive/5' : isNearLimit ? 'border-warning/50 bg-warning/5' : ''}`}
-                    style={{ animationDelay: `${index * 0.05}s` }}
+                    key={tier.id}
+                    className={`p-5 animate-fade-in transition-all ${tier.highlighted ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20' : ''
+                      } ${isCurrentPlan ? 'border-primary bg-primary/10' : ''}`}
+                    style={{ animationDelay: `${(index + 6) * 0.05}s` }}
                   >
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isAtLimit ? 'bg-destructive/20' : isNearLimit ? 'bg-warning/20' : 'bg-primary/10'
-                        }`}>
-                        <Icon className={`w-4 h-4 ${isAtLimit ? 'text-destructive' : isNearLimit ? 'text-warning' : 'text-primary'
-                          }`} />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium text-sm">{usageLabels[type]}</span>
-                          <span className={`text-sm font-semibold ${isAtLimit ? 'text-destructive' : isNearLimit ? 'text-warning' : 'text-foreground'
-                            }`}>
-                            {data.used} / {formatLimit(data.limit)}
-                          </span>
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h5 className="font-bold text-lg">{tier.name}</h5>
+                          {tier.highlighted && !isCurrentPlan && (
+                            <Badge className="bg-primary text-primary-foreground text-xs">Popular</Badge>
+                          )}
+                          {isCurrentPlan && (
+                            <Badge variant="secondary" className="text-xs">Current</Badge>
+                          )}
                         </div>
+                        <p className="text-2xl font-bold mt-1">
+                          ${tier.price}
+                          <span className="text-sm font-normal text-muted-foreground">/month</span>
+                        </p>
                       </div>
                     </div>
-                    {!data.isUnlimited && (
-                      <Progress
-                        value={percentage}
-                        className={`h-2 ${isAtLimit ? '[&>div]:bg-destructive' : isNearLimit ? '[&>div]:bg-warning' : ''}`}
-                      />
+
+                    <ul className="space-y-2 mb-4">
+                      {tier.features.slice(0, 4).map((feature, i) => (
+                        <li key={i} className="flex items-center gap-2 text-sm">
+                          <Check className="w-4 h-4 text-primary shrink-0" />
+                          <span>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {!isCurrentPlan && !isDowngrade && (
+                      <Button
+                        className="w-full"
+                        variant={tier.highlighted ? 'premium' : 'outline'}
+                        onClick={() => handleUpgrade(tier.id)}
+                        disabled={loadingTier !== null}
+                      >
+                        {loadingTier === tier.id ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          <>
+                            <Crown className="w-4 h-4 mr-2" />
+                            Upgrade to {tier.name}
+                          </>
+                        )}
+                      </Button>
                     )}
-                    {data.isUnlimited && (
-                      <div className="flex items-center gap-1 text-xs text-primary">
-                        <Sparkles className="w-3 h-3" />
-                        <span>Unlimited</span>
+
+                    {isCurrentPlan && (
+                      <div className="text-center text-sm text-muted-foreground">
+                        This is your current plan
                       </div>
                     )}
                   </Card>
                 );
               })}
             </div>
-          )}
-        </div>
-
-        {/* Upgrade Plans */}
-        <div className="space-y-3">
-          <h4 className="font-semibold text-lg">Upgrade Your Plan</h4>
-
-          {isNativeApp() && (
-            <div className="space-y-2">
-              <Card className="p-4 bg-muted/50 border-dashed">
-                <p className="text-sm text-muted-foreground text-center">
-                  Subscriptions are managed through the app store on mobile devices.
-                </p>
-              </Card>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={handleRestorePurchases}
-                disabled={isRestoring}
-              >
-                {isRestoring ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                )}
-                Restore Purchases
-              </Button>
-            </div>
-          )}
-
-          <div className="grid gap-3">
-            {SUBSCRIPTION_TIERS.filter(tier => tier.id !== 'free').map((tier, index) => {
-              const isCurrentPlan = tier.id === currentTier;
-              const isDowngrade = SUBSCRIPTION_TIERS.findIndex(t => t.id === tier.id) <
-                SUBSCRIPTION_TIERS.findIndex(t => t.id === currentTier);
-
-              return (
-                <Card
-                  key={tier.id}
-                  className={`p-5 animate-fade-in transition-all ${tier.highlighted ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/20' : ''
-                    } ${isCurrentPlan ? 'border-primary bg-primary/10' : ''}`}
-                  style={{ animationDelay: `${(index + 6) * 0.05}s` }}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h5 className="font-bold text-lg">{tier.name}</h5>
-                        {tier.highlighted && !isCurrentPlan && (
-                          <Badge className="bg-primary text-primary-foreground text-xs">Popular</Badge>
-                        )}
-                        {isCurrentPlan && (
-                          <Badge variant="secondary" className="text-xs">Current</Badge>
-                        )}
-                      </div>
-                      <p className="text-2xl font-bold mt-1">
-                        ${tier.price}
-                        <span className="text-sm font-normal text-muted-foreground">/month</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <ul className="space-y-2 mb-4">
-                    {tier.features.slice(0, 4).map((feature, i) => (
-                      <li key={i} className="flex items-center gap-2 text-sm">
-                        <Check className="w-4 h-4 text-primary shrink-0" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {!isCurrentPlan && !isDowngrade && (
-                    <Button
-                      className="w-full"
-                      variant={tier.highlighted ? 'premium' : 'outline'}
-                      onClick={() => handleUpgrade(tier.id)}
-                      disabled={loadingTier !== null}
-                    >
-                      {loadingTier === tier.id ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Loading...
-                        </>
-                      ) : (
-                        <>
-                          <Crown className="w-4 h-4 mr-2" />
-                          Upgrade to {tier.name}
-                        </>
-                      )}
-                    </Button>
-                  )}
-
-                  {isCurrentPlan && (
-                    <div className="text-center text-sm text-muted-foreground">
-                      This is your current plan
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
           </div>
-        </div>
 
-        {/* Footer note */}
-        <p className="text-xs text-muted-foreground text-center pt-4">
-          All prices in AUD. Cancel anytime. Questions? Contact support@tradiemate.app
-        </p>
+          {/* Footer note */}
+          <p className="text-xs text-muted-foreground text-center pt-4">
+            All prices in AUD. Cancel anytime. Questions? Contact support@tradiemate.app
+          </p>
+        </div>
       </div>
     </MobileLayout>
   );

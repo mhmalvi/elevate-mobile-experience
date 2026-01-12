@@ -264,7 +264,7 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
                 srcDoc={sanitizedHtml}
                 className="w-full h-[500px] border-0"
                 title={`Preview ${documentNumber}`}
-                sandbox="allow-same-origin"
+                sandbox="allow-same-origin allow-scripts"
               />
             </div>
           ) : (

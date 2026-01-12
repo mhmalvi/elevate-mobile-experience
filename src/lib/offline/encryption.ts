@@ -9,6 +9,7 @@
  */
 
 import { Preferences } from '@capacitor/preferences';
+import { safeNumber } from '@/lib/utils';
 
 const ENCRYPTION_KEY_NAME = 'offline_encryption_key';
 const ALGORITHM = 'AES-GCM';
@@ -240,14 +241,23 @@ export async function decryptInvoiceFields(invoice: any): Promise<any> {
 
   const decrypted = { ...invoice };
 
-  // Decrypt financial amounts (convert back to number)
-  if (invoice.total) {
-    const decryptedTotal = await decryptField(invoice.total);
-    decrypted.total = decryptedTotal ? parseFloat(decryptedTotal) : 0;
+  // Decrypt financial amounts - use safeNumber to handle NaN/null/undefined
+  // Also handle case where value is already a number (not encrypted)
+  if (invoice.total !== undefined && invoice.total !== null) {
+    if (typeof invoice.total === 'number') {
+      decrypted.total = safeNumber(invoice.total);
+    } else {
+      const decryptedTotal = await decryptField(invoice.total);
+      decrypted.total = safeNumber(decryptedTotal);
+    }
   }
-  if (invoice.amount_paid) {
-    const decryptedPaid = await decryptField(invoice.amount_paid);
-    decrypted.amount_paid = decryptedPaid ? parseFloat(decryptedPaid) : 0;
+  if (invoice.amount_paid !== undefined && invoice.amount_paid !== null) {
+    if (typeof invoice.amount_paid === 'number') {
+      decrypted.amount_paid = safeNumber(invoice.amount_paid);
+    } else {
+      const decryptedPaid = await decryptField(invoice.amount_paid);
+      decrypted.amount_paid = safeNumber(decryptedPaid);
+    }
   }
 
   return decrypted;
@@ -277,10 +287,15 @@ export async function decryptQuoteFields(quote: any): Promise<any> {
 
   const decrypted = { ...quote };
 
-  // Decrypt financial amounts
-  if (quote.total) {
-    const decryptedTotal = await decryptField(quote.total);
-    decrypted.total = decryptedTotal ? parseFloat(decryptedTotal) : 0;
+  // Decrypt financial amounts - use safeNumber to handle NaN/null/undefined
+  // Also handle case where value is already a number (not encrypted)
+  if (quote.total !== undefined && quote.total !== null) {
+    if (typeof quote.total === 'number') {
+      decrypted.total = safeNumber(quote.total);
+    } else {
+      const decryptedTotal = await decryptField(quote.total);
+      decrypted.total = safeNumber(decryptedTotal);
+    }
   }
 
   return decrypted;

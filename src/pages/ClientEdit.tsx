@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Users, Phone, Mail, MapPin, Save } from 'lucide-react';
 
 const AUSTRALIAN_STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'];
 
@@ -84,9 +83,25 @@ export default function ClientEdit() {
   if (fetching) {
     return (
       <MobileLayout showNav={false}>
-        <PageHeader title="Edit Client" showBack />
-        <div className="flex items-center justify-center p-8">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="min-h-screen scrollbar-hide">
+          <div className="relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+            <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+            <div className="relative px-4 pt-8 pb-6">
+              <button onClick={() => navigate('/clients')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4">
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-sm font-medium">Back to Clients</span>
+              </button>
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium text-primary">Edit Client</span>
+              </div>
+              <h1 className="text-3xl font-bold text-foreground">Loading...</h1>
+            </div>
+          </div>
+          <div className="flex items-center justify-center p-8">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
         </div>
       </MobileLayout>
     );
@@ -94,104 +109,156 @@ export default function ClientEdit() {
 
   return (
     <MobileLayout showNav={false}>
-      <PageHeader title="Edit Client" showBack backPath={`/clients/${id}`} />
-      
-      <form onSubmit={handleSubmit} className="p-4 space-y-4 animate-fade-in">
-        <div className="space-y-2">
-          <Label htmlFor="name">Name *</Label>
-          <Input
-            id="name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="John Smith"
-            required
-          />
+      <div className="min-h-screen scrollbar-hide">
+        {/* Hero Section */}
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+          <div className="relative px-4 pt-8 pb-6">
+            <button onClick={() => navigate(`/clients/${id}`)} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4">
+              <ArrowLeft className="w-4 h-4" />
+              <span className="text-sm font-medium">Back to Client</span>
+            </button>
+            <div className="flex items-center gap-2 mb-1">
+              <Users className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-primary">Edit</span>
+            </div>
+            <h1 className="text-3xl font-bold text-foreground">Edit Client</h1>
+            <p className="text-muted-foreground mt-1">Update contact information</p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="px-4 space-y-4 animate-fade-in pb-48 safe-bottom">
+          {/* Name */}
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone</Label>
+            <Label htmlFor="name">Name *</Label>
             <Input
-              id="phone"
-              type="tel"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              placeholder="0412 345 678"
+              id="name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="John Smith"
+              className="h-12 rounded-xl"
+              required
             />
           </div>
+
+          {/* Contact Details */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <div className="w-1.5 h-6 bg-primary rounded-full" />
+              <h3 className="font-bold text-lg">Contact</h3>
+            </div>
+            <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="flex items-center gap-2">
+                  <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                  Phone
+                </Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="0412 345 678"
+                  className="h-11 rounded-xl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="john@email.com"
+                  className="h-11 rounded-xl"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Address Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <div className="w-1.5 h-6 bg-primary rounded-full" />
+              <h3 className="font-bold text-lg">Address</h3>
+            </div>
+            <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="address" className="flex items-center gap-2">
+                  <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                  Street Address
+                </Label>
+                <Input
+                  id="address"
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  placeholder="123 Main Street"
+                  className="h-11 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="suburb">Suburb</Label>
+                  <Input
+                    id="suburb"
+                    value={form.suburb}
+                    onChange={(e) => setForm({ ...form, suburb: e.target.value })}
+                    placeholder="Sydney"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="state">State</Label>
+                  <Select value={form.state} onValueChange={(v) => setForm({ ...form, state: v })}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AUSTRALIAN_STATES.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="postcode">Postcode</Label>
+                  <Input
+                    id="postcode"
+                    value={form.postcode}
+                    onChange={(e) => setForm({ ...form, postcode: e.target.value })}
+                    placeholder="2000"
+                    maxLength={4}
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="john@email.com"
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea
+              id="notes"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              placeholder="Any notes about this client..."
+              rows={3}
+              className="rounded-xl"
             />
           </div>
-        </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="address">Street Address</Label>
-          <Input
-            id="address"
-            value={form.address}
-            onChange={(e) => setForm({ ...form, address: e.target.value })}
-            placeholder="123 Main Street"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="suburb">Suburb</Label>
-            <Input
-              id="suburb"
-              value={form.suburb}
-              onChange={(e) => setForm({ ...form, suburb: e.target.value })}
-              placeholder="Sydney"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="state">State</Label>
-            <Select value={form.state} onValueChange={(v) => setForm({ ...form, state: v })}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AUSTRALIAN_STATES.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="postcode">Postcode</Label>
-            <Input
-              id="postcode"
-              value={form.postcode}
-              onChange={(e) => setForm({ ...form, postcode: e.target.value })}
-              placeholder="2000"
-              maxLength={4}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="notes">Notes</Label>
-          <Textarea
-            id="notes"
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            placeholder="Any notes about this client..."
-            rows={3}
-          />
-        </div>
-
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-          Save Changes
-        </Button>
-      </form>
+          <Button type="submit" className="w-full h-12 rounded-xl shadow-premium" disabled={loading}>
+            {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+            Save Changes
+          </Button>
+        </form>
+      </div>
     </MobileLayout>
   );
 }

@@ -5,6 +5,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { ExternalLink, Repeat, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { safeNumber } from '@/lib/utils';
 
 interface RecurringInvoiceHistoryProps {
   parentInvoiceId: string;
@@ -75,7 +76,7 @@ export function RecurringInvoiceHistory({ parentInvoiceId }: RecurringInvoiceHis
             <div className="flex items-center gap-3">
               <StatusBadge status={invoice.status} />
               <p className="font-semibold text-sm min-w-[80px] text-right">
-                ${invoice.total?.toFixed(2)}
+                ${safeNumber(invoice.total).toFixed(2)}
               </p>
               <Button
                 size="sm"

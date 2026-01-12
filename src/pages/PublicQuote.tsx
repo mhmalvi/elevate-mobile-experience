@@ -7,6 +7,7 @@ import { SignaturePad } from '@/components/ui/signature-pad';
 import { Check, FileText, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { safeNumber } from '@/lib/utils';
 
 export default function PublicQuote() {
   const { id } = useParams();
@@ -209,10 +210,10 @@ export default function PublicQuote() {
                 <div>
                   <p className="font-medium text-foreground">{item.description}</p>
                   <p className="text-sm text-muted-foreground">
-                    {item.quantity} × ${Number(item.unit_price).toFixed(2)} / {item.unit}
+                    {item.quantity} × ${safeNumber(item.unit_price).toFixed(2)} / {item.unit}
                   </p>
                 </div>
-                <p className="font-semibold text-foreground">${Number(item.total).toFixed(2)}</p>
+                <p className="font-semibold text-foreground">${safeNumber(item.total).toFixed(2)}</p>
               </div>
             </div>
           ))}
@@ -222,15 +223,15 @@ export default function PublicQuote() {
         <div className="p-4 bg-card rounded-xl border border-border space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Subtotal</span>
-            <span className="text-foreground">${Number(quote.subtotal).toFixed(2)}</span>
+            <span className="text-foreground">${safeNumber(quote.subtotal).toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">GST (10%)</span>
-            <span className="text-foreground">${Number(quote.gst).toFixed(2)}</span>
+            <span className="text-foreground">${safeNumber(quote.gst).toFixed(2)}</span>
           </div>
           <div className="flex justify-between font-bold text-xl pt-2 border-t border-border">
             <span className="text-foreground">Total</span>
-            <span style={{ color: primaryColor }}>${Number(quote.total).toFixed(2)}</span>
+            <span style={{ color: primaryColor }}>${safeNumber(quote.total).toFixed(2)}</span>
           </div>
         </div>
 

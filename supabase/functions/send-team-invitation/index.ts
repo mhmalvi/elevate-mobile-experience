@@ -146,7 +146,7 @@ serve(async (req) => {
     }
 
     // Send invitation email
-    const baseUrl = Deno.env.get('APP_URL') || 'https://app.tradiemate.com.au';
+    const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
     const invitationUrl = `${baseUrl}/join-team?token=${token_value}`;
     const teamName = (userMembership as any).teams?.name || 'TradieMate Team';
 
