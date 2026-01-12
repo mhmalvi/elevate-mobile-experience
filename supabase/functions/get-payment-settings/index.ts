@@ -55,19 +55,37 @@ serve(async (req) => {
       return createErrorResponse(req, fetchError.message, 500);
     }
 
-    logStep('Profile fetched, decrypting bank details');
+    logStep('Profile fetched, checking for bank details');
 
-    // SECURITY: Decrypt bank account details
-    const encryptedDetails: EncryptedBankAccountDetails = {
-      bank_name_encrypted: profile.bank_name_encrypted,
-      bank_bsb_encrypted: profile.bank_bsb_encrypted,
-      bank_account_number_encrypted: profile.bank_account_number_encrypted,
-      bank_account_name_encrypted: profile.bank_account_name_encrypted,
-    };
+    // SECURITY: Decrypt bank account details only if they exist
+    let decryptedDetails: { bank_name?: string; bank_bsb?: string; bank_account_number?: string; bank_account_name?: string } = {};
 
-    const decryptedDetails = await decryptBankDetails(encryptedDetails);
+    // Check if any encrypted bank details exist
+    const hasEncryptedDetails = profile.bank_name_encrypted ||
+                                 profile.bank_bsb_encrypted ||
+                                 profile.bank_account_number_encrypted ||
+                                 profile.bank_account_name_encrypted;
 
-    logStep('Bank details decrypted successfully');
+    if (hasEncryptedDetails) {
+      try {
+        const encryptedDetails: EncryptedBankAccountDetails = {
+          bank_name_encrypted: profile.bank_name_encrypted,
+          bank_bsb_encrypted: profile.bank_bsb_encrypted,
+          bank_account_number_encrypted: profile.bank_account_number_encrypted,
+          bank_account_name_encrypted: profile.bank_account_name_encrypted,
+        };
+
+        decryptedDetails = await decryptBankDetails(encryptedDetails);
+        logStep('Bank details decrypted successfully');
+      } catch (decryptError) {
+        logStep('Decryption failed, returning empty bank details', {
+          error: decryptError instanceof Error ? decryptError.message : 'Unknown error'
+        });
+        // Continue with empty details if decryption fails
+      }
+    } else {
+      logStep('No encrypted bank details found');
+    }
 
     return new Response(JSON.stringify({
       bank_name: decryptedDetails.bank_name || '',

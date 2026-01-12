@@ -45,7 +45,7 @@ export function StatCard({
       <div className="flex items-start justify-between gap-4 relative z-10">
         <div className="space-y-2 min-w-0 flex-1">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
-          <p className="text-3xl font-bold tracking-tight truncate text-gradient">{value}</p>
+          <p className="text-3xl font-bold tracking-tight truncate text-foreground">{value}</p>
 
           {trend && (
             <div className="flex items-center gap-2 mt-1">

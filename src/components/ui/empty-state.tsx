@@ -34,7 +34,7 @@ export function EmptyState({
 }: EmptyStateProps) {
   const variantStyles = {
     default: 'py-12 px-4',
-    card: 'p-8 rounded-xl bg-card border border-border/50',
+    card: 'p-8 rounded-lg bg-card border border-border/50',
     minimal: 'py-6 px-4',
   };
 

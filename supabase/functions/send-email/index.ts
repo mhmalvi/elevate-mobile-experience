@@ -215,7 +215,7 @@ serve(async (req) => {
     }
 
     const businessName = profile?.business_name || "TradieMate";
-    const baseUrl = Deno.env.get('APP_URL') || 'https://app.tradiemate.com.au';
+    const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
     const viewUrl = `${baseUrl}/${type === 'quote' ? 'q' : 'i'}/${id}`;
 
     // Extract branding values with fallbacks

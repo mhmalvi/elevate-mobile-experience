@@ -195,7 +195,7 @@ serve(async (req) => {
     }
 
     // Generate the share URL
-    const baseUrl = Deno.env.get('APP_URL') || 'https://app.tradiemate.com.au';
+    const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
     const shareUrl = type === 'quote' 
       ? `${baseUrl}/q/${id}` 
       : `${baseUrl}/i/${id}`;
