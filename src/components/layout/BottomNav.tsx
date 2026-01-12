@@ -10,10 +10,17 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useState, useEffect } from 'react';
 
 export function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState(location.pathname);
+
+  // Sync state with location
+  useEffect(() => {
+    setActiveTab(location.pathname);
+  }, [location.pathname]);
 
   const navItems = [
     { path: '/dashboard', label: 'Home', icon: LayoutDashboard },
@@ -25,99 +32,137 @@ export function BottomNav() {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up">
-      <div className="relative h-[72px] w-full max-w-lg mx-auto">
-        {/* Glassmorphism Background */}
-        <div className="absolute inset-x-0 bottom-0 h-[68px] bg-card/95 backdrop-blur-xl border-t border-border/50 shadow-[0_-8px_32px_rgba(0,0,0,0.12)]" />
+    <div className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up pb-safe-bottom">
+      <div className="relative h-[80px] w-full max-w-lg mx-auto flex items-end mb-safe-bottom">
 
-        {/* Floating Action Button with Pulse Animation */}
-        <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-20">
-          {/* Outer glow ring */}
-          <div className="absolute inset-0 w-[72px] h-[72px] -left-1 -top-1 bg-primary/30 rounded-full blur-xl animate-pulse" />
-          <Button
-            size="icon"
-            className="relative w-[64px] h-[64px] rounded-full bg-gradient-to-br from-primary via-primary to-primary-hover shadow-glow-lg hover:shadow-glow transition-all duration-300 hover:scale-110 active:scale-95 text-primary-foreground border-[4px] border-background group"
-            onClick={() => console.log("Voice FAB clicked")}
-          >
-            <Mic className="w-7 h-7 transition-transform duration-300 group-hover:scale-110" />
-            {/* Inner shimmer effect */}
-            <div className="absolute inset-0 rounded-full bg-gradient-to-t from-transparent via-white/10 to-white/20 pointer-events-none" />
-          </Button>
+        {/* Glassmorphism Background Container */}
+        <div className="absolute inset-x-4 bottom-4 h-[72px] bg-card/90 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-[2.5rem] overflow-hidden">
+          {/* Subtle internal gradient/shine */}
+          <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent opacity-50 pointer-events-none" />
+          <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-70" />
+        </div>
+
+        {/* Floating Action Button (FAB) - Centered & Floating */}
+        <div className="absolute bottom-[28px] left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+          <div className="relative pointer-events-auto group animate-float">
+            {/* Deep Glow/Shadow */}
+            <div className="absolute inset-0 rounded-full bg-primary/40 blur-2xl animate-pulse-glow" />
+
+            {/* Main Button */}
+            <Button
+              size="icon"
+              className="relative w-16 h-16 rounded-full bg-primary hover:bg-primary-hover shadow-glow-lg transition-all duration-500 hover:scale-110 active:scale-90 border-[4px] border-[#F5F5F5] dark:border-[#121212] group-hover:rotate-3"
+              onClick={() => console.log("Voice FAB clicked")}
+            >
+              <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/20 to-transparent opacity-100" />
+              <Mic className="w-7 h-7 text-primary-foreground drop-shadow-md transition-transform duration-500 group-hover:scale-110 group-active:scale-90" />
+            </Button>
+          </div>
         </div>
 
         {/* Nav Items Container */}
-        <div className="absolute inset-x-0 bottom-0 h-[68px] flex items-center justify-between px-1 z-10">
-          {/* Left Side Nav Items */}
-          <div className="flex items-center justify-evenly flex-1 max-w-[45%]">
-            <NavItem item={navItems[0]} isActive={location.pathname === navItems[0].path} onClick={() => navigate(navItems[0].path)} />
-            <NavItem item={navItems[1]} isActive={location.pathname.startsWith(navItems[1].path)} onClick={() => navigate(navItems[1].path)} />
-            <NavItem item={navItems[2]} isActive={location.pathname.startsWith(navItems[2].path)} onClick={() => navigate(navItems[2].path)} />
+        <div className="absolute inset-x-4 bottom-4 h-[72px] flex items-center justify-between px-2 z-20">
+
+          {/* Left Group */}
+          <div className="flex items-center justify-between w-[42%] h-full pl-1">
+            <NavItem
+              item={navItems[0]}
+              isActive={activeTab === navItems[0].path}
+              onClick={() => navigate(navItems[0].path)}
+            />
+            <NavItem
+              item={navItems[1]}
+              isActive={activeTab.startsWith(navItems[1].path)}
+              onClick={() => navigate(navItems[1].path)}
+            />
+            <NavItem
+              item={navItems[2]}
+              isActive={activeTab.startsWith(navItems[2].path)}
+              onClick={() => navigate(navItems[2].path)}
+            />
           </div>
 
-          {/* Center Spacer for FAB */}
-          <div className="w-[72px] shrink-0" />
+          {/* Spacer for FAB */}
+          <div className="w-16 shrink-0" />
 
-          {/* Right Side Nav Items */}
-          <div className="flex items-center justify-evenly flex-1 max-w-[45%]">
-            <NavItem item={navItems[3]} isActive={location.pathname.startsWith(navItems[3].path)} onClick={() => navigate(navItems[3].path)} />
-            <NavItem item={navItems[4]} isActive={location.pathname.startsWith(navItems[4].path)} onClick={() => navigate(navItems[4].path)} />
-            <NavItem item={navItems[5]} isActive={location.pathname.startsWith(navItems[5].path)} onClick={() => navigate(navItems[5].path)} />
+          {/* Right Group */}
+          <div className="flex items-center justify-between w-[42%] h-full pr-1">
+            <NavItem
+              item={navItems[3]}
+              isActive={activeTab.startsWith(navItems[3].path)}
+              onClick={() => navigate(navItems[3].path)}
+            />
+            <NavItem
+              item={navItems[4]}
+              isActive={activeTab.startsWith(navItems[4].path)}
+              onClick={() => navigate(navItems[4].path)}
+            />
+            <NavItem
+              item={navItems[5]}
+              isActive={activeTab.startsWith(navItems[5].path)}
+              onClick={() => navigate(navItems[5].path)}
+            />
           </div>
         </div>
       </div>
-
-      {/* Safe area padding for devices with home indicator */}
-      <div className="h-safe-bottom bg-card/95 backdrop-blur-xl" />
     </div>
   );
 }
 
 function NavItem({ item, isActive, onClick }: { item: any, isActive: boolean, onClick: () => void }) {
   const Icon = item.icon;
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  useEffect(() => {
+    if (isActive) {
+      setIsAnimating(true);
+      const timer = setTimeout(() => setIsAnimating(false), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isActive]);
+
   return (
     <button
       onClick={onClick}
       className={cn(
-        "relative flex flex-col items-center justify-center h-14 min-w-[48px] px-1 rounded-lg transition-all duration-300 active:scale-90 group",
-        isActive
-          ? "text-primary"
-          : "text-muted-foreground hover:text-foreground hover:bg-primary/5"
+        "relative flex flex-col items-center justify-center h-12 w-12 rounded-2xl transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
+        isActive ? "text-primary -translate-y-3" : "text-muted-foreground/60 hover:text-foreground active:scale-95"
       )}
     >
-      {/* Active Background Indicator */}
+      {/* Active Indicator Background Pill */}
       {isActive && (
-        <div className="absolute inset-0 bg-primary/10 rounded-lg animate-fade-in" />
+        <span className="absolute inset-0 bg-primary/10 rounded-2xl animate-scale-in border border-primary/5" />
       )}
 
-      {/* Icon Container */}
+      {/* Icon Wrapper for transforms */}
       <div className={cn(
-        "relative transition-all duration-300 ease-out",
-        isActive ? "scale-110 -translate-y-0.5" : "group-hover:scale-105 group-hover:-translate-y-0.5"
+        "relative z-10 p-2 transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
+        isActive ? "scale-110" : "group-hover:scale-105"
       )}>
-        <Icon className={cn(
-          "w-5 h-5 transition-all duration-300",
-          isActive && "drop-shadow-[0_0_8px_rgba(var(--primary),0.5)]"
-        )} />
-        {/* Icon Glow */}
+        <Icon
+          className={cn(
+            "w-6 h-6 transition-all duration-500",
+            isActive && "fill-current drop-shadow-[0_2px_8px_rgba(var(--primary),0.3)]",
+            isAnimating && "animate-wiggle"
+          )}
+          strokeWidth={isActive ? 2.5 : 2}
+        />
+
+        {/* Active Glow Dot */}
         {isActive && (
-          <div className="absolute inset-0 bg-primary/40 blur-md rounded-full -z-10" />
+          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full shadow-[0_0_8px_currentColor] animate-fade-in" />
         )}
       </div>
 
-      {/* Label */}
+      {/* Label - fades in/out on selection */}
       <span className={cn(
-        "text-[8px] font-semibold mt-0.5 transition-all duration-300 tracking-wide truncate max-w-full",
+        "absolute -bottom-5 text-[9px] font-bold tracking-tight transition-all duration-300 ease-out whitespace-nowrap",
         isActive
-          ? "opacity-100 translate-y-0"
-          : "opacity-0 translate-y-1 group-hover:opacity-70 group-hover:translate-y-0"
+          ? "opacity-100 translate-y-0 text-primary"
+          : "opacity-0 -translate-y-2 pointer-events-none"
       )}>
         {item.label}
       </span>
-
-      {/* Active Indicator Dot */}
-      {isActive && (
-        <span className="absolute -bottom-0.5 w-1 h-1 rounded-full bg-primary animate-pulse" />
-      )}
     </button>
   );
 }
