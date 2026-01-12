@@ -1,15 +1,17 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
-import { Receipt, Loader2, CreditCard, CheckCircle } from 'lucide-react';
+import { Receipt, Loader2, CreditCard, CheckCircle, PartyPopper, ArrowLeft } from 'lucide-react';
 import { format, isPast, parseISO } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { safeNumber } from '@/lib/utils';
 
 export default function PublicInvoice() {
   const { id } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [invoice, setInvoice] = useState<any>(null);
   const [lineItems, setLineItems] = useState<any[]>([]);
@@ -18,6 +20,9 @@ export default function PublicInvoice() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const realtimeChannelRef = useRef<any>(null);
 
   const fetchInvoice = useCallback(async () => {
     try {
@@ -35,17 +40,9 @@ export default function PublicInvoice() {
 
       setInvoice(invoiceData);
 
-      // Mark as viewed (silently fails for anonymous users due to RLS - that's OK)
-      if (!invoiceData.viewed_at) {
-        try {
-          await supabase
-            .from('invoices')
-            .update({ viewed_at: new Date().toISOString(), status: invoiceData.status === 'sent' ? 'viewed' : invoiceData.status })
-            .eq('id', id);
-        } catch {
-          // Silently ignore - anonymous users can't update, but can view
-        }
-      }
+      // Note: We don't try to update viewed_at for anonymous users since they don't have
+      // permission to update invoices. The viewed_at is tracked by the owner when they
+      // send the invoice via the app.
 
       // Fetch line items
       const { data: items } = await supabase
@@ -78,7 +75,61 @@ export default function PublicInvoice() {
     }
   }, [id]);
 
-  // Check for payment status in URL and poll for updates
+  // Set up realtime subscription for invoice updates
+  useEffect(() => {
+    if (!id) return;
+
+    // Subscribe to realtime updates for this invoice
+    // Note: Realtime may not be available for public/anonymous users
+    // We have fallback polling in the payment success handler
+    const channel = supabase
+      .channel(`invoice-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'invoices',
+          filter: `id=eq.${id}`
+        },
+        (payload) => {
+          console.log('Invoice updated via realtime:', payload.new);
+          const newData = payload.new as any;
+
+          // Update invoice state with new data
+          setInvoice((prev: any) => ({
+            ...prev,
+            ...newData
+          }));
+
+          // If payment was just confirmed, show success state
+          if (newData.status === 'paid' || newData.status === 'partially_paid') {
+            setPaymentProcessing(false);
+            setPaymentSuccess(true);
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        // Gracefully handle subscription errors (common for anonymous users)
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.log('Realtime subscription not available, using polling fallback');
+        }
+        if (err) {
+          // Suppress WebSocket errors for public pages - we have polling fallback
+          console.log('Realtime error (using polling fallback):', err.message);
+        }
+      });
+
+    realtimeChannelRef.current = channel;
+
+    return () => {
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+      }
+    };
+  }, [id]);
+
+  // Check for payment status in URL
   useEffect(() => {
     const paymentStatus = searchParams.get('payment');
 
@@ -88,87 +139,175 @@ export default function PublicInvoice() {
         description: 'Your payment was cancelled. You can try again anytime.',
         variant: 'destructive'
       });
+      // Clear the payment param from URL
+      setSearchParams({});
       return;
     }
 
     if (paymentStatus === 'success') {
-      toast({
-        title: 'Payment Successful!',
-        description: 'Thank you for your payment. Updating invoice status...'
-      });
+      setPaymentProcessing(true);
 
-      // Poll for invoice status updates
-      // Webhooks can take 1-10 seconds, so we poll every 2 seconds for up to 20 seconds
-      let pollAttempts = 0;
-      const maxPolls = 10;
-      const pollInterval = 2000; // 2 seconds
-      let pollTimeoutId: NodeJS.Timeout;
+      // Check if invoice is already marked as paid (webhook might have processed already)
+      const checkPaymentStatus = async () => {
+        const { data: invoiceData } = await supabase
+          .from('invoices')
+          .select('status, amount_paid, total')
+          .eq('id', id)
+          .single();
 
-      const pollForUpdate = async () => {
-        pollAttempts++;
-        console.log(`Polling for invoice update, attempt ${pollAttempts}/${maxPolls}`);
+        if (invoiceData) {
+          const isPaidOrPartial = invoiceData.status === 'paid' || invoiceData.status === 'partially_paid';
 
-        try {
-          // Refetch the invoice
-          const { data: invoiceData, error } = await supabase
-            .from('invoices')
-            .select('status, amount_paid, total')
-            .eq('id', id)
-            .single();
-
-          if (error) {
-            console.error('Error polling invoice:', error);
-          }
-
-          if (invoiceData) {
-            const isPaid = invoiceData.status === 'paid';
-            const isPartiallyPaid = invoiceData.status === 'partially_paid';
-
-            if (isPaid || isPartiallyPaid) {
-              // Payment status updated! Refetch full invoice data
-              fetchInvoice();
-              toast({
-                title: 'Invoice Updated',
-                description: isPaid ? 'Payment confirmed! Invoice is now marked as paid.' : 'Partial payment received.',
-                duration: 5000
-              });
-              return; // Stop polling
-            }
-          }
-
-          if (pollAttempts < maxPolls) {
-            // Continue polling
-            pollTimeoutId = setTimeout(() => pollForUpdate(), pollInterval);
-          } else {
-            // Max attempts reached, do final refetch
+          if (isPaidOrPartial) {
+            // Payment already processed
+            setPaymentProcessing(false);
+            setPaymentSuccess(true);
             fetchInvoice();
-            toast({
-              title: 'Status Update Pending',
-              description: 'Payment was received. If status does not update, please refresh the page.',
-              variant: 'default',
-              duration: 7000
-            });
+          } else {
+            // Wait for realtime update (with fallback timeout)
+            setTimeout(() => {
+              // After 15 seconds, check one more time
+              supabase
+                .from('invoices')
+                .select('status, amount_paid, total')
+                .eq('id', id)
+                .single()
+                .then(({ data }) => {
+                  if (data && (data.status === 'paid' || data.status === 'partially_paid')) {
+                    setPaymentProcessing(false);
+                    setPaymentSuccess(true);
+                    fetchInvoice();
+                  } else {
+                    // Still not updated, but payment went through
+                    setPaymentProcessing(false);
+                    setPaymentSuccess(true);
+                    toast({
+                      title: 'Payment Received',
+                      description: 'Your payment was successful. The invoice status will update shortly.',
+                      duration: 5000
+                    });
+                  }
+                });
+            }, 15000);
           }
-        } catch (err) {
-          console.error('Error in polling:', err);
         }
       };
 
-      // Start polling after 1 second (give webhook initial time)
-      pollTimeoutId = setTimeout(() => pollForUpdate(), 1000);
-
-      // Cleanup function
-      return () => {
-        if (pollTimeoutId) {
-          clearTimeout(pollTimeoutId);
-        }
-      };
+      checkPaymentStatus();
     }
-  }, [searchParams, id]); // Removed toast and fetchInvoice from dependencies to avoid infinite loop
+  }, [searchParams, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (id) fetchInvoice();
   }, [id, fetchInvoice]);
+
+  // Payment Processing Screen
+  if (paymentProcessing) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+        <div className="max-w-md w-full text-center space-y-6">
+          <div className="relative">
+            <div className="w-24 h-24 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+              <Loader2 className="w-12 h-12 animate-spin text-primary" />
+            </div>
+            <div className="absolute -inset-4 rounded-full border-4 border-primary/20 animate-pulse" />
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-foreground">Processing Payment</h1>
+            <p className="text-muted-foreground">
+              Please wait while we confirm your payment...
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+            <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+            <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+
+          <p className="text-xs text-muted-foreground/70">
+            This usually takes just a few seconds
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Payment Success Screen
+  if (paymentSuccess && invoice) {
+    const amountPaid = invoice.amount_paid || invoice.total || 0;
+    const primaryColorValue = branding?.primary_color || '#3b82f6';
+
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+        <div className="max-w-md w-full text-center space-y-6">
+          {/* Success Animation */}
+          <div className="relative">
+            <div
+              className="w-24 h-24 mx-auto rounded-full flex items-center justify-center animate-in zoom-in-50 duration-500"
+              style={{ backgroundColor: `${primaryColorValue}15` }}
+            >
+              <CheckCircle className="w-14 h-14 text-success" />
+            </div>
+            <div className="absolute -top-2 -right-2">
+              <PartyPopper className="w-8 h-8 text-warning animate-bounce" />
+            </div>
+          </div>
+
+          <div className="space-y-2 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-200">
+            <h1 className="text-2xl font-bold text-foreground">Payment Successful!</h1>
+            <p className="text-muted-foreground">
+              Thank you for your payment
+            </p>
+          </div>
+
+          {/* Payment Details Card */}
+          <div className="bg-card border border-border rounded-xl p-6 space-y-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-300">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Invoice</span>
+              <span className="font-medium text-foreground">{invoice.invoice_number}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">Amount Paid</span>
+              <span className="text-2xl font-bold" style={{ color: primaryColorValue }}>
+                ${safeNumber(amountPaid).toFixed(2)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center pt-2 border-t border-border">
+              <span className="text-sm text-muted-foreground">Status</span>
+              <StatusBadge status={invoice.status} />
+            </div>
+          </div>
+
+          {/* Business Info */}
+          {profile && (
+            <div className="text-sm text-muted-foreground animate-in fade-in-0 duration-500 delay-400">
+              <p>Payment received by</p>
+              <p className="font-medium text-foreground">{profile.business_name}</p>
+            </div>
+          )}
+
+          {/* Action Button */}
+          <Button
+            variant="outline"
+            className="w-full animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-500"
+            onClick={() => {
+              setPaymentSuccess(false);
+              setSearchParams({});
+            }}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            View Invoice Details
+          </Button>
+
+          <p className="text-xs text-muted-foreground/70 pt-4">
+            A confirmation email has been sent to the business owner
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -305,10 +444,10 @@ export default function PublicInvoice() {
                 <div>
                   <p className="font-medium text-foreground">{item.description}</p>
                   <p className="text-sm text-muted-foreground">
-                    {item.quantity} × ${Number(item.unit_price).toFixed(2)}
+                    {item.quantity} × ${safeNumber(item.unit_price).toFixed(2)}
                   </p>
                 </div>
-                <p className="font-semibold text-foreground">${Number(item.total).toFixed(2)}</p>
+                <p className="font-semibold text-foreground">${safeNumber(item.total).toFixed(2)}</p>
               </div>
             </div>
           ))}
@@ -318,21 +457,21 @@ export default function PublicInvoice() {
         <div className="p-4 bg-card rounded-xl border border-border space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Subtotal</span>
-            <span className="text-foreground">${Number(invoice.subtotal || 0).toFixed(2)}</span>
+            <span className="text-foreground">${safeNumber(invoice.subtotal).toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">GST (10%)</span>
-            <span className="text-foreground">${Number(invoice.gst || 0).toFixed(2)}</span>
+            <span className="text-foreground">${safeNumber(invoice.gst).toFixed(2)}</span>
           </div>
           <div className="flex justify-between font-bold text-xl pt-2 border-t border-border">
             <span className="text-foreground">Total</span>
-            <span style={{ color: primaryColor }}>${Number(invoice.total || 0).toFixed(2)}</span>
+            <span style={{ color: primaryColor }}>${safeNumber(invoice.total).toFixed(2)}</span>
           </div>
           {(invoice.amount_paid || 0) > 0 && (
             <>
               <div className="flex justify-between text-sm text-success">
                 <span>Amount Paid</span>
-                <span>-${Number(invoice.amount_paid).toFixed(2)}</span>
+                <span>-${safeNumber(invoice.amount_paid).toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-xl pt-2 border-t border-border">
                 <span className="text-foreground">Balance Due</span>

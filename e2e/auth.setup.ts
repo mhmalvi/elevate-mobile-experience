@@ -1,5 +1,6 @@
 import { test as setup, expect } from '@playwright/test';
 import path from 'path';
+import { TEST_USER } from './fixtures/test-helpers';
 
 /**
  * Authentication Setup for E2E Tests
@@ -33,9 +34,9 @@ setup('authenticate', async ({ page }) => {
     await authButton.click();
     await page.waitForLoadState('networkidle');
 
-    // Check if we have environment variables for test user
-    const testEmail = process.env.TEST_USER_EMAIL || 'test@tradiemate.com';
-    const testPassword = process.env.TEST_USER_PASSWORD || 'TestPassword123!';
+    // Use test user credentials from test-helpers
+    const testEmail = TEST_USER.email;
+    const testPassword = TEST_USER.password;
 
     // Try to fill in login form if it exists
     const emailInput = page.locator('input[type="email"], input[name="email"]').first();

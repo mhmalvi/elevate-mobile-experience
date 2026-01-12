@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { MobileLayout } from '@/components/layout/MobileLayout';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
-import { CheckCircle2, XCircle, Loader2, CreditCard } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, CreditCard, Building2, Hash, DollarSign, ArrowLeft, Calendar } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   Select,
   SelectContent,
@@ -31,6 +31,7 @@ interface StripeAccountStatus {
 }
 
 export default function PaymentSettings() {
+  const navigate = useNavigate();
   const { profile, updateProfile, loading: profileLoading } = useProfile();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -174,9 +175,35 @@ export default function PaymentSettings() {
   if (profileLoading) {
     return (
       <MobileLayout>
-        <PageHeader title="Payment Details" showBack />
-        <div className="flex items-center justify-center p-8">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <div className="min-h-screen scrollbar-hide">
+          {/* Hero Section */}
+          <div className="relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+            <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+
+            <div className="relative px-4 pt-8 pb-6">
+              <button
+                onClick={() => navigate('/settings')}
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span className="text-sm font-medium">Back to Settings</span>
+              </button>
+
+              <div className="flex items-center gap-2 mb-1">
+                <DollarSign className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium text-primary">Financial Setup</span>
+              </div>
+              <h1 className="text-3xl font-bold text-foreground">Payment Details</h1>
+              <p className="text-muted-foreground mt-1">
+                Configure payment methods and bank details
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center p-8">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
         </div>
       </MobileLayout>
     );
@@ -184,186 +211,231 @@ export default function PaymentSettings() {
 
   return (
     <MobileLayout>
-      <PageHeader title="Payment Details" showBack />
+      <div className="min-h-screen scrollbar-hide">
+        {/* Hero Section */}
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
+          <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
-      <div className="p-4 space-y-6 animate-fade-in">
-        {/* Stripe Connect Section */}
-        <Card className="p-4 space-y-4">
-          <div className="flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold">Online Payments (Stripe)</h3>
+          <div className="relative px-4 pt-8 pb-6">
+            <button
+              onClick={() => navigate('/settings')}
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span className="text-sm font-medium">Back to Settings</span>
+            </button>
+
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-primary">Financial Setup</span>
+            </div>
+            <h1 className="text-3xl font-bold text-foreground">Payment Details</h1>
+            <p className="text-muted-foreground mt-1">
+              Configure payment methods and bank details
+            </p>
           </div>
+        </div>
 
-          <p className="text-sm text-muted-foreground">
-            Connect Stripe to accept credit card and digital wallet payments directly from your invoices.
-          </p>
-
-          {checkingStripe ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Checking connection status...
+        <div className="px-4 pb-32 space-y-6 animate-fade-in">
+          {/* Stripe Connect Section */}
+          <Card className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-4">
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-primary" />
+              <h3 className="font-semibold">Online Payments (Stripe)</h3>
             </div>
-          ) : stripeStatus.charges_enabled ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-green-600">
-                <CheckCircle2 className="w-5 h-5" />
-                <span className="font-medium">Stripe Connected</span>
+
+            <p className="text-sm text-muted-foreground">
+              Connect Stripe to accept credit card and digital wallet payments directly from your invoices.
+            </p>
+
+            {checkingStripe ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Checking connection status...
               </div>
-              <p className="text-sm text-muted-foreground">
-                You can now accept payments on invoices. Funds will be deposited to your bank account within 2-7 business days.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={connectStripe}
-                disabled={stripeLoading}
-                className="w-full"
-              >
-                {stripeLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  'Manage Stripe Account'
-                )}
-              </Button>
-            </div>
-          ) : stripeStatus.connected && !stripeStatus.onboarding_complete ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-yellow-600">
-                <XCircle className="w-5 h-5" />
-                <span className="font-medium">Setup Incomplete</span>
+            ) : stripeStatus.charges_enabled ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="font-medium">Stripe Connected</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  You can now accept payments on invoices. Funds will be deposited to your bank account within 2-7 business days.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={connectStripe}
+                  disabled={stripeLoading}
+                  className="w-full rounded-xl"
+                >
+                  {stripeLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Manage Stripe Account'
+                  )}
+                </Button>
               </div>
-              <p className="text-sm text-muted-foreground">
-                You need to complete your Stripe setup to start accepting payments.
-              </p>
-              <Button
-                type="button"
-                onClick={connectStripe}
-                disabled={stripeLoading}
-                className="w-full"
-              >
-                {stripeLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  'Complete Stripe Setup'
-                )}
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <XCircle className="w-5 h-5" />
-                <span className="font-medium">Not Connected</span>
+            ) : stripeStatus.connected && !stripeStatus.onboarding_complete ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-yellow-600">
+                  <XCircle className="w-5 h-5" />
+                  <span className="font-medium">Setup Incomplete</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  You need to complete your Stripe setup to start accepting payments.
+                </p>
+                <Button
+                  type="button"
+                  onClick={connectStripe}
+                  disabled={stripeLoading}
+                  className="w-full rounded-xl"
+                >
+                  {stripeLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Complete Stripe Setup'
+                  )}
+                </Button>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Connect your Stripe account to enable online payments for your invoices.
-              </p>
-              <Button
-                type="button"
-                onClick={connectStripe}
-                disabled={stripeLoading}
-                className="w-full"
-              >
-                {stripeLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  'Connect Stripe Account'
-                )}
-              </Button>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <XCircle className="w-5 h-5" />
+                  <span className="font-medium">Not Connected</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Connect your Stripe account to enable online payments for your invoices.
+                </p>
+                <Button
+                  type="button"
+                  onClick={connectStripe}
+                  disabled={stripeLoading}
+                  className="w-full rounded-xl"
+                >
+                  {stripeLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Connect Stripe Account'
+                  )}
+                </Button>
+              </div>
+            )}
+          </Card>
+
+          {/* Bank Details Section */}
+          <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in" style={{ animationDelay: '0.05s' }}>
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-primary" />
+              <h3 className="font-semibold">Bank Transfer Details</h3>
             </div>
-          )}
-        </Card>
 
-        {/* Bank Details Section */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold">Bank Transfer Details</h3>
-          </div>
+            <p className="text-sm text-muted-foreground -mt-4">
+              These details will appear on your invoices for customers who prefer bank transfers.
+            </p>
 
-          <p className="text-sm text-muted-foreground">
-            These details will appear on your invoices for customers who prefer bank transfers.
-          </p>
+            {/* Bank Name */}
+            <div className="space-y-2 p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
+              <Label htmlFor="bankName" className="text-sm font-medium">Bank Name</Label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="bankName"
+                  value={form.bank_name}
+                  onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
+                  placeholder="e.g., Commonwealth Bank"
+                  className="pl-10 rounded-xl"
+                />
+              </div>
+            </div>
 
-        {/* Bank Name */}
-        <div className="space-y-2">
-          <Label htmlFor="bankName">Bank Name</Label>
-          <Input
-            id="bankName"
-            value={form.bank_name}
-            onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
-            placeholder="e.g., Commonwealth Bank"
-          />
+            {/* BSB */}
+            <div className="space-y-2 p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 animate-fade-in" style={{ animationDelay: '0.1s' }}>
+              <Label htmlFor="bsb" className="text-sm font-medium">BSB</Label>
+              <div className="relative">
+                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="bsb"
+                  value={form.bank_bsb}
+                  onChange={(e) => setForm({ ...form, bank_bsb: e.target.value })}
+                  placeholder="000-000"
+                  maxLength={7}
+                  className="pl-10 rounded-xl"
+                />
+              </div>
+            </div>
+
+            {/* Account Number */}
+            <div className="space-y-2 p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 animate-fade-in" style={{ animationDelay: '0.15s' }}>
+              <Label htmlFor="accountNumber" className="text-sm font-medium">Account Number</Label>
+              <div className="relative">
+                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="accountNumber"
+                  value={form.bank_account_number}
+                  onChange={(e) => setForm({ ...form, bank_account_number: e.target.value })}
+                  placeholder="00000000"
+                  className="pl-10 rounded-xl"
+                />
+              </div>
+            </div>
+
+            {/* Account Name */}
+            <div className="space-y-2 p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 animate-fade-in" style={{ animationDelay: '0.2s' }}>
+              <Label htmlFor="accountName" className="text-sm font-medium">Account Name</Label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="accountName"
+                  value={form.bank_account_name}
+                  onChange={(e) => setForm({ ...form, bank_account_name: e.target.value })}
+                  placeholder="e.g., Smith Electrical Pty Ltd"
+                  className="pl-10 rounded-xl"
+                />
+              </div>
+            </div>
+
+            {/* Payment Terms */}
+            <div className="space-y-2 p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 animate-fade-in" style={{ animationDelay: '0.25s' }}>
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-primary" />
+                Default Payment Terms
+              </Label>
+              <Select
+                value={form.payment_terms.toString()}
+                onValueChange={(value) => setForm({ ...form, payment_terms: parseInt(value) })}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue placeholder="Select payment terms" />
+                </SelectTrigger>
+                <SelectContent>
+                  {paymentTermsOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Default due date for new invoices
+              </p>
+            </div>
+
+            <Button type="submit" className="w-full rounded-xl" disabled={loading}>
+              {loading ? 'Saving...' : 'Save Bank Details'}
+            </Button>
+          </form>
         </div>
-
-        {/* BSB */}
-        <div className="space-y-2">
-          <Label htmlFor="bsb">BSB</Label>
-          <Input
-            id="bsb"
-            value={form.bank_bsb}
-            onChange={(e) => setForm({ ...form, bank_bsb: e.target.value })}
-            placeholder="000-000"
-            maxLength={7}
-          />
-        </div>
-
-        {/* Account Number */}
-        <div className="space-y-2">
-          <Label htmlFor="accountNumber">Account Number</Label>
-          <Input
-            id="accountNumber"
-            value={form.bank_account_number}
-            onChange={(e) => setForm({ ...form, bank_account_number: e.target.value })}
-            placeholder="00000000"
-          />
-        </div>
-
-        {/* Account Name */}
-        <div className="space-y-2">
-          <Label htmlFor="accountName">Account Name</Label>
-          <Input
-            id="accountName"
-            value={form.bank_account_name}
-            onChange={(e) => setForm({ ...form, bank_account_name: e.target.value })}
-            placeholder="e.g., Smith Electrical Pty Ltd"
-          />
-        </div>
-
-        {/* Payment Terms */}
-        <div className="space-y-2">
-          <Label>Default Payment Terms</Label>
-          <Select
-            value={form.payment_terms.toString()}
-            onValueChange={(value) => setForm({ ...form, payment_terms: parseInt(value) })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select payment terms" />
-            </SelectTrigger>
-            <SelectContent>
-              {paymentTermsOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            Default due date for new invoices
-          </p>
-        </div>
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Saving...' : 'Save Bank Details'}
-          </Button>
-        </form>
       </div>
     </MobileLayout>
   );

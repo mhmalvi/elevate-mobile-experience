@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+/* Font imports handled in index.html */
 
 @tailwind base;
 @tailwind components;
@@ -12,135 +12,139 @@
 
 @layer base {
   :root {
-    /* Light Mode - "Executive Site Manager" */
-    --background: 210 40% 98%;
-    /* refined off-white */
-    --foreground: 239 94% 15%;
-    /* deep-navy */
+    /* Light Mode - "Aussie Tradie" */
+    --background: 0 0% 96%;
+    /* Neutral #F5F5F5 */
+    --foreground: 174 100% 7%;
+    /* Secondary Dark #00251F */
 
     --card: 0 0% 100%;
-    --card-foreground: 239 94% 15%;
+    --card-foreground: 174 100% 7%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 239 94% 15%;
+    --popover-foreground: 174 100% 7%;
 
-    /* Primary - Deep Navy (Professional Base) */
-    --primary: 239 94% 19%;
-    /* deep-twilight */
+    /* Primary - Orange/Gold */
+    --primary: 33 100% 50%;
+    /* #FF8C00 */
     --primary-foreground: 0 0% 100%;
+    --primary-hover: 33 100% 45%;
+    /* #E67E00 */
 
-    /* Secondary - French Blue */
-    --secondary: 214 97% 27%;
+    /* Secondary - Dark Teal */
+    --secondary: 171 100% 15%;
+    /* #004D40 */
     --secondary-foreground: 0 0% 100%;
 
-    /* Accent - Metallic Gold (Premium Touch) */
-    --accent: 45 93% 47%;
-    /* gold */
-    --accent-foreground: 239 94% 15%;
+    /* Accent - Orange/Gold */
+    --accent: 33 100% 50%;
+    --accent-foreground: 0 0% 100%;
 
-    --muted: 210 40% 90%;
-    --muted-foreground: 215 25% 40%;
+    --muted: 0 0% 90%;
+    --muted-foreground: 171 100% 15%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 4 90% 58%;
+    /* #F44336 */
     --destructive-foreground: 0 0% 100%;
 
-    --success: 152 69% 40%;
+    --success: 122 39% 49%;
+    /* #4CAF50 */
     --success-foreground: 0 0% 100%;
 
-    --warning: 45 93% 47%;
-    --warning-foreground: 239 94% 15%;
+    --warning: 33 100% 50%;
+    --warning-foreground: 0 0% 100%;
 
-    --border: 214 30% 85%;
-    --input: 214 30% 85%;
-    --ring: 239 94% 19%;
+    --border: 171 20% 85%;
+    --input: 171 20% 85%;
+    --ring: 33 100% 50%;
 
-    --radius: 1rem;
-    /* Modern rounded corners */
+    --radius: 0.75rem;
+    /* 12px */
 
     /* Sidebar */
-    --sidebar-background: 210 40% 98%;
-    --sidebar-foreground: 239 94% 15%;
-    --sidebar-primary: 239 94% 19%;
+    --sidebar-background: 0 0% 96%;
+    --sidebar-foreground: 174 100% 7%;
+    --sidebar-primary: 33 100% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 40% 90%;
-    --sidebar-accent-foreground: 239 94% 15%;
-    --sidebar-border: 214 30% 85%;
-    --sidebar-ring: 239 94% 19%;
+    --sidebar-accent: 0 0% 90%;
+    --sidebar-accent-foreground: 174 100% 7%;
+    --sidebar-border: 171 20% 85%;
+    --sidebar-ring: 33 100% 50%;
 
     /* Custom TradieMate tokens */
     --glass: 0 0% 100% / 0.9;
-    --glass-border: 239 94% 19% / 0.1;
-    --glass-subtle: 239 94% 19% / 0.05;
-    --shadow-color: 239 94% 19% / 0.1;
-    --shadow-primary: 239 94% 19% / 0.25;
-    --gradient-start: 239 94% 19%;
-    --gradient-end: 214 97% 27%;
-    --glow-primary: 214 97% 27% / 0.3;
+    --glass-border: 33 100% 50% / 0.1;
+    --glass-subtle: 33 100% 50% / 0.05;
+    --shadow-color: 174 100% 7% / 0.1;
+    --shadow-primary: 33 100% 50% / 0.25;
+    --gradient-start: 33 100% 50%;
+    --gradient-end: 33 100% 45%;
+    --glow-primary: 33 100% 50% / 0.3;
   }
 
   .dark {
-    /* Dark Mode - "Industrial Luxury" */
-    --background: 239 94% 12%;
-    /* deep-navy (darker for contrast) */
-    --foreground: 210 40% 98%;
+    /* Dark Mode - "Night Shift" */
+    --background: 174 100% 7%;
+    /* Secondary Dark #00251F */
+    --foreground: 0 0% 96%;
 
-    /* Card - Glassy Deep Blue */
-    --card: 239 94% 15%;
-    --card-foreground: 210 40% 98%;
+    /* Card */
+    --card: 171 100% 15%;
+    /* Secondary #004D40 */
+    --card-foreground: 0 0% 96%;
 
-    --popover: 239 94% 15%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 171 100% 15%;
+    --popover-foreground: 0 0% 96%;
 
-    /* Primary - Turquoise Surf (Vibrant Action) */
-    --primary: 190 100% 42%;
-    --primary-foreground: 239 94% 10%;
+    /* Primary */
+    --primary: 33 100% 50%;
+    /* #FF8C00 */
+    --primary-foreground: 0 0% 100%;
 
-    /* Secondary - French Blue Surface */
-    --secondary: 214 97% 27%;
-    --secondary-foreground: 210 40% 98%;
+    /* Secondary */
+    --secondary: 173 100% 21%;
+    /* Secondary Light #00695C */
+    --secondary-foreground: 0 0% 100%;
 
-    /* Accent - Muted Gold (The "Premium" factor) */
-    --accent: 42 70% 60%;
-    /* muted-gold */
-    --accent-foreground: 239 94% 10%;
+    /* Accent */
+    --accent: 33 100% 50%;
+    --accent-foreground: 0 0% 100%;
 
-    --muted: 239 60% 20%;
-    --muted-foreground: 214 60% 70%;
+    --muted: 171 50% 20%;
+    --muted-foreground: 171 30% 70%;
 
-    --destructive: 0 72% 55%;
-    --destructive-foreground: 255 255 255;
+    --destructive: 4 90% 58%;
+    --destructive-foreground: 0 0% 100%;
 
-    --success: 150 60% 45%;
+    --success: 122 39% 49%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 42 80% 60%;
-    --warning-foreground: 239 94% 10%;
+    --warning: 33 100% 50%;
+    --warning-foreground: 0 0% 100%;
 
-    --border: 214 97% 27%;
-    /* french-blue */
-    --input: 239 94% 18%;
-    /* slightly lighter than bg */
-    --ring: 190 100% 42%;
+    --border: 171 50% 25%;
+    --input: 171 50% 25%;
+    --ring: 33 100% 50%;
 
     /* Sidebar Dark */
-    --sidebar-background: 239 94% 12%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 190 100% 42%;
-    --sidebar-primary-foreground: 239 94% 10%;
-    --sidebar-accent: 239 94% 15%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 214 97% 27%;
-    --sidebar-ring: 190 100% 42%;
+    --sidebar-background: 174 100% 7%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 33 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 171 100% 15%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 171 50% 25%;
+    --sidebar-ring: 33 100% 50%;
 
     /* Custom TradieMate tokens - Dark */
-    --glass: 239 94% 15% / 0.7;
-    --glass-border: 190 100% 42% / 0.2;
-    --glass-subtle: 214 97% 27% / 0.3;
+    --glass: 171 100% 15% / 0.7;
+    --glass-border: 33 100% 50% / 0.2;
+    --glass-subtle: 33 100% 50% / 0.1;
     --shadow-color: 0 0% 0% / 0.5;
-    --shadow-primary: 190 100% 42% / 0.25;
-    --gradient-start: 239 94% 12%;
-    --gradient-end: 214 97% 27%;
-    --glow-primary: 190 100% 42% / 0.4;
+    --shadow-primary: 33 100% 50% / 0.25;
+    --gradient-start: 174 100% 7%;
+    --gradient-end: 171 100% 15%;
+    --glow-primary: 33 100% 50% / 0.4;
   }
 }
 
@@ -150,7 +154,7 @@
   }
 
   html {
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-family: 'Open Sans', system-ui, sans-serif;
     -webkit-tap-highlight-color: transparent;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -159,6 +163,15 @@
   /* Default to dark mode for TradieMate premium look */
   html {
     color-scheme: dark;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Montserrat', sans-serif;
   }
 
   body {
@@ -211,7 +224,7 @@
 
   /* Metallic Gold Text */
   .text-premium-gold {
-    background: linear-gradient(135deg, hsl(45 93% 55%), hsl(42 70% 45%));
+    background: linear-gradient(135deg, hsl(33 100% 50%), hsl(33 100% 40%));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

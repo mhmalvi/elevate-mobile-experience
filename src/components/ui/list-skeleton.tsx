@@ -17,7 +17,7 @@ export function ListSkeleton({ count = 5, className }: ListSkeletonProps) {
       {Array.from({ length: count }).map((_, i) => (
         <div
           key={i}
-          className="p-4 bg-card/50 backdrop-blur-sm rounded-xl border border-border/50 animate-pulse"
+          className="p-4 bg-card/50 backdrop-blur-sm rounded-lg border border-border/50 animate-pulse"
           style={{ animationDelay: `${i * 100}ms` }}
         >
           <div className="flex items-start justify-between gap-3">
@@ -38,7 +38,7 @@ export function ListSkeleton({ count = 5, className }: ListSkeletonProps) {
 export function CardSkeleton({ className }: { className?: string }) {
   return (
     <div
-      className={cn("p-4 bg-card/50 backdrop-blur-sm rounded-xl border border-border/50 animate-pulse", className)}
+      className={cn("p-4 bg-card/50 backdrop-blur-sm rounded-lg border border-border/50 animate-pulse", className)}
       role="status"
       aria-busy="true"
     >

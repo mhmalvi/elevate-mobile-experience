@@ -127,7 +127,15 @@
       "Bash(wc:*)",
       "Bash(node comprehensive-production-test.js:*)",
       "Bash(node test-email-sms.js:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(set TEST_USER_EMAIL=yuanhuafung2021@gmail.com:*)",
+      "Bash(set TEST_USER_PASSWORD=90989098)",
+      "Bash(cmd /c \"set TEST_USER_EMAIL=yuanhuafung2021@gmail.com && set TEST_USER_PASSWORD=90989098 && npx playwright test --project=chromium --grep @auth --reporter=list\")",
+      "Bash($env:TEST_USER_EMAIL=\"yuanhuafung2021@gmail.com\")",
+      "Bash($env:TEST_USER_PASSWORD=\"90989098\")",
+      "Bash(TEST_USER_EMAIL=yuanhuafung2021@gmail.com TEST_USER_PASSWORD=90989098 npx playwright test:*)",
+      "Bash(node -e:*)",
+      "mcp__supabase__deploy_edge_function"
     ]
   },
   "enableAllProjectMcpServers": true,
