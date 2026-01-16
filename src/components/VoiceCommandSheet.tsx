@@ -284,22 +284,71 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         }
     };
 
+    // Helper: Find existing client by name or create new one
+    const findOrCreateClient = async (clientName: string, clientData?: any): Promise<string | null> => {
+        if (!user || !clientName) return null;
+
+        // Search for existing client (case-insensitive partial match)
+        const { data: existingClients } = await supabase
+            .from('clients')
+            .select('id, name')
+            .eq('user_id', user.id)
+            .ilike('name', `%${clientName}%`)
+            .limit(1);
+
+        if (existingClients && existingClients.length > 0) {
+            console.log('Found existing client:', existingClients[0].name);
+            return existingClients[0].id;
+        }
+
+        // Create new client if not found
+        const { data: newClient, error } = await supabase
+            .from('clients')
+            .insert({
+                user_id: user.id,
+                name: clientName,
+                phone: clientData?.client_phone || null,
+                email: clientData?.client_email || null,
+                address: clientData?.client_address || null,
+            })
+            .select()
+            .single();
+
+        if (newClient) {
+            console.log('Created new client:', newClient.name);
+            toast({ title: "New client added!", description: clientName });
+            return newClient.id;
+        }
+
+        return null;
+    };
+
     const createQuote = async (data: any) => {
         if (!user) return;
         try {
+            // Step 1: Find or create the client
+            let clientId: string | null = null;
+            if (data.client_name) {
+                clientId = await findOrCreateClient(data.client_name, data);
+            }
+
+            // Step 2: Create the quote with client_id linked
             const { data: quote, error } = await supabase
                 .from('quotes')
                 .insert({
                     user_id: user.id,
+                    client_id: clientId, // Link to client!
                     quote_number: `Q-${Date.now().toString().slice(-6)}`,
                     title: data.client_name ? `Quote for ${data.client_name}` : 'Voice Quote',
                     status: 'draft',
                     total: data.total || 0,
                     valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                    notes: data.notes || null,
                 })
                 .select()
                 .single();
 
+            // Step 3: Add line items if any
             if (quote && data.items?.length > 0) {
                 const items = data.items.map((item: any) => ({
                     quote_id: quote.id,
@@ -313,7 +362,10 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
 
             if (quote) {
                 setOpen(false);
-                toast({ title: "Quote Created! ✨", description: `$${data.total || 0}` });
+                toast({
+                    title: "Quote Created! ✨",
+                    description: `${data.client_name ? `For ${data.client_name} - ` : ''}$${data.total || 0}`
+                });
                 navigate(`/quotes/${quote.id}`);
             }
         } catch (err) {
@@ -325,10 +377,17 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     const createInvoice = async (data: any) => {
         if (!user) return;
         try {
-            const { data: invoice, error } = await supabase
+            // Find or create the client
+            let clientId: string | null = null;
+            if (data.client_name) {
+                clientId = await findOrCreateClient(data.client_name, data);
+            }
+
+            const { data: invoice } = await supabase
                 .from('invoices')
                 .insert({
                     user_id: user.id,
+                    client_id: clientId, // Link to client!
                     invoice_number: `INV-${Date.now().toString().slice(-6)}`,
                     title: data.client_name ? `Invoice for ${data.client_name}` : 'Voice Invoice',
                     status: 'draft',
@@ -339,7 +398,10 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
 
             if (invoice) {
                 setOpen(false);
-                toast({ title: "Invoice Created! 💰" });
+                toast({
+                    title: "Invoice Created! 💰",
+                    description: `${data.client_name ? `For ${data.client_name}` : ''}`
+                });
                 navigate(`/invoices/${invoice.id}`);
             }
         } catch (err) {
@@ -377,11 +439,18 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     const createJob = async (data: any) => {
         if (!user) return;
         try {
-            const { data: job, error } = await supabase
+            // Find or create the client
+            let clientId: string | null = null;
+            if (data.client_name) {
+                clientId = await findOrCreateClient(data.client_name, data);
+            }
+
+            const { data: job } = await supabase
                 .from('jobs')
                 .insert({
                     user_id: user.id,
-                    title: data.title || 'New Job',
+                    client_id: clientId, // Link to client!
+                    title: data.title || data.client_name ? `Job for ${data.client_name}` : 'New Job',
                     description: data.description || '',
                     status: 'scheduled',
                     scheduled_date: data.scheduled_date || new Date().toISOString(),
@@ -392,7 +461,10 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
 
             if (job) {
                 setOpen(false);
-                toast({ title: "Job Scheduled! 📅" });
+                toast({
+                    title: "Job Scheduled! 📅",
+                    description: `${data.client_name ? `For ${data.client_name}` : data.title || ''}`
+                });
                 navigate(`/jobs/${job.id}`);
             }
         } catch (err) {
