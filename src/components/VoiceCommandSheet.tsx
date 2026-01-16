@@ -60,6 +60,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     const [transcript, setTranscript] = useState('');
     const [displayMessage, setDisplayMessage] = useState('');
     const [history, setHistory] = useState<any[]>([]);
+    const [accumulatedData, setAccumulatedData] = useState<any>({});
     const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
 
     const recognitionRef = useRef<any>(null);
@@ -144,7 +145,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 silenceTimerRef.current = setTimeout(() => {
                     stopListening();
                     processCommand(currentText);
-                }, 2500); // 2.5s of silence
+                }, 4000); // 4s of silence - gives user time to think
             }
         };
 
@@ -226,7 +227,11 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
 
         try {
             const { data, error } = await supabase.functions.invoke('process-voice-command', {
-                body: { query: text, conversationHistory: history }
+                body: {
+                    query: text,
+                    conversationHistory: history,
+                    accumulatedData: accumulatedData
+                }
             });
 
             if (error) throw error;
@@ -241,6 +246,11 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             ]);
 
             setDisplayMessage(speak);
+
+            // Update accumulated data from AI response
+            if (actionData) {
+                setAccumulatedData(prev => ({ ...prev, ...actionData }));
+            }
 
             if (action === 'create_quote' && actionData) {
                 setStatus('success');
@@ -436,6 +446,26 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                                     {suggestion}
                                 </button>
                             ))}
+                        </div>
+                    )}
+
+                    {/* Listening Controls */}
+                    {status === 'listening' && transcript.length > 3 && (
+                        <div className="flex flex-col items-center gap-3 animate-fade-in">
+                            <p className="text-xs text-muted-foreground">
+                                Tap the orb when you're done speaking
+                            </p>
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                    stopListening();
+                                    processCommand(transcript);
+                                }}
+                                className="rounded-full px-6"
+                            >
+                                Done Speaking →
+                            </Button>
                         </div>
                     )}
                 </div>
