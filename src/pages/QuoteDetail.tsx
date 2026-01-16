@@ -9,10 +9,10 @@ import { PDFPreviewModal } from '@/components/PDFPreviewModal';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { User, FileText, Send, Receipt, Download, Share2, Loader2, Briefcase, ArrowLeft, Edit } from 'lucide-react';
-
+import { User, FileText, Send, Receipt, Download, Share2, Loader2, Briefcase, ArrowLeft, Edit, Camera, Trash2, Image } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils/clipboard';
 import { safeNumber } from '@/lib/utils';
+import { compressImages } from '@/lib/utils/imageCompression';
 
 const QUOTE_STATUSES = ['draft', 'sent', 'viewed', 'accepted', 'declined'] as const;
 
@@ -25,12 +25,78 @@ export default function QuoteDetail() {
   const [lineItems, setLineItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (user && id) {
       fetchQuote();
+      fetchPhotos();
     }
   }, [user, id]);
+
+  const fetchPhotos = async () => {
+    const { data } = await supabase.storage
+      .from('quote-photos')
+      .list(`${id}`, { limit: 20 });
+
+    if (data && data.length > 0) {
+      const urls = data.map(file => {
+        const { data: urlData } = supabase.storage
+          .from('quote-photos')
+          .getPublicUrl(`${id}/${file.name}`);
+        return urlData.publicUrl;
+      });
+      setPhotos(urls);
+    }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || !id) return;
+
+    setUploading(true);
+
+    try {
+      // Compress images before upload to save mobile data
+      const compressedFiles = await compressImages(Array.from(files));
+
+      for (const file of compressedFiles) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+        const filePath = `${id}/${fileName}`;
+
+        const { error } = await supabase.storage
+          .from('quote-photos')
+          .upload(filePath, file);
+
+        if (error) {
+          toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
+        }
+      }
+
+      await fetchPhotos();
+      toast({ title: 'Photos uploaded! 📸' });
+    } catch (error) {
+      toast({ title: 'Compression failed', description: 'Could not process images', variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeletePhoto = async (photoUrl: string) => {
+    const fileName = photoUrl.split('/').pop();
+    if (!fileName || !id) return;
+
+    const { error } = await supabase.storage
+      .from('quote-photos')
+      .remove([`${id}/${fileName}`]);
+
+    if (!error) {
+      setPhotos(photos.filter(p => p !== photoUrl));
+      toast({ title: 'Photo removed' });
+    }
+  };
 
   const fetchQuote = async () => {
     const [quoteRes, itemsRes] = await Promise.all([
@@ -351,6 +417,61 @@ export default function QuoteDetail() {
                 <Send className="w-5 h-5 mr-2" />
                 Mark as Sent & Send to Client
               </Button>
+            )}
+          </div>
+
+          {/* Photo Gallery */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-6 bg-primary rounded-full" />
+                <h3 className="font-bold text-lg">Photos</h3>
+              </div>
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                  disabled={uploading}
+                />
+                <Button size="sm" variant="outline" asChild disabled={uploading} className="rounded-full shadow-sm hover:shadow-glow-sm">
+                  <span>
+                    {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Camera className="w-4 h-4 mr-1 text-primary" />}
+                    Upload
+                  </span>
+                </Button>
+              </label>
+            </div>
+
+            {photos.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {photos.map((photo, index) => (
+                  <div key={index} className="relative aspect-video group overflow-hidden rounded-2xl shadow-sm hover:shadow-premium-lg transition-all duration-300">
+                    <img
+                      src={photo}
+                      alt={`Quote photo ${index + 1}`}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button
+                        onClick={() => handleDeletePhoto(photo)}
+                        className="w-10 h-10 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center transform scale-75 group-hover:scale-100 transition-transform"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center bg-card/80 backdrop-blur-sm rounded-2xl border border-dashed border-border/60">
+                <div className="w-12 h-12 bg-muted/40 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Image className="w-6 h-6 text-muted-foreground/50" />
+                </div>
+                <p className="text-sm text-muted-foreground font-medium">No quote photos yet</p>
+              </div>
             )}
           </div>
 

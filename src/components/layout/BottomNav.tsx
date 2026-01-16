@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
+import { VoiceCommandSheet } from '@/components/VoiceCommandSheet';
 
 export function BottomNav() {
   const location = useLocation();
@@ -48,15 +49,16 @@ export function BottomNav() {
             {/* Deep Glow/Shadow */}
             <div className="absolute inset-0 rounded-full bg-primary/40 blur-2xl animate-pulse-glow" />
 
-            {/* Main Button */}
-            <Button
-              size="icon"
-              className="relative w-16 h-16 rounded-full bg-primary hover:bg-primary-hover shadow-glow-lg transition-all duration-500 hover:scale-110 active:scale-90 border-[4px] border-[#F5F5F5] dark:border-[#121212] group-hover:rotate-3"
-              onClick={() => console.log("Voice FAB clicked")}
-            >
-              <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/20 to-transparent opacity-100" />
-              <Mic className="w-7 h-7 text-primary-foreground drop-shadow-md transition-transform duration-500 group-hover:scale-110 group-active:scale-90" />
-            </Button>
+            {/* Main Button wrapped in VoiceCommandSheet */}
+            <VoiceCommandSheet>
+              <Button
+                size="icon"
+                className="relative w-16 h-16 rounded-full bg-primary hover:bg-primary-hover shadow-glow-lg transition-all duration-500 hover:scale-110 active:scale-90 border-[4px] border-[#F5F5F5] dark:border-[#121212] group-hover:rotate-3"
+              >
+                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/20 to-transparent opacity-100" />
+                <Mic className="w-7 h-7 text-primary-foreground drop-shadow-md transition-transform duration-500 group-hover:scale-110 group-active:scale-90" />
+              </Button>
+            </VoiceCommandSheet>
           </div>
         </div>
 

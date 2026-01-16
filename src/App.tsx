@@ -48,6 +48,9 @@ const TeamSettings = lazy(() => import("./pages/settings/TeamSettings"));
 const PaymentSettings = lazy(() => import("./pages/settings/PaymentSettings"));
 const SubscriptionSettings = lazy(() => import("./pages/settings/SubscriptionSettings"));
 const IntegrationsSettings = lazy(() => import("./pages/settings/IntegrationsSettings"));
+const Subcontractors = lazy(() => import("./pages/Subcontractors"));
+const VoiceWizard = lazy(() => import("./pages/VoiceWizard"));
+const BASReport = lazy(() => import("./pages/BASReport"));
 const PublicQuote = lazy(() => import("./pages/PublicQuote"));
 const PublicInvoice = lazy(() => import("./pages/PublicInvoice"));
 const JoinTeam = lazy(() => import("./pages/JoinTeam"));
@@ -131,7 +134,10 @@ function AppRoutes() {
           <Route path="/settings/team" element={<ProtectedRoute><TeamSettings /></ProtectedRoute>} />
           <Route path="/settings/payments" element={<ProtectedRoute><PaymentSettings /></ProtectedRoute>} />
           <Route path="/settings/subscription" element={<ProtectedRoute><SubscriptionSettings /></ProtectedRoute>} />
+          <Route path="/voice-wizard" element={<ProtectedRoute><VoiceWizard /></ProtectedRoute>} />
           <Route path="/settings/integrations" element={<ProtectedRoute><IntegrationsSettings /></ProtectedRoute>} />
+          <Route path="/settings/subcontractors" element={<ProtectedRoute><Subcontractors /></ProtectedRoute>} />
+          <Route path="/settings/bas-report" element={<ProtectedRoute><BASReport /></ProtectedRoute>} />
           <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
         </Routes>
       </AnimatePresence>

@@ -197,16 +197,7 @@ export default function Dashboard() {
             </p>
 
             {/* Settings Button */}
-            <button
-              onClick={() => navigate('/settings')}
-              className="absolute top-8 right-4 p-2.5 rounded-full bg-card/80 backdrop-blur-sm border border-border/50 hover:bg-card transition-all duration-200 hover:scale-105 active:scale-95"
-            >
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                <span className="text-sm font-bold text-primary">
-                  {(profile?.business_name || 'T')[0].toUpperCase()}
-                </span>
-              </div>
-            </button>
+
           </div>
         </div>
 

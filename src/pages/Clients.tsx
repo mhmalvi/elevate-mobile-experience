@@ -57,14 +57,7 @@ export default function Clients() {
               >
                 <Plus className="w-6 h-6 text-primary-foreground" />
               </button>
-              <button
-                onClick={() => navigate('/settings')}
-                className="p-2.5 rounded-full bg-card/80 backdrop-blur-sm border border-border/50 hover:bg-card transition-all duration-200 hover:scale-105 active:scale-95"
-              >
-                <div className="w-6 h-6 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-primary" />
-                </div>
-              </button>
+
             </div>
           </div>
         </div>
