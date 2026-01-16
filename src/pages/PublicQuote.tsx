@@ -88,19 +88,13 @@ export default function PublicQuote() {
     if (!quote) return;
     setAccepting(true);
 
-    const updateData: any = { 
-      status: 'accepted', 
-      accepted_at: new Date().toISOString() 
-    };
-
-    if (signatureData) {
-      updateData.signature_data = signatureData;
-    }
-
-    const { error } = await supabase
-      .from('quotes')
-      .update(updateData)
-      .eq('id', id);
+    const { error } = await supabase.functions.invoke('accept-quote', {
+      body: {
+        quote_id: id,
+        signature_data: signatureData,
+        status: 'accepted'
+      }
+    });
 
     if (error) {
       toast({ title: 'Error', description: 'Failed to accept quote', variant: 'destructive' });
@@ -252,8 +246,8 @@ export default function PublicQuote() {
                   By signing below, you accept this quote and agree to the terms.
                 </p>
                 <SignaturePad onSave={handleSignatureComplete} />
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full"
                   onClick={() => setShowSignature(false)}
                 >
@@ -262,8 +256,8 @@ export default function PublicQuote() {
               </div>
             ) : (
               <div className="space-y-2">
-                <Button 
-                  onClick={() => setShowSignature(true)} 
+                <Button
+                  onClick={() => setShowSignature(true)}
                   className="w-full h-14 text-lg shadow-premium"
                   disabled={accepting}
                 >
@@ -274,9 +268,9 @@ export default function PublicQuote() {
                   )}
                   Accept Quote with Signature
                 </Button>
-                <Button 
+                <Button
                   variant="outline"
-                  onClick={() => handleAccept()} 
+                  onClick={() => handleAccept()}
                   className="w-full"
                   disabled={accepting}
                 >
@@ -297,9 +291,9 @@ export default function PublicQuote() {
             {quote.signature_data && (
               <div className="mt-4 pt-4 border-t border-success/30">
                 <p className="text-xs text-muted-foreground mb-2">Signature</p>
-                <img 
-                  src={quote.signature_data} 
-                  alt="Customer signature" 
+                <img
+                  src={quote.signature_data}
+                  alt="Customer signature"
                   className="max-w-[200px] h-auto mx-auto bg-background rounded border p-2"
                 />
               </div>

@@ -87,8 +87,36 @@ IMPORTANT RULES FOR ACTIONS:
   "client_name": "Full Name",
   "title": "Job title",
   "description": "What needs to be done",
-  "scheduled_date": "2024-01-20",
+  "scheduled_date": "2024-01-20" (ISO format if possible, or "tomorrow", "next tuesday"),
   "site_address": "Work location"
+}
+
+### Invoice Data (for create_invoice):
+{
+  "client_name": "Full Name",
+  "items": [
+    { "description": "Work description", "quantity": 1, "price": 100.00 }
+  ],
+  "total": 100.00,
+  "due_date": "seven_days" (or specific date)
+}
+
+### Client Data (for create_client):
+{
+  "client_name": "Full Name",
+  "client_phone": "04XXXXXXXX",
+  "client_email": "email@example.com",
+  "client_address": "Full Address"
+}
+
+### Search Data (for find_client):
+{
+  "search_name": "Name to find"
+}
+
+### Job Note Data (for add_job_note):
+{
+  "note": "The content of the note"
 }
 
 ## Australian Speech Patterns to Understand
@@ -113,6 +141,15 @@ User: "Nah that's all"
 → {"speak": "Done! Created a quote for Sarah - $570. Taking you there now.", "action": "create_quote", "data": {"client_name": "Sarah Chen", "items": [{"description": "Install downlights", "quantity": 6, "price": 45}, {"description": "Labour", "quantity": 2, "price": 150}], "total": 570}}
 
 ### Quick Commands:
+User: "Create client Mike Ross 0400111222"
+→ {"speak": "Easy, creating a new client for Mike.", "action": "create_client", "data": {"client_name": "Mike Ross", "client_phone": "0400111222"}}
+
+User: "Schedule a job for tomorrow at 10 to fix the roof for Tom"
+→ {"speak": "Done! Scheduled the roof fix for Tom tomorrow.", "action": "schedule_job", "data": {"title": "Fix the roof", "client_name": "Tom", "scheduled_date": "tomorrow", "description": "Fix the roof"}}
+
+User: "Create invoice for BuildCorp for fencing $5000"
+→ {"speak": "Sweet, generating invoice for BuildCorp.", "action": "create_invoice", "data": {"client_name": "BuildCorp", "total": 5000, "items": [{"description": "Fencing", "price": 5000, "quantity": 1}]}}
+
 User: "Find John Smith"
 → {"speak": "Looking up John Smith for ya...", "action": "find_client", "data": {"search_name": "John Smith"}}
 
