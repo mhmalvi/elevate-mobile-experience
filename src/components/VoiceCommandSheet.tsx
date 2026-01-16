@@ -1,16 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from '@/components/ui/sheet';
 import {
     Mic,
-    MoreHorizontal,
-    FileText,
-    Briefcase,
-    Receipt,
-    Search,
-    StickyNote,
     Sparkles,
-    ChevronRight,
     Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -231,6 +224,9 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             <SheetContent side="bottom" className="rounded-t-[2rem] px-6 pb-10 pt-8 border-t-0 bg-background/95 backdrop-blur-3xl shadow-2xl h-[60vh] flex flex-col items-center">
                 <SheetHeader className="mb-4">
                     <SheetTitle className="hidden">Voice Assistant</SheetTitle>
+                    <SheetDescription className="hidden">
+                        Interactive AI Voice Assistant to help you manage quotes and jobs.
+                    </SheetDescription>
                 </SheetHeader>
 
                 {/* Main Interaction Area */}
