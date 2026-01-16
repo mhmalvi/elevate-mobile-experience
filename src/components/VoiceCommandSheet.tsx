@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from '@/components/ui/sheet';
-import { Mic, MicOff, Sparkles, Loader2, Volume2, CheckCircle, AlertCircle, X, Send, StopCircle, Clock } from 'lucide-react';
+import { Mic, MicOff, Sparkles, Loader2, Volume2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -514,85 +514,99 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                     <SheetDescription>TradieMate AI Voice Assistant</SheetDescription>
                 </SheetHeader>
 
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border/30">
-                    <div className="flex items-center gap-3">
+                {/* Header - Custom Close Button Removed (relies on default SheetClose) */}
+                <div className="flex items-center justify-between px-6 py-6 border-b border-white/10">
+                    <div className="flex items-center gap-4">
                         <div className={cn(
-                            "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
-                            status === 'listening' ? "bg-red-500/20" :
-                                status === 'processing' ? "bg-blue-500/20" :
-                                    status === 'speaking' ? "bg-green-500/20" :
-                                        "bg-primary/20"
+                            "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-500 shadow-lg",
+                            status === 'listening' ? "bg-red-500/20 ring-2 ring-red-500/50 scale-110" :
+                                status === 'processing' ? "bg-blue-500/20 ring-2 ring-blue-500/50 animate-pulse" :
+                                    status === 'speaking' ? "bg-green-500/20 ring-2 ring-green-500/50" :
+                                        "bg-primary/10 ring-1 ring-primary/30"
                         )}>
-                            {status === 'listening' ? <Mic className="w-5 h-5 text-red-500 animate-pulse" /> :
-                                status === 'processing' ? <Loader2 className="w-5 h-5 text-blue-500 animate-spin" /> :
-                                    status === 'speaking' ? <Volume2 className="w-5 h-5 text-green-500 animate-pulse" /> :
-                                        <Sparkles className="w-5 h-5 text-primary" />}
+                            {status === 'listening' ? <Mic className="w-6 h-6 text-red-500 animate-pulse" /> :
+                                status === 'processing' ? <Loader2 className="w-6 h-6 text-blue-500 animate-spin" /> :
+                                    status === 'speaking' ? <Volume2 className="w-6 h-6 text-green-500 animate-bounce" /> :
+                                        <Sparkles className="w-6 h-6 text-primary" />}
                         </div>
                         <div>
-                            <h3 className="font-semibold text-foreground">Matey</h3>
-                            <p className="text-xs text-muted-foreground">
-                                {status === 'listening' ? `Recording ${formatTime(recordingTime)} / ${formatTime(MAX_RECORD_TIME)}` :
+                            <h3 className="font-bold text-lg text-foreground tracking-tight">Matey</h3>
+                            <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider">
+                                {status === 'listening' ? `Listening (${formatTime(recordingTime)})` :
                                     status === 'processing' ? 'Thinking...' :
                                         status === 'speaking' ? 'Speaking...' :
-                                            'Ready to help'}
+                                            'Your Helping Hand'}
                             </p>
                         </div>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="rounded-full">
-                        <X className="w-5 h-5" />
-                    </Button>
                 </div>
 
                 {/* Chat Area */}
-                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-                    {/* AI Message */}
-                    <div className="flex gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                            <Sparkles className="w-4 h-4 text-primary" />
+                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8 bg-gradient-to-b from-transparent to-background/50">
+                    {/* AI Message - Left Side */}
+                    <div className="flex gap-4 animate-in slide-in-from-left-5 duration-500">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shrink-0 shadow-md transform translate-y-2">
+                            <Sparkles className="w-5 h-5 text-white" />
                         </div>
                         <div className={cn(
-                            "flex-1 p-4 rounded-2xl rounded-tl-sm",
-                            status === 'success' ? "bg-green-500/10 border border-green-500/20" :
-                                status === 'error' ? "bg-red-500/10 border border-red-500/20" :
-                                    "bg-muted/50"
+                            "flex-1 p-5 rounded-2xl rounded-tl-none shadow-sm backdrop-blur-sm transition-all duration-300",
+                            status === 'success' ? "bg-green-500/10 border border-green-500/30" :
+                                status === 'error' ? "bg-red-500/10 border border-red-500/30" :
+                                    "bg-card/80 border border-border/50"
                         )}>
                             <p className={cn(
-                                "text-base leading-relaxed",
+                                "text-lg leading-relaxed font-medium",
                                 status === 'success' ? "text-green-700 dark:text-green-300" :
                                     status === 'error' ? "text-red-700 dark:text-red-300" :
                                         "text-foreground"
                             )}>
-                                {aiMessage || "G'day! What can I help you with?"}
+                                {aiMessage || "G'day! I'm Matey. Need a hand with a quote, invoice, or job today?"}
                             </p>
                         </div>
                     </div>
 
-                    {/* User Transcript (while recording) */}
+                    {/* User Transcript - Right Side */}
                     {(transcript || fullTranscript) && (
-                        <div className="flex gap-3 justify-end animate-fade-in">
-                            <div className="flex-1 max-w-[85%] p-4 rounded-2xl rounded-tr-sm bg-primary text-primary-foreground">
-                                <p className="text-base leading-relaxed">
-                                    {fullTranscript}{transcript && <span className="opacity-70">{transcript}</span>}
+                        <div className="flex gap-4 justify-end animate-in slide-in-from-right-5 duration-300">
+                            <div className="flex-1 max-w-[85%] p-5 rounded-2xl rounded-tr-none bg-gradient-to-br from-primary to-primary/90 text-primary-foreground shadow-md">
+                                <p className="text-lg leading-relaxed">
+                                    {fullTranscript}<span className="opacity-70 animate-pulse">{transcript}</span>
                                 </p>
+                            </div>
+                            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0 shadow-sm border border-border transform translate-y-2">
+                                <div className="w-5 h-5 rounded-full bg-foreground/20" />
                             </div>
                         </div>
                     )}
 
                     {/* Quick Suggestions (when idle) */}
                     {status === 'idle' && !transcript && !fullTranscript && conversationHistory.length === 0 && (
-                        <div className="space-y-3 pt-4">
-                            <p className="text-sm text-muted-foreground text-center">Try saying:</p>
-                            <div className="flex flex-wrap justify-center gap-2">
+                        <div className="space-y-6 pt-8 animate-in fade-in duration-700 delay-200">
+                            <p className="text-sm font-medium text-muted-foreground text-center uppercase tracking-widest opacity-70">
+                                I can help you with
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
                                 {[
-                                    "Create a quote for...",
-                                    "Add a new client",
-                                    "Schedule a job for tomorrow",
-                                    "Find client John Smith"
+                                    "Create a new quote",
+                                    "Add a client",
+                                    "Search for John",
+                                    "New Invoice ($500)"
                                 ].map((hint) => (
-                                    <span key={hint} className="px-3 py-1.5 text-xs bg-muted/50 rounded-full text-muted-foreground">
-                                        "{hint}"
-                                    </span>
+                                    <button
+                                        key={hint}
+                                        onClick={() => {
+                                            const command = hint.replace(" ($500)", "").replace("Search for", "Find");
+                                            setTranscript(command);
+                                            setTimeout(() => {
+                                                // Simulate user sending it
+                                                // We'd need to expose startWithText or just direct handle
+                                                // For now just filling input is okay, but user has to tap mic.
+                                            }, 100);
+                                        }}
+                                        className="px-4 py-3 text-sm font-medium bg-card/50 hover:bg-primary/5 border border-border/50 hover:border-primary/30 rounded-xl transition-all hover:scale-105 hover:shadow-sm text-center"
+                                    >
+                                        {hint}
+                                    </button>
                                 ))}
                             </div>
                         </div>
@@ -600,57 +614,56 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 </div>
 
                 {/* Controls */}
-                <div className="border-t border-border/30 bg-background/80 backdrop-blur px-6 py-5">
-                    <div className="flex items-center justify-center gap-4">
+                <div className="border-t border-border/10 bg-background/60 backdrop-blur-xl px-6 py-8 pb-10">
+                    <div className="flex items-center justify-center gap-6">
                         {status === 'listening' ? (
                             <>
-                                {/* Stop Recording */}
                                 <Button
                                     variant="outline"
                                     size="lg"
                                     onClick={stopRecording}
-                                    className="rounded-full h-14 px-6 gap-2"
+                                    className="rounded-full h-16 px-8 gap-2 border-2 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors"
                                 >
                                     <MicOff className="w-5 h-5" />
                                     Cancel
                                 </Button>
 
-                                {/* Send Button */}
                                 <Button
                                     size="lg"
                                     onClick={sendMessage}
                                     disabled={!transcript && !fullTranscript}
-                                    className="rounded-full h-14 w-14 p-0 bg-primary shadow-xl hover:scale-105 transition-transform"
+                                    className="rounded-full h-16 w-16 p-0 bg-primary shadow-lg shadow-primary/25 hover:scale-110 transition-transform hover:shadow-xl"
                                 >
-                                    <Send className="w-6 h-6" />
+                                    <Send className="w-6 h-6 ml-0.5" />
                                 </Button>
                             </>
                         ) : status === 'processing' || status === 'speaking' ? (
-                            <div className="flex items-center gap-3 text-muted-foreground">
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                <span>{status === 'processing' ? 'Processing...' : 'Speaking...'}</span>
+                            <div className="flex flex-col items-center gap-2 text-muted-foreground animate-pulse">
+                                <div className="h-16 w-16 rounded-full border-2 border-primary/20 border-t-primary flex items-center justify-center animate-spin">
+                                    <Sparkles className="w-6 h-6 text-primary" />
+                                </div>
                             </div>
                         ) : (
-                            /* Main Mic Button */
                             <Button
                                 size="lg"
                                 onClick={startRecording}
                                 className={cn(
-                                    "rounded-full h-20 w-20 p-0 shadow-2xl transition-all duration-300",
-                                    "bg-gradient-to-br from-primary to-primary/80 hover:scale-105",
-                                    "border-4 border-background"
+                                    "rounded-full h-24 w-24 p-0 shadow-2xl transition-all duration-300 group relative",
+                                    "bg-gradient-to-b from-primary to-primary/90 hover:scale-105 active:scale-95",
+                                    "border-[6px] border-background ring-1 ring-border"
                                 )}
                             >
-                                <Mic className="w-8 h-8 text-primary-foreground" />
+                                <div className="absolute inset-0 rounded-full bg-white/20 animate-ping opacity-0 group-hover:opacity-20" />
+                                <Mic className="w-10 h-10 text-primary-foreground drop-shadow-md" />
                             </Button>
                         )}
                     </div>
 
                     {/* Helper Text */}
-                    <p className="text-center text-xs text-muted-foreground mt-4">
+                    <p className="text-center text-xs font-medium text-muted-foreground/70 mt-6 tracking-wide">
                         {status === 'listening'
-                            ? "Speak naturally. Tap ➤ when done."
-                            : "Tap the mic and speak your command"}
+                            ? "Speak naturally. Tap the send button when done."
+                            : "Tap the mic to start speaking"}
                     </p>
                 </div>
             </SheetContent>
