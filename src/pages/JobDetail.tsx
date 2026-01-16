@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Timer } from '@/components/ui/timer';
+import { VoiceRecorder } from '@/components/ui/voice-recorder';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn, safeNumber } from '@/lib/utils';
+import { compressImages } from '@/lib/utils/imageCompression';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,11 +40,13 @@ export default function JobDetail() {
   const [savingMaterials, setSavingMaterials] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [voiceNotes, setVoiceNotes] = useState<{ url: string; duration: number; name: string }[]>([]);
 
   useEffect(() => {
     if (user && id) {
       fetchJob();
       fetchPhotos();
+      fetchVoiceNotes();
     }
   }, [user, id]);
 
@@ -79,23 +83,85 @@ export default function JobDetail() {
 
     setUploading(true);
 
-    for (const file of Array.from(files)) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
-      const filePath = `${id}/${fileName}`;
+    try {
+      // Compress images before upload to save mobile data
+      const compressedFiles = await compressImages(Array.from(files));
 
-      const { error } = await supabase.storage
-        .from('job-photos')
-        .upload(filePath, file);
+      for (const file of compressedFiles) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+        const filePath = `${id}/${fileName}`;
 
-      if (error) {
-        toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
+        const { error } = await supabase.storage
+          .from('job-photos')
+          .upload(filePath, file);
+
+        if (error) {
+          toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
+        }
       }
+
+      await fetchPhotos();
+      toast({ title: 'Photos uploaded! 📸' });
+    } catch (error) {
+      toast({ title: 'Compression failed', description: 'Could not process images', variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const fetchVoiceNotes = async () => {
+    const { data } = await supabase.storage
+      .from('job-voice-notes')
+      .list(`${id}`, { limit: 20 });
+
+    if (data && data.length > 0) {
+      const notes = data.map(file => {
+        const { data: urlData } = supabase.storage
+          .from('job-voice-notes')
+          .getPublicUrl(`${id}/${file.name}`);
+        // Extract duration from filename if stored (format: timestamp-duration.webm)
+        const durationMatch = file.name.match(/-(\d+)\.webm$/);
+        return {
+          url: urlData.publicUrl,
+          duration: durationMatch ? parseInt(durationMatch[1]) : 0,
+          name: file.name,
+        };
+      });
+      setVoiceNotes(notes);
+    }
+  };
+
+  const handleSaveVoiceNote = async (audioBlob: Blob, duration: number) => {
+    if (!id) return;
+
+    const fileName = `${Date.now()}-${duration}.webm`;
+    const filePath = `${id}/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from('job-voice-notes')
+      .upload(filePath, audioBlob, { contentType: 'audio/webm' });
+
+    if (error) {
+      toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
+      throw error;
     }
 
-    await fetchPhotos();
-    toast({ title: 'Photos uploaded! 📸' });
-    setUploading(false);
+    await fetchVoiceNotes();
+    toast({ title: 'Voice note saved! 🎙️' });
+  };
+
+  const handleDeleteVoiceNote = async (name: string) => {
+    if (!id) return;
+
+    const { error } = await supabase.storage
+      .from('job-voice-notes')
+      .remove([`${id}/${name}`]);
+
+    if (!error) {
+      setVoiceNotes(voiceNotes.filter(n => n.name !== name));
+      toast({ title: 'Voice note removed' });
+    }
   };
 
   const handleDeletePhoto = async (photoUrl: string) => {
@@ -384,7 +450,7 @@ export default function JobDetail() {
                 style={{ border: 0 }}
                 loading="lazy"
                 referrerPolicy="no-referrer-when-downgrade"
-                src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(job.site_address)}`}
+                src={`https://maps.google.com/maps?q=${encodeURIComponent(job.site_address)}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
               />
             </div>
           )}
@@ -440,6 +506,39 @@ export default function JobDetail() {
                   <Image className="w-6 h-6 text-muted-foreground/50" />
                 </div>
                 <p className="text-sm text-muted-foreground font-medium">No job site photos yet</p>
+              </div>
+            )}
+          </div>
+
+          {/* Voice Notes Section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <div className="w-1.5 h-6 bg-primary rounded-full" />
+              <h3 className="font-bold text-lg">Voice Notes</h3>
+            </div>
+
+            <VoiceRecorder onSave={handleSaveVoiceNote} />
+
+            {voiceNotes.length > 0 && (
+              <div className="space-y-2">
+                {voiceNotes.map((note, index) => (
+                  <div
+                    key={note.name}
+                    className="flex items-center gap-3 p-3 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 animate-fade-in"
+                    style={{ animationDelay: `${index * 0.05}s` }}
+                  >
+                    <audio controls src={note.url} className="flex-1 h-10" />
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {Math.floor(note.duration / 60)}:{(note.duration % 60).toString().padStart(2, '0')}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteVoiceNote(note.name)}
+                      className="p-2 text-destructive/60 hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>

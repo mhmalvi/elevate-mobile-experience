@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { ArrowLeft, Plus, CircleUser } from 'lucide-react';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -9,7 +9,6 @@ interface PageHeaderProps {
   subtitle?: string;
   showBack?: boolean;
   backPath?: string;
-  showSettings?: boolean;
   action?: {
     label: string;
     onClick: () => void;
@@ -23,7 +22,6 @@ export function PageHeader({
   subtitle,
   showBack,
   backPath,
-  showSettings,
   action,
   className
 }: PageHeaderProps) {
@@ -55,16 +53,7 @@ export function PageHeader({
         </div>
 
         <div className="flex items-center gap-3">
-          {showSettings && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate('/settings')}
-              className="shrink-0 hover:bg-primary/10 active:scale-95 transition-all duration-200 w-10 h-10"
-            >
-              <CircleUser className="w-7 h-7 text-muted-foreground hover:text-foreground transition-colors" />
-            </Button>
-          )}
+
 
           {action && (
             <Button
