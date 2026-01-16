@@ -50,7 +50,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (SpeechRecognition) {
                 const recognition = new SpeechRecognition();
-                recognition.continuous = false; // Stop after one sentence to process
+                recognition.continuous = true; // Keep listening until manual stop or long silence
                 recognition.interimResults = true;
                 recognition.lang = 'en-AU'; // Aussie Accent Support
 
@@ -114,7 +114,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             timer = setTimeout(() => {
                 stopListening();
                 handleAiProcess(transcript);
-            }, 1500); // 1.5s silence -> send
+            }, 3000); // 3s silence -> send
         }
         return () => clearTimeout(timer);
     }, [transcript, status]);

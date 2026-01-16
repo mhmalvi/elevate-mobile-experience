@@ -79,7 +79,17 @@ serve(async (req) => {
             })
         });
 
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`OpenRouter API Error: ${response.status} ${errText}`);
+        }
+
         const data = await response.json();
+
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error('Invalid OpenRouter Response format');
+        }
+
         const aiResponse = JSON.parse(data.choices[0].message.content);
 
         return new Response(JSON.stringify(aiResponse), {
@@ -88,12 +98,15 @@ serve(async (req) => {
 
     } catch (error) {
         console.error("AI Processing Error:", error);
-        // Fallback for demo if API fails
+
+        // Safer Fallback - Don't create junk data
         const fallback = {
-            speak: "I'm having trouble connecting to my brain. Let me draft a blank quote for you.",
-            action: "create_quote",
-            data: { client_name: "Unknown Client", items: [] }
+            speak: "I'm having trouble understanding. Could you please repeat that?",
+            action: "ask_details",
+            data: {},
+            error: error.message
         };
+
         return new Response(JSON.stringify(fallback), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
