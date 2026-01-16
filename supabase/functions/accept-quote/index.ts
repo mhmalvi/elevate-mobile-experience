@@ -21,20 +21,42 @@ serve(async (req) => {
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         );
 
-        const { quote_id, signature_data, status } = await req.json();
+        const { quote_id, signature_data, status, action } = await req.json();
 
         if (!quote_id) throw new Error('Quote ID is required');
 
-        console.log(`Accepting quote: ${quote_id}`);
+        console.log(`Processing quote action: ${action || 'accept'} for ${quote_id}`);
 
-        // Prepare update data
-        const updateData: any = {
-            status: status || 'accepted',
-            accepted_at: new Date().toISOString()
-        };
+        let updateData: any = {};
 
-        if (signature_data) {
-            updateData.signature_data = signature_data;
+        if (action === 'view') {
+            updateData = {
+                viewed_at: new Date().toISOString(),
+                // Only set status to 'viewed' if it was 'sent'
+                // We use a raw query check or just blind update? 
+                // Let's just update viewed_at. Status logic is complex without fetching first.
+                // But we have service role, so we can fetch first.
+            };
+
+            // Fetch current status first
+            const { data: currentQuote } = await supabase
+                .from('quotes')
+                .select('status')
+                .eq('id', quote_id)
+                .single();
+
+            if (currentQuote && currentQuote.status === 'sent') {
+                updateData.status = 'viewed';
+            }
+        } else {
+            // Default to accept logic
+            updateData = {
+                status: status || 'accepted',
+                accepted_at: new Date().toISOString()
+            };
+            if (signature_data) {
+                updateData.signature_data = signature_data;
+            }
         }
 
         // Perform update via Service Role (bypassing RLS)

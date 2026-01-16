@@ -41,15 +41,17 @@ export default function PublicQuote() {
 
       setQuote(quoteData);
 
-      // Mark as viewed (silently fails for anonymous users due to RLS - that's OK)
-      if (!quoteData.viewed_at) {
+      // Mark as viewed via Edge Function to bypass RLS
+      if (!quoteData.viewed_at && quoteData.status !== 'accepted' && quoteData.status !== 'declined') {
         try {
-          await supabase
-            .from('quotes')
-            .update({ viewed_at: new Date().toISOString(), status: quoteData.status === 'sent' ? 'viewed' : quoteData.status })
-            .eq('id', id);
+          await supabase.functions.invoke('accept-quote', {
+            body: {
+              quote_id: id,
+              action: 'view'
+            }
+          });
         } catch {
-          // Silently ignore - anonymous users can't update, but can view
+          // Ignore failures
         }
       }
 
