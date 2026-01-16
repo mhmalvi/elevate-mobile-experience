@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from '@/components/ui/sheet';
-import { Mic, Sparkles, Loader2, Volume2, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Mic, MicOff, Sparkles, Loader2, Volume2, CheckCircle, AlertCircle, X, Send, StopCircle, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -12,7 +12,6 @@ interface VoiceCommandSheetProps {
     children: React.ReactNode;
 }
 
-// Web Speech API Types
 declare global {
     interface Window {
         SpeechRecognition: any;
@@ -20,34 +19,24 @@ declare global {
     }
 }
 
-// Get best Australian female voice
+// Premium Australian voice selection
 const getAussieVoice = (): SpeechSynthesisVoice | null => {
     const voices = window.speechSynthesis.getVoices();
-    // Priority: Australian English Female
-    const aussieFemalePriority = [
-        'Karen', 'Catherine', 'Tessa', 'Moira', // iOS/macOS Aussie voices
-        'en-AU', 'en_AU', // General Australian
-        'Google UK English Female', // Fallback
-    ];
+    const priority = ['Karen', 'Catherine', 'Tessa', 'Moira', 'Samantha', 'Victoria'];
 
-    for (const pref of aussieFemalePriority) {
-        const found = voices.find(v =>
-            v.name.includes(pref) || v.lang.includes(pref)
-        );
+    for (const name of priority) {
+        const found = voices.find(v => v.name.includes(name));
         if (found) return found;
     }
 
-    // Fallback to any female-sounding English voice
-    return voices.find(v =>
-        v.lang.startsWith('en') &&
-        (v.name.toLowerCase().includes('female') ||
-            v.name.includes('Samantha') ||
-            v.name.includes('Victoria') ||
-            v.name.includes('Google'))
-    ) || voices.find(v => v.lang.startsWith('en')) || null;
+    return voices.find(v => v.lang.includes('en-AU')) ||
+        voices.find(v => v.lang.includes('en-GB') && v.name.toLowerCase().includes('female')) ||
+        voices.find(v => v.lang.startsWith('en')) || null;
 };
 
-type VoiceStatus = 'ready' | 'listening' | 'processing' | 'speaking' | 'success' | 'error';
+type VoiceStatus = 'idle' | 'listening' | 'processing' | 'speaking' | 'success' | 'error';
+
+const MAX_RECORD_TIME = 120; // 2 minutes max
 
 export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     const navigate = useNavigate();
@@ -55,250 +44,266 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     const { user } = useAuth();
     const [open, setOpen] = useState(false);
 
-    // Conversation State
-    const [status, setStatus] = useState<VoiceStatus>('ready');
+    // Core State
+    const [status, setStatus] = useState<VoiceStatus>('idle');
     const [transcript, setTranscript] = useState('');
-    const [displayMessage, setDisplayMessage] = useState('');
-    const [history, setHistory] = useState<any[]>([]);
+    const [fullTranscript, setFullTranscript] = useState(''); // Accumulated transcript
+    const [aiMessage, setAiMessage] = useState('');
+    const [recordingTime, setRecordingTime] = useState(0);
+
+    // Conversation Context
+    const [conversationHistory, setConversationHistory] = useState<any[]>([]);
     const [accumulatedData, setAccumulatedData] = useState<any>({});
+
     const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
 
+    // Refs
     const recognitionRef = useRef<any>(null);
-    const silenceTimerRef = useRef<any>(null);
+    const timerRef = useRef<any>(null);
 
     // Load voices
     useEffect(() => {
-        const loadVoices = () => {
-            const voice = getAussieVoice();
-            setSelectedVoice(voice);
-        };
-
+        const loadVoices = () => setSelectedVoice(getAussieVoice());
         loadVoices();
         window.speechSynthesis.onvoiceschanged = loadVoices;
-
-        return () => {
-            window.speechSynthesis.onvoiceschanged = null;
-        };
+        return () => { window.speechSynthesis.onvoiceschanged = null; };
     }, []);
 
-    // Initialize on open
+    // Handle sheet open/close
     useEffect(() => {
         if (open) {
-            setStatus('ready');
-            setTranscript('');
-            setDisplayMessage("G'day! What can I help you with?");
-            setHistory([]);
-
-            // Speak greeting
-            setTimeout(() => {
-                speakText("G'day! What can I help you with?", false);
-            }, 300);
-
-            initRecognition();
+            resetConversation();
+            setAiMessage("G'day mate! What can I help you with today?");
+            setTimeout(() => speak("G'day! What can I help you with?", false), 500);
         } else {
             cleanup();
         }
-
-        return () => cleanup();
     }, [open]);
 
+    // Recording timer
+    useEffect(() => {
+        if (status === 'listening') {
+            timerRef.current = setInterval(() => {
+                setRecordingTime(prev => {
+                    if (prev >= MAX_RECORD_TIME) {
+                        stopRecording();
+                        return prev;
+                    }
+                    return prev + 1;
+                });
+            }, 1000);
+        } else {
+            if (timerRef.current) clearInterval(timerRef.current);
+            setRecordingTime(0);
+        }
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    }, [status]);
+
     const cleanup = () => {
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
         if (recognitionRef.current) {
             try { recognitionRef.current.stop(); } catch (e) { }
         }
+        if (timerRef.current) clearInterval(timerRef.current);
         window.speechSynthesis.cancel();
     };
 
-    const initRecognition = () => {
+    const resetConversation = () => {
+        setStatus('idle');
+        setTranscript('');
+        setFullTranscript('');
+        setConversationHistory([]);
+        setAccumulatedData({});
+        setRecordingTime(0);
+    };
+
+    const startRecording = useCallback(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return;
+        if (!SpeechRecognition) {
+            toast({ title: "Voice not supported", description: "Use Chrome or Safari", variant: "destructive" });
+            return;
+        }
 
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = 'en-AU';
+        recognition.maxAlternatives = 1;
 
-        recognition.onstart = () => setStatus('listening');
+        recognition.onstart = () => {
+            setStatus('listening');
+            setTranscript('');
+        };
 
         recognition.onresult = (event: any) => {
-            let finalTranscript = '';
-            let interimTranscript = '';
+            let interim = '';
+            let final = '';
 
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                const t = event.results[i][0].transcript;
-                if (event.results[i].isFinal) {
-                    finalTranscript += t;
+            for (let i = 0; i < event.results.length; i++) {
+                const result = event.results[i];
+                if (result.isFinal) {
+                    final += result[0].transcript + ' ';
                 } else {
-                    interimTranscript += t;
+                    interim += result[0].transcript;
                 }
             }
 
-            const currentText = finalTranscript || interimTranscript;
-            setTranscript(currentText);
-
-            // Reset silence timer on speech
-            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-
-            // If we have final transcript, start silence timer
-            if (finalTranscript || currentText.length > 5) {
-                silenceTimerRef.current = setTimeout(() => {
-                    stopListening();
-                    processCommand(currentText);
-                }, 4000); // 4s of silence - gives user time to think
+            setTranscript(interim);
+            if (final) {
+                setFullTranscript(prev => prev + final);
             }
         };
 
         recognition.onerror = (event: any) => {
             console.error('Speech error:', event.error);
-            if (event.error === 'no-speech') {
-                setDisplayMessage("I didn't hear anything. Tap to try again.");
-                setStatus('ready');
+            if (event.error !== 'no-speech' && event.error !== 'aborted') {
+                setStatus('error');
+                setAiMessage('Voice input error. Please try again.');
             }
         };
 
         recognition.onend = () => {
-            // Only set to ready if we're not processing
-            if (status === 'listening') {
-                if (transcript.length > 2) {
-                    processCommand(transcript);
-                } else {
-                    setStatus('ready');
-                }
+            // Only process if we have content and were actively listening
+            if (status === 'listening' && (fullTranscript || transcript)) {
+                // Don't auto-process, let user click "Send"
             }
         };
 
         recognitionRef.current = recognition;
-    };
+        recognition.start();
+    }, [status, fullTranscript, transcript]);
 
-    const startListening = useCallback(() => {
-        if (!recognitionRef.current) initRecognition();
-
-        try {
-            recognitionRef.current?.start();
-            setStatus('listening');
-            setTranscript('');
-            setDisplayMessage('Listening...');
-        } catch (e) {
-            // Already started, just update state
-            setStatus('listening');
+    const stopRecording = useCallback(() => {
+        if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch (e) { }
         }
+        setStatus('idle');
     }, []);
 
-    const stopListening = useCallback(() => {
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        try { recognitionRef.current?.stop(); } catch (e) { }
-    }, []);
+    const sendMessage = useCallback(async () => {
+        const messageText = (fullTranscript + transcript).trim();
 
-    const speakText = useCallback((text: string, autoListen: boolean) => {
-        window.speechSynthesis.cancel();
-
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.95; // Slightly slower for clarity
-        utterance.pitch = 1.1; // Slightly higher for friendliness
-        utterance.volume = 1.0;
-
-        if (selectedVoice) {
-            utterance.voice = selectedVoice;
-        }
-
-        utterance.onstart = () => setStatus('speaking');
-
-        utterance.onend = () => {
-            if (autoListen && open) {
-                setTimeout(() => startListening(), 300);
-            } else {
-                setStatus('ready');
-            }
-        };
-
-        window.speechSynthesis.speak(utterance);
-    }, [selectedVoice, open, startListening]);
-
-    const processCommand = async (text: string) => {
-        if (!text.trim()) {
-            setDisplayMessage("I didn't catch that. Try again?");
-            setStatus('ready');
+        if (!messageText) {
+            setAiMessage("I didn't hear anything. Please try again.");
             return;
         }
 
+        stopRecording();
         setStatus('processing');
-        setDisplayMessage('Processing...');
+        setAiMessage('Processing...');
 
         try {
             const { data, error } = await supabase.functions.invoke('process-voice-command', {
                 body: {
-                    query: text,
-                    conversationHistory: history,
+                    query: messageText,
+                    conversationHistory: conversationHistory,
                     accumulatedData: accumulatedData
                 }
             });
 
             if (error) throw error;
 
-            const { speak, action, data: actionData } = data;
+            const { speak: response, action, data: responseData } = data;
 
-            // Update history
-            setHistory(prev => [
+            // Update conversation history
+            setConversationHistory(prev => [
                 ...prev,
-                { role: 'user', content: text },
-                { role: 'assistant', content: JSON.stringify(data) }
+                { role: 'user', content: messageText },
+                { role: 'assistant', content: response }
             ]);
 
-            setDisplayMessage(speak);
-
-            // Update accumulated data from AI response
-            if (actionData) {
-                setAccumulatedData(prev => ({ ...prev, ...actionData }));
+            // Merge accumulated data
+            if (responseData) {
+                setAccumulatedData(prev => ({ ...prev, ...responseData }));
             }
 
-            if (action === 'create_quote' && actionData) {
-                setStatus('success');
-                speakText(speak, false);
+            // Clear transcript for next input
+            setTranscript('');
+            setFullTranscript('');
 
-                // Create and navigate after speaking
-                setTimeout(async () => {
-                    await createQuoteAndNavigate(actionData);
-                }, 2500);
+            // Display and speak response
+            setAiMessage(response);
 
-            } else if (action === 'ask_details') {
-                // Continue conversation
-                speakText(speak, true);
-
-            } else {
-                // General reply
-                speakText(speak, false);
-            }
+            // Handle different actions
+            await handleAction(action, { ...accumulatedData, ...responseData }, response);
 
         } catch (err) {
-            console.error('Voice processing error:', err);
+            console.error('Voice AI error:', err);
             setStatus('error');
-            setDisplayMessage("Sorry, something went wrong. Let's try again.");
-            speakText("Sorry, I had trouble understanding. Could you repeat that?", true);
+            setAiMessage("Something went wrong. Let's try again.");
+            speak("Sorry, I had trouble with that. Could you try again?", true);
+        }
+    }, [fullTranscript, transcript, conversationHistory, accumulatedData]);
+
+    const handleAction = async (action: string, data: any, responseText: string) => {
+        switch (action) {
+            case 'create_quote':
+                setStatus('success');
+                speak(responseText, false);
+                setTimeout(() => createQuote(data), 2500);
+                break;
+
+            case 'create_invoice':
+                setStatus('success');
+                speak(responseText, false);
+                setTimeout(() => createInvoice(data), 2500);
+                break;
+
+            case 'create_client':
+                setStatus('success');
+                speak(responseText, false);
+                setTimeout(() => createClient(data), 2500);
+                break;
+
+            case 'schedule_job':
+                setStatus('success');
+                speak(responseText, false);
+                setTimeout(() => createJob(data), 2500);
+                break;
+
+            case 'find_client':
+                speak(responseText, false);
+                setTimeout(() => {
+                    setOpen(false);
+                    navigate(`/clients?search=${encodeURIComponent(data.search_name || '')}`);
+                }, 2000);
+                break;
+
+            case 'navigate':
+                speak(responseText, false);
+                setTimeout(() => {
+                    setOpen(false);
+                    if (data.destination) navigate(data.destination);
+                }, 2000);
+                break;
+
+            case 'ask_details':
+            default:
+                // Continue conversation
+                speak(responseText, true);
+                break;
         }
     };
 
-    const createQuoteAndNavigate = async (quoteData: any) => {
+    const createQuote = async (data: any) => {
         if (!user) return;
-
         try {
             const { data: quote, error } = await supabase
                 .from('quotes')
                 .insert({
                     user_id: user.id,
-                    quote_number: `Q-AI-${Date.now().toString().slice(-4)}`,
-                    title: quoteData.client_name ? `Quote for ${quoteData.client_name}` : 'Voice Quote',
+                    quote_number: `Q-${Date.now().toString().slice(-6)}`,
+                    title: data.client_name ? `Quote for ${data.client_name}` : 'Voice Quote',
                     status: 'draft',
-                    total: quoteData.total || 0,
+                    total: data.total || 0,
                     valid_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
                 })
                 .select()
                 .single();
 
-            if (quote && quoteData.items?.length > 0) {
-                const items = quoteData.items.map((item: any) => ({
+            if (quote && data.items?.length > 0) {
+                const items = data.items.map((item: any) => ({
                     quote_id: quote.id,
-                    description: item.description,
+                    description: item.description || 'Service',
                     quantity: item.quantity || 1,
                     unit_price: item.price || 0,
                     total: (item.quantity || 1) * (item.price || 0)
@@ -308,172 +313,273 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
 
             if (quote) {
                 setOpen(false);
-                toast({ title: "Quote Created! ✨", description: `$${quoteData.total || 0} for ${quoteData.client_name || 'Client'}` });
+                toast({ title: "Quote Created! ✨", description: `$${data.total || 0}` });
                 navigate(`/quotes/${quote.id}`);
             }
         } catch (err) {
-            console.error('Quote creation error:', err);
-            toast({ title: "Couldn't create quote", variant: "destructive" });
+            console.error('Create quote error:', err);
+            toast({ title: "Failed to create quote", variant: "destructive" });
         }
     };
 
-    const getStatusIcon = () => {
-        switch (status) {
-            case 'listening':
-                return <Mic className="w-12 h-12 text-red-500 animate-pulse" />;
-            case 'processing':
-                return <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />;
-            case 'speaking':
-                return <Volume2 className="w-12 h-12 text-green-500 animate-pulse" />;
-            case 'success':
-                return <CheckCircle className="w-12 h-12 text-green-500" />;
-            case 'error':
-                return <AlertCircle className="w-12 h-12 text-red-500" />;
-            default:
-                return <Mic className="w-12 h-12 text-primary" />;
-        }
-    };
+    const createInvoice = async (data: any) => {
+        if (!user) return;
+        try {
+            const { data: invoice, error } = await supabase
+                .from('invoices')
+                .insert({
+                    user_id: user.id,
+                    invoice_number: `INV-${Date.now().toString().slice(-6)}`,
+                    title: data.client_name ? `Invoice for ${data.client_name}` : 'Voice Invoice',
+                    status: 'draft',
+                    total: data.total || 0,
+                })
+                .select()
+                .single();
 
-    const getOrbStyles = () => {
-        const base = "w-28 h-28 rounded-full flex items-center justify-center transition-all duration-500 cursor-pointer";
-        switch (status) {
-            case 'listening':
-                return cn(base, "bg-red-500/20 shadow-[0_0_60px_rgba(239,68,68,0.5)] scale-110 border-4 border-red-500/50 animate-pulse");
-            case 'processing':
-                return cn(base, "bg-blue-500/20 shadow-[0_0_50px_rgba(59,130,246,0.4)] border-4 border-blue-500/50");
-            case 'speaking':
-                return cn(base, "bg-green-500/20 shadow-[0_0_50px_rgba(34,197,94,0.4)] border-4 border-green-500/50 animate-pulse");
-            case 'success':
-                return cn(base, "bg-green-500/30 shadow-[0_0_60px_rgba(34,197,94,0.5)] border-4 border-green-500");
-            case 'error':
-                return cn(base, "bg-red-500/20 shadow-[0_0_40px_rgba(239,68,68,0.3)] border-4 border-red-500/50");
-            default:
-                return cn(base, "bg-primary/20 shadow-[0_0_30px_rgba(var(--primary),0.3)] border-4 border-primary/30 hover:scale-105 hover:shadow-[0_0_50px_rgba(var(--primary),0.4)]");
-        }
-    };
-
-    const handleOrbClick = () => {
-        if (status === 'ready' || status === 'error') {
-            startListening();
-        } else if (status === 'listening') {
-            stopListening();
-            if (transcript.length > 2) {
-                processCommand(transcript);
-            } else {
-                setStatus('ready');
-                setDisplayMessage("Tap to try again");
+            if (invoice) {
+                setOpen(false);
+                toast({ title: "Invoice Created! 💰" });
+                navigate(`/invoices/${invoice.id}`);
             }
+        } catch (err) {
+            console.error('Create invoice error:', err);
+            toast({ title: "Failed to create invoice", variant: "destructive" });
         }
+    };
+
+    const createClient = async (data: any) => {
+        if (!user) return;
+        try {
+            const { data: client, error } = await supabase
+                .from('clients')
+                .insert({
+                    user_id: user.id,
+                    name: data.client_name || 'New Client',
+                    phone: data.client_phone || null,
+                    email: data.client_email || null,
+                    address: data.client_address || null,
+                })
+                .select()
+                .single();
+
+            if (client) {
+                setOpen(false);
+                toast({ title: "Client Added! 👤" });
+                navigate(`/clients/${client.id}`);
+            }
+        } catch (err) {
+            console.error('Create client error:', err);
+            toast({ title: "Failed to add client", variant: "destructive" });
+        }
+    };
+
+    const createJob = async (data: any) => {
+        if (!user) return;
+        try {
+            const { data: job, error } = await supabase
+                .from('jobs')
+                .insert({
+                    user_id: user.id,
+                    title: data.title || 'New Job',
+                    description: data.description || '',
+                    status: 'scheduled',
+                    scheduled_date: data.scheduled_date || new Date().toISOString(),
+                    site_address: data.site_address || data.client_address || '',
+                })
+                .select()
+                .single();
+
+            if (job) {
+                setOpen(false);
+                toast({ title: "Job Scheduled! 📅" });
+                navigate(`/jobs/${job.id}`);
+            }
+        } catch (err) {
+            console.error('Create job error:', err);
+            toast({ title: "Failed to create job", variant: "destructive" });
+        }
+    };
+
+    const speak = (text: string, autoListen: boolean) => {
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.95;
+        utterance.pitch = 1.05;
+        utterance.volume = 1.0;
+        if (selectedVoice) utterance.voice = selectedVoice;
+
+        utterance.onstart = () => setStatus('speaking');
+        utterance.onend = () => {
+            if (autoListen && open) {
+                setStatus('idle');
+                setTimeout(() => startRecording(), 500);
+            } else {
+                setStatus('idle');
+            }
+        };
+
+        window.speechSynthesis.speak(utterance);
+    };
+
+    const formatTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
     };
 
     return (
         <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger asChild>
-                {children}
-            </SheetTrigger>
+            <SheetTrigger asChild>{children}</SheetTrigger>
             <SheetContent
                 side="bottom"
-                className="rounded-t-[2.5rem] px-6 pb-12 pt-8 border-t-0 bg-gradient-to-b from-background via-background to-background/95 backdrop-blur-3xl shadow-2xl h-[65vh] flex flex-col"
+                className="rounded-t-[2rem] border-t-0 bg-gradient-to-b from-background to-background/95 backdrop-blur-2xl h-[75vh] flex flex-col p-0 overflow-hidden"
             >
+                {/* Hidden accessibility */}
                 <SheetHeader className="sr-only">
                     <SheetTitle>Voice Assistant</SheetTitle>
-                    <SheetDescription>Interactive AI Voice Assistant for TradieMate</SheetDescription>
+                    <SheetDescription>TradieMate AI Voice Assistant</SheetDescription>
                 </SheetHeader>
 
-                {/* Close Button */}
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-4 right-4 rounded-full opacity-50 hover:opacity-100"
-                    onClick={() => setOpen(false)}
-                >
-                    <X className="w-5 h-5" />
-                </Button>
-
-                {/* Main Content */}
-                <div className="flex-1 flex flex-col items-center justify-center space-y-8">
-
-                    {/* Voice Orb */}
-                    <div
-                        className={getOrbStyles()}
-                        onClick={handleOrbClick}
-                        role="button"
-                        aria-label={status === 'listening' ? 'Stop listening' : 'Start listening'}
-                    >
-                        {getStatusIcon()}
-                    </div>
-
-                    {/* Message Display */}
-                    <div className="text-center space-y-3 max-w-sm px-4">
-                        {status === 'listening' && transcript && (
-                            <p className="text-lg text-foreground/80 italic animate-fade-in">
-                                "{transcript}"
-                            </p>
-                        )}
-
-                        <p className={cn(
-                            "text-xl font-semibold leading-relaxed transition-all duration-300",
-                            status === 'success' ? "text-green-600 dark:text-green-400" :
-                                status === 'error' ? "text-red-600 dark:text-red-400" :
-                                    "text-foreground"
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border/30">
+                    <div className="flex items-center gap-3">
+                        <div className={cn(
+                            "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                            status === 'listening' ? "bg-red-500/20" :
+                                status === 'processing' ? "bg-blue-500/20" :
+                                    status === 'speaking' ? "bg-green-500/20" :
+                                        "bg-primary/20"
                         )}>
-                            {displayMessage}
-                        </p>
-
-                        {status === 'ready' && (
-                            <p className="text-sm text-muted-foreground">
-                                Tap the orb and say things like:
+                            {status === 'listening' ? <Mic className="w-5 h-5 text-red-500 animate-pulse" /> :
+                                status === 'processing' ? <Loader2 className="w-5 h-5 text-blue-500 animate-spin" /> :
+                                    status === 'speaking' ? <Volume2 className="w-5 h-5 text-green-500 animate-pulse" /> :
+                                        <Sparkles className="w-5 h-5 text-primary" />}
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-foreground">Matey</h3>
+                            <p className="text-xs text-muted-foreground">
+                                {status === 'listening' ? `Recording ${formatTime(recordingTime)} / ${formatTime(MAX_RECORD_TIME)}` :
+                                    status === 'processing' ? 'Thinking...' :
+                                        status === 'speaking' ? 'Speaking...' :
+                                            'Ready to help'}
                             </p>
-                        )}
+                        </div>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => setOpen(false)} className="rounded-full">
+                        <X className="w-5 h-5" />
+                    </Button>
+                </div>
+
+                {/* Chat Area */}
+                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+                    {/* AI Message */}
+                    <div className="flex gap-3">
+                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                            <Sparkles className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className={cn(
+                            "flex-1 p-4 rounded-2xl rounded-tl-sm",
+                            status === 'success' ? "bg-green-500/10 border border-green-500/20" :
+                                status === 'error' ? "bg-red-500/10 border border-red-500/20" :
+                                    "bg-muted/50"
+                        )}>
+                            <p className={cn(
+                                "text-base leading-relaxed",
+                                status === 'success' ? "text-green-700 dark:text-green-300" :
+                                    status === 'error' ? "text-red-700 dark:text-red-300" :
+                                        "text-foreground"
+                            )}>
+                                {aiMessage || "G'day! What can I help you with?"}
+                            </p>
+                        </div>
                     </div>
 
-                    {/* Suggestions (only in ready state) */}
-                    {status === 'ready' && (
-                        <div className="flex flex-wrap justify-center gap-2 max-w-xs">
-                            {[
-                                "Create a quote",
-                                "Find John Smith",
-                                "Add job note"
-                            ].map((suggestion) => (
-                                <button
-                                    key={suggestion}
-                                    onClick={() => {
-                                        setTranscript(suggestion);
-                                        processCommand(suggestion);
-                                    }}
-                                    className="px-3 py-1.5 text-xs bg-muted/50 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground transition-all"
-                                >
-                                    {suggestion}
-                                </button>
-                            ))}
+                    {/* User Transcript (while recording) */}
+                    {(transcript || fullTranscript) && (
+                        <div className="flex gap-3 justify-end animate-fade-in">
+                            <div className="flex-1 max-w-[85%] p-4 rounded-2xl rounded-tr-sm bg-primary text-primary-foreground">
+                                <p className="text-base leading-relaxed">
+                                    {fullTranscript}{transcript && <span className="opacity-70">{transcript}</span>}
+                                </p>
+                            </div>
                         </div>
                     )}
 
-                    {/* Listening Controls */}
-                    {status === 'listening' && transcript.length > 3 && (
-                        <div className="flex flex-col items-center gap-3 animate-fade-in">
-                            <p className="text-xs text-muted-foreground">
-                                Tap the orb when you're done speaking
-                            </p>
-                            <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => {
-                                    stopListening();
-                                    processCommand(transcript);
-                                }}
-                                className="rounded-full px-6"
-                            >
-                                Done Speaking →
-                            </Button>
+                    {/* Quick Suggestions (when idle) */}
+                    {status === 'idle' && !transcript && !fullTranscript && conversationHistory.length === 0 && (
+                        <div className="space-y-3 pt-4">
+                            <p className="text-sm text-muted-foreground text-center">Try saying:</p>
+                            <div className="flex flex-wrap justify-center gap-2">
+                                {[
+                                    "Create a quote for...",
+                                    "Add a new client",
+                                    "Schedule a job for tomorrow",
+                                    "Find client John Smith"
+                                ].map((hint) => (
+                                    <span key={hint} className="px-3 py-1.5 text-xs bg-muted/50 rounded-full text-muted-foreground">
+                                        "{hint}"
+                                    </span>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground/50 pt-4">
-                    <Sparkles className="w-3 h-3" />
-                    <span>TradieMate Voice Assistant</span>
+                {/* Controls */}
+                <div className="border-t border-border/30 bg-background/80 backdrop-blur px-6 py-5">
+                    <div className="flex items-center justify-center gap-4">
+                        {status === 'listening' ? (
+                            <>
+                                {/* Stop Recording */}
+                                <Button
+                                    variant="outline"
+                                    size="lg"
+                                    onClick={stopRecording}
+                                    className="rounded-full h-14 px-6 gap-2"
+                                >
+                                    <MicOff className="w-5 h-5" />
+                                    Cancel
+                                </Button>
+
+                                {/* Send Button */}
+                                <Button
+                                    size="lg"
+                                    onClick={sendMessage}
+                                    disabled={!transcript && !fullTranscript}
+                                    className="rounded-full h-14 w-14 p-0 bg-primary shadow-xl hover:scale-105 transition-transform"
+                                >
+                                    <Send className="w-6 h-6" />
+                                </Button>
+                            </>
+                        ) : status === 'processing' || status === 'speaking' ? (
+                            <div className="flex items-center gap-3 text-muted-foreground">
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <span>{status === 'processing' ? 'Processing...' : 'Speaking...'}</span>
+                            </div>
+                        ) : (
+                            /* Main Mic Button */
+                            <Button
+                                size="lg"
+                                onClick={startRecording}
+                                className={cn(
+                                    "rounded-full h-20 w-20 p-0 shadow-2xl transition-all duration-300",
+                                    "bg-gradient-to-br from-primary to-primary/80 hover:scale-105",
+                                    "border-4 border-background"
+                                )}
+                            >
+                                <Mic className="w-8 h-8 text-primary-foreground" />
+                            </Button>
+                        )}
+                    </div>
+
+                    {/* Helper Text */}
+                    <p className="text-center text-xs text-muted-foreground mt-4">
+                        {status === 'listening'
+                            ? "Speak naturally. Tap ➤ when done."
+                            : "Tap the mic and speak your command"}
+                    </p>
                 </div>
             </SheetContent>
         </Sheet>
