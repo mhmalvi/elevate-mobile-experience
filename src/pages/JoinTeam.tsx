@@ -67,16 +67,28 @@ export default function JoinTeam() {
     setAccepting(true);
 
     try {
+      console.log('Accepting invitation with token:', token);
       const { data, error } = await supabase.functions.invoke('accept-team-invitation', {
         body: { token },
       });
 
-      if (error) throw error;
+      console.log('Accept response:', { data, error });
 
+      // Check for invoke-level error
+      if (error) {
+        throw new Error(error.message || 'Failed to accept invitation');
+      }
+
+      // Check for error in response body
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      // Success!
       setSuccess(true);
       toast({
         title: 'Welcome to the team!',
-        description: `You've successfully joined ${data.team_name}`,
+        description: `You've successfully joined ${data?.team_name || 'the team'}`,
       });
 
       setTimeout(() => {
