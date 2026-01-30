@@ -160,8 +160,9 @@ export default function IntegrationsSettings() {
           variant: 'destructive',
         });
       } else if (data?.authorization_url) {
-        // Open Xero authorization in new window
-        window.open(data.authorization_url, '_blank');
+        // Redirect to Xero authorization in the same window
+        // This ensures the callback is handled by the same app instance
+        window.location.href = data.authorization_url;
 
         toast({
           title: 'Redirecting to Xero',
