@@ -33,20 +33,20 @@ export default function JoinTeam() {
     try {
       setLoading(true);
 
+      // @ts-ignore
       const { data, error: invitationError } = await supabase
-        .from('team_invitations')
-        .select('*, teams!inner(*)')
-        .eq('token', token)
-        .eq('accepted', false)
-        .single();
+        .rpc('get_invitation_by_token', { lookup_token: token })
+        .maybeSingle();
 
       if (invitationError || !data) {
-        setError('Invitation not found or already accepted');
+        console.error('Error fetching invitation:', invitationError);
+        setError('Invitation not found or may have expired');
         setLoading(false);
         return;
       }
 
       // Check if expired
+      // @ts-ignore
       if (new Date(data.expires_at) < new Date()) {
         setError('This invitation has expired');
         setLoading(false);

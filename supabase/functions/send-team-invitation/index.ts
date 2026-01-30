@@ -130,61 +130,77 @@ serve(async (req) => {
     // Check if there's already a pending invitation
     const { data: existingInvitation } = await supabase
       .from('team_invitations')
-      .select('id')
+      .select('*')
       .eq('team_id', teamId)
       .eq('email', email)
       .eq('accepted', false)
-      .gt('expires_at', new Date().toISOString())
       .maybeSingle();
 
-    if (existingInvitation) {
-      return new Response(JSON.stringify({ error: 'Invitation already sent to this email' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    let inviteToken: string;
+    let expiresAt: Date;
+    let invitation: any;
+
+    if (existingInvitation && new Date(existingInvitation.expires_at) > new Date()) {
+      // Valid invitation exists, just resend email with existing token or refresh it
+      console.log('Existing active invitation found, resending email');
+      inviteToken = existingInvitation.token;
+      expiresAt = new Date(existingInvitation.expires_at);
+      invitation = existingInvitation;
+    } else if (existingInvitation) {
+      // Expired invitation exists, refresh it
+      console.log('Expired invitation found, refreshing');
+      inviteToken = generateUUID();
+      expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+
+      const { data: updatedInvite, error: updateError } = await supabase
+        .from('team_invitations')
+        .update({
+          token: inviteToken,
+          expires_at: expiresAt.toISOString(),
+          created_at: new Date().toISOString()
+        })
+        .eq('id', existingInvitation.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+      invitation = updatedInvite;
+    } else {
+      // Create new invitation
+      inviteToken = generateUUID();
+      expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+
+      console.log('Creating new invitation');
+      const { data: newInvitation, error: invitationError } = await supabase
+        .from('team_invitations')
+        .insert({
+          team_id: teamId,
+          email,
+          role,
+          token: inviteToken,
+          invited_by: user.id,
+          expires_at: expiresAt.toISOString(),
+        })
+        .select()
+        .single();
+
+      if (invitationError) {
+        console.error('Error creating invitation:', JSON.stringify(invitationError, null, 2));
+        return new Response(JSON.stringify({
+          error: 'Failed to create invitation',
+          details: invitationError.message,
+          code: invitationError.code
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      invitation = newInvitation;
     }
 
-    // Generate unique token
-    const inviteToken = generateUUID();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
-
-    console.log('Creating invitation with data:', {
-      team_id: teamId,
-      email,
-      role,
-      token: inviteToken.substring(0, 8) + '...',
-      invited_by: user.id,
-      expires_at: expiresAt.toISOString(),
-    });
-
-    // Create invitation
-    const { data: invitation, error: invitationError } = await supabase
-      .from('team_invitations')
-      .insert({
-        team_id: teamId,
-        email,
-        role,
-        token: inviteToken,
-        invited_by: user.id,
-        expires_at: expiresAt.toISOString(),
-      })
-      .select()
-      .single();
-
-    if (invitationError) {
-      console.error('Error creating invitation:', JSON.stringify(invitationError, null, 2));
-      return new Response(JSON.stringify({
-        error: 'Failed to create invitation',
-        details: invitationError.message,
-        code: invitationError.code
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log('Invitation created successfully:', invitation?.id);
+    console.log('Invitation ready:', invitation?.id);
 
     // Build invitation URL
     const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
