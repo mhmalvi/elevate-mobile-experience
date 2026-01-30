@@ -20,6 +20,56 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const body = await req.json();
+    const { token, action } = body;
+
+    console.log(`Processing invitation request: action=${action || 'accept'}, token=${token?.substring(0, 10)}...`);
+
+    if (!token) {
+      return new Response(JSON.stringify({ error: 'Token is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // -- ACTION: GET DETAILS (Public, relies on token security) --
+    if (action === 'get-details') {
+      const { data: invitation, error: invitationError } = await supabase
+        .from('team_invitations')
+        .select('*, teams(name)')
+        .eq('token', token)
+        .eq('accepted', false)
+        .maybeSingle();
+
+      if (invitationError || !invitation) {
+        return new Response(JSON.stringify({ error: 'Invalid or expired invitation' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Check expiry
+      if (new Date(invitation.expires_at) < new Date()) {
+        return new Response(JSON.stringify({ error: 'Invitation has expired' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const teamName = (invitation.teams as any)?.name || 'TradieMate Team';
+
+      return new Response(JSON.stringify({
+        team_name: teamName,
+        role: invitation.role,
+        email: invitation.email,
+        expires_at: invitation.expires_at
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // -- ACTION: ACCEPT (Requires Auth) --
+
     // Get user from auth header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -39,11 +89,7 @@ serve(async (req) => {
       });
     }
 
-    const { token }: AcceptInvitationRequest = await req.json();
-
-    console.log(`Processing invitation acceptance with token: ${token}`);
-
-    // Find the invitation
+    // Find the invitation again for acceptance
     const { data: invitation, error: invitationError } = await supabase
       .from('team_invitations')
       .select('*, teams!inner(*)')
@@ -75,9 +121,12 @@ serve(async (req) => {
       .single();
 
     // Verify the invitation email matches the user's email
+    // Note: In development we might skip this strict check if needed, but for prod it's important
     if (profile?.email?.toLowerCase() !== invitation.email.toLowerCase()) {
+      // Create a more helpful error message
+      const msg = `This invitation was sent to ${invitation.email}, but you are signed in as ${profile?.email}. Please sign out and sign in with the correct account.`;
       return new Response(JSON.stringify({
-        error: 'This invitation was sent to a different email address'
+        error: msg
       }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
