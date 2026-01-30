@@ -188,6 +188,7 @@ serve(async (req) => {
         const { query, conversationHistory, accumulatedData } = body;
 
         if (!query || query.trim() === '') {
+            console.log("Empty query received");
             return new Response(JSON.stringify({
                 speak: "I didn't catch that, mate. Could you say it again?",
                 action: "ask_details",
@@ -196,6 +197,8 @@ serve(async (req) => {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
         }
+
+        console.log(`Processing voice command for user. Query length: ${query.length}`);
 
         // Build conversation messages
         const messages = [
@@ -223,6 +226,7 @@ serve(async (req) => {
         messages.push({ role: 'user', content: query });
 
         // Call OpenRouter
+        console.log("Calling OpenRouter API...");
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -243,20 +247,24 @@ serve(async (req) => {
         if (!response.ok) {
             const errorText = await response.text();
             console.error("OpenRouter Error:", response.status, errorText);
-            throw new Error(`API Error: ${response.status}`);
+            throw new Error(`API Error: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
+        console.log("OpenRouter response received");
 
         if (!data.choices?.[0]?.message?.content) {
+            console.error("Invalid OpenRouter structure:", JSON.stringify(data));
             throw new Error("Invalid API response structure");
         }
 
         // Parse AI response
         let aiResponse;
         try {
+            console.log("Raw AI content:", data.choices[0].message.content);
             aiResponse = JSON.parse(data.choices[0].message.content);
         } catch (e) {
+            console.error("JSON Parse Error:", e);
             // If JSON parsing fails, create a safe response
             aiResponse = {
                 speak: "Sorry mate, I got a bit confused. Could you say that again?",
@@ -275,6 +283,7 @@ serve(async (req) => {
             aiResponse.data = { ...accumulatedData, ...aiResponse.data };
         }
 
+        console.log("Sending response to client:", JSON.stringify(aiResponse));
         return new Response(JSON.stringify(aiResponse), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
