@@ -190,6 +190,36 @@ serve(async (req) => {
         .order("sort_order");
       lineItems = items || [];
 
+    } else if (type === "team_invitation") {
+      // Simple handling for team invitations
+      const businessName = "TradieMate";
+      const fromEmail = `${businessName} <onboarding@resend.dev>`;
+
+      console.log(`Sending invitation email to ${recipient_email}`);
+
+      const emailResponse = await resend.emails.send({
+        from: fromEmail,
+        to: [recipient_email],
+        subject: subject || "You've been invited to join a team on TradieMate",
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Team Invitation</h2>
+            <p>${message}</p>
+            <p>If you didn't expect this invitation, you can ignore this email.</p>
+            <p>Powered by <a href="https://tradiemate.com.au">TradieMate</a></p>
+          </div>
+        `,
+      });
+
+      if (emailResponse.error) {
+        throw new Error(emailResponse.error.message);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, message: "Invitation sent successfully" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+
     } else {
       return new Response(
         JSON.stringify({ error: "Invalid document type" }),
@@ -200,11 +230,11 @@ serve(async (req) => {
     // Check rate limits
     const tier = profile?.subscription_tier || 'free';
     const usageCheck = await checkAndIncrementUsage(supabase, documentData.user_id, tier);
-    
+
     if (!usageCheck.allowed) {
       console.log(`Email rate limit exceeded: ${usageCheck.used}/${usageCheck.limit}`);
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           error: `Monthly email limit reached (${usageCheck.used}/${usageCheck.limit}). Upgrade your plan for more.`,
           limitReached: true,
           used: usageCheck.used,
@@ -260,9 +290,9 @@ serve(async (req) => {
               
               <p style="margin: 0 0 24px; color: #374151; font-size: 16px; line-height: 1.6;">
                 ${type === 'quote'
-                  ? `We've prepared this quote for "${documentTitle}". Please review the details below and let us know if you have any questions.`
-                  : `Thank you for your business! Please find your invoice below for "${documentTitle}". We appreciate your prompt payment.`
-                }
+        ? `We've prepared this quote for "${documentTitle}". Please review the details below and let us know if you have any questions.`
+        : `Thank you for your business! Please find your invoice below for "${documentTitle}". We appreciate your prompt payment.`
+      }
               </p>
               
               <!-- Document Card -->

@@ -59,6 +59,7 @@ serve(async (req) => {
       .from('team_members')
       .select('team_id, role')
       .eq('user_id', user.id)
+      .limit(1)
       .single();
 
     if (membershipError) {
