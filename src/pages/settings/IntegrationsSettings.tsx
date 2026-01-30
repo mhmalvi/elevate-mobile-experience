@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
