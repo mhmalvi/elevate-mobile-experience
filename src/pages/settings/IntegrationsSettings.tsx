@@ -43,6 +43,56 @@ export default function IntegrationsSettings() {
     token_expires_at: null,
   });
   const [syncHistory, setSyncHistory] = useState<SyncHistory[]>([]);
+  const [processingCallback, setProcessingCallback] = useState(false);
+
+  // Handle OAuth callback when redirected back from Xero
+  useEffect(() => {
+    const handleXeroCallback = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
+
+      if (code && state) {
+        setProcessingCallback(true);
+        console.log('Processing Xero OAuth callback...');
+
+        try {
+          // Exchange the code for tokens via Edge Function
+          const { data, error } = await supabase.functions.invoke('xero-oauth', {
+            body: { action: 'callback', code, state },
+          });
+
+          if (error) {
+            console.error('Xero callback error:', error);
+            toast({
+              title: 'Connection Failed',
+              description: error.message || 'Failed to connect to Xero',
+              variant: 'destructive',
+            });
+          } else if (data?.success) {
+            toast({
+              title: 'Success!',
+              description: `Connected to Xero: ${data.tenant_name || 'Organization'}`,
+            });
+            await checkXeroStatus();
+          }
+        } catch (err: any) {
+          console.error('Xero callback exception:', err);
+          toast({
+            title: 'Error',
+            description: err.message || 'Failed to process Xero authorization',
+            variant: 'destructive',
+          });
+        } finally {
+          setProcessingCallback(false);
+          // Clean up URL params
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+    };
+
+    handleXeroCallback();
+  }, []);
 
   useEffect(() => {
     checkXeroStatus();
@@ -311,9 +361,12 @@ export default function IntegrationsSettings() {
               </div>
             </div>
 
-            {checkingXero ? (
+            {checkingXero || processingCallback ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                {processingCallback && (
+                  <span className="ml-2 text-sm text-muted-foreground">Connecting to Xero...</span>
+                )}
               </div>
             ) : (
               <>

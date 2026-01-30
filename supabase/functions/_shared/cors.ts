@@ -47,31 +47,17 @@ const LOCAL_NETWORK_PATTERNS = [
  */
 export function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get('origin') || '';
-  const isDevelopment = Deno.env.get('ENVIRONMENT') !== 'production';
 
-  // Combine allowed origins based on environment
-  const allowedOrigins = isDevelopment
-    ? [...ALLOWED_ORIGINS, ...DEV_ORIGINS]
-    : ALLOWED_ORIGINS;
+  // Allow all Vercel deployments (preview and production)
+  // Also allow all local development
+  // And allow specific production domains
 
-  // Check if origin is whitelisted (exact match)
-  let isAllowed = allowedOrigins.some(allowed => origin === allowed);
+  const isVercel = origin.includes('.vercel.app');
+  const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1');
+  const isProduction = ALLOWED_ORIGINS.includes(origin);
 
-  // Always allow local network IPs (192.168.x.x, 10.x.x.x, etc.) for testing/hybrid usage
-  if (!isAllowed && origin) {
-    isAllowed = LOCAL_NETWORK_PATTERNS.some(pattern => pattern.test(origin));
-  }
-
-  // Also allow any Vercel deployment URL for this project
-  // Vercel preview URLs follow patterns like: project-name-xxx-team.vercel.app
-  if (!isAllowed && origin) {
-    const vercelPatterns = [
-      /^https:\/\/elevate-mobile-experience.*\.vercel\.app$/,
-      /^https:\/\/dist-.*\.vercel\.app$/,
-      /^https:\/\/.*-info-quadquetechs-projects\.vercel\.app$/,
-    ];
-    isAllowed = vercelPatterns.some(pattern => pattern.test(origin));
-  }
+  // If it matches any of our broad patterns, allow it
+  const isAllowed = isVercel || isLocal || isProduction;
 
   // Log for debugging CORS issues
   if (!isAllowed && origin) {
@@ -79,7 +65,7 @@ export function getCorsHeaders(req: Request): Record<string, string> {
   }
 
   return {
-    'Access-Control-Allow-Origin': isAllowed ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Origin': isAllowed ? origin : (origin || ALLOWED_ORIGINS[0]),
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
     'Access-Control-Max-Age': '86400', // 24 hours
