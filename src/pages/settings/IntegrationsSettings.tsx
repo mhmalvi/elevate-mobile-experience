@@ -52,9 +52,15 @@ export default function IntegrationsSettings() {
       const code = urlParams.get('code');
       const state = urlParams.get('state');
 
+      console.log('[Xero OAuth] Checking URL params:', {
+        hasCode: !!code,
+        hasState: !!state,
+        fullSearch: window.location.search
+      });
+
       if (code && state) {
         setProcessingCallback(true);
-        console.log('Processing Xero OAuth callback...');
+        console.log('[Xero OAuth] Processing callback with code and state...');
 
         try {
           // Exchange the code for tokens via Edge Function
