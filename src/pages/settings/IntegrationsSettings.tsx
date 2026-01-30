@@ -45,9 +45,14 @@ export default function IntegrationsSettings() {
   const [syncHistory, setSyncHistory] = useState<SyncHistory[]>([]);
   const [processingCallback, setProcessingCallback] = useState(false);
 
+  const hasProcessedCallback = useRef(false);
+
   // Handle OAuth callback when redirected back from Xero
   useEffect(() => {
     const handleXeroCallback = async () => {
+      // Prevent double execution in Strict Mode
+      if (hasProcessedCallback.current) return;
+
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
       const state = urlParams.get('state');
@@ -59,6 +64,7 @@ export default function IntegrationsSettings() {
       });
 
       if (code && state) {
+        hasProcessedCallback.current = true;
         setProcessingCallback(true);
         console.log('[Xero OAuth] Processing callback with code and state...');
 
