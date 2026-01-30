@@ -37,9 +37,11 @@ export function MagicMic() {
     }, []);
 
     const startListening = useCallback(() => {
+        console.log('Voice: Starting listening...');
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (!SpeechRecognition) {
+            console.error('Voice: SpeechRecognition API not supported');
             toast({
                 title: "Voice not supported",
                 description: "Use Chrome or Safari for voice input",
@@ -52,62 +54,71 @@ export function MagicMic() {
         setTranscript('');
         setFullTranscript('');
 
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-AU';
-        recognition.maxAlternatives = 1;
+        try {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-AU';
+            recognition.maxAlternatives = 1;
 
-        recognition.onstart = () => {
-            setStatus('listening');
-            toast({ title: "🎙️ Listening...", description: "Speak your quote details" });
-        };
+            recognition.onstart = () => {
+                console.log('Voice: Recognition started');
+                setStatus('listening');
+                toast({ title: "🎙️ Listening...", description: "Speak your quote details" });
+            };
 
-        recognition.onresult = (event: any) => {
-            let interim = '';
-            let final = '';
+            recognition.onresult = (event: any) => {
+                let interim = '';
+                let final = '';
 
-            for (let i = 0; i < event.results.length; i++) {
-                const result = event.results[i];
-                if (result.isFinal) {
-                    final += result[0].transcript + ' ';
-                } else {
-                    interim += result[0].transcript;
+                for (let i = 0; i < event.results.length; i++) {
+                    const result = event.results[i];
+                    if (result.isFinal) {
+                        final += result[0].transcript + ' ';
+                    } else {
+                        interim += result[0].transcript;
+                    }
                 }
-            }
 
-            setTranscript(interim);
-            if (final) {
-                setFullTranscript(prev => prev + final);
-            }
-        };
+                console.log('Voice: Result', { interim, final });
+                setTranscript(interim);
+                if (final) {
+                    setFullTranscript(prev => prev + final);
+                }
+            };
 
-        recognition.onerror = (event: any) => {
-            console.error('Speech recognition error:', event.error);
-            if (event.error !== 'no-speech' && event.error !== 'aborted') {
-                toast({
-                    title: "Voice error",
-                    description: event.error === 'not-allowed'
-                        ? "Microphone permission denied"
-                        : "Please try again",
-                    variant: "destructive"
-                });
-                setStatus('idle');
-            }
-        };
+            recognition.onerror = (event: any) => {
+                console.error('Voice: Recognition error', event.error);
+                if (event.error !== 'no-speech' && event.error !== 'aborted') {
+                    toast({
+                        title: "Voice error",
+                        description: event.error === 'not-allowed'
+                            ? "Microphone permission denied"
+                            : `Error: ${event.error}`,
+                        variant: "destructive"
+                    });
+                    setStatus('idle');
+                }
+            };
 
-        recognition.onend = () => {
-            // Recognition ended but we might still want to process
-            if (status === 'listening') {
-                // Don't auto-reset, let user click stop
-            }
-        };
+            recognition.onend = () => {
+                console.log('Voice: Recognition ended');
+                // Recognition ended but we might still want to process
+                if (status === 'listening') {
+                    // Don't auto-reset, let user click stop
+                }
+            };
 
-        recognitionRef.current = recognition;
-        recognition.start();
+            recognitionRef.current = recognition;
+            recognition.start();
+        } catch (e) {
+            console.error('Voice: Failed to start recognition', e);
+            toast({ title: "Voice Error", description: "Could not start microphone", variant: "destructive" });
+        }
     }, [toast, status]);
 
     const stopListening = useCallback(() => {
+        console.log('Voice: Stopping listening');
         if (recognitionRef.current) {
             try { recognitionRef.current.stop(); } catch (e) { }
         }
@@ -116,6 +127,7 @@ export function MagicMic() {
 
     const processVoiceCommand = useCallback(async () => {
         const messageText = (fullTranscript + transcript).trim();
+        console.log('Voice: Processing command:', messageText);
 
         if (!messageText) {
             toast({
@@ -135,8 +147,12 @@ export function MagicMic() {
         toast({ title: "🔮 Processing...", description: "Understanding your command" });
 
         try {
-            if (!user) throw new Error("Please log in first");
+            if (!user) {
+                console.warn('Voice: User not logged in');
+                throw new Error("Please log in first");
+            }
 
+            console.log('Voice: Invoking Edge Function...');
             // Call the voice command Edge Function
             const { data, error } = await supabase.functions.invoke('process-voice-command', {
                 body: {
@@ -146,40 +162,51 @@ export function MagicMic() {
                 }
             });
 
-            if (error) throw error;
+            if (error) {
+                console.error('Voice: Supabase invoke error', error);
+                throw error;
+            }
 
+            console.log('Voice: Response received', data);
             const { speak: responseText, action, data: responseData } = data;
 
             // Handle different actions from the AI
             switch (action) {
                 case 'create_quote':
+                    console.log('Voice: Action create_quote');
                     await createQuoteFromVoice(responseData);
                     break;
 
                 case 'create_invoice':
+                    console.log('Voice: Action create_invoice');
                     await createInvoiceFromVoice(responseData);
                     break;
 
                 case 'create_client':
+                    console.log('Voice: Action create_client');
                     await createClientFromVoice(responseData);
                     break;
 
                 case 'schedule_job':
+                    console.log('Voice: Action schedule_job');
                     await createJobFromVoice(responseData);
                     break;
 
                 case 'find_client':
+                    console.log('Voice: Action find_client');
                     toast({ title: "🔍 Searching...", description: responseText });
                     navigate(`/clients?search=${encodeURIComponent(responseData.search_name || '')}`);
                     break;
 
                 case 'navigate':
+                    console.log('Voice: Action navigate');
                     if (responseData.destination) {
                         navigate(responseData.destination);
                     }
                     break;
 
                 default:
+                    console.log('Voice: Action default/chat');
                     // Continue conversation - show result
                     toast({
                         title: "🎙️ Matey says:",
