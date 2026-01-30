@@ -60,7 +60,7 @@ export default function JoinTeam() {
         title: 'Please sign in',
         description: 'You need to be signed in to accept this invitation',
       });
-      navigate(`/login?redirect=/join-team?token=${token}`);
+      navigate(`/auth?redirect=/join-team?token=${token}`);
       return;
     }
 
