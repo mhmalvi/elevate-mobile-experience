@@ -1,13 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { getCorsHeaders, createCorsResponse } from "../_shared/cors.ts";
 
 // UUID v4 generator with fallback
 function generateUUID(): string {
   try {
     return crypto.randomUUID();
   } catch {
-    // Fallback implementation for environments without crypto.randomUUID
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0;
       const v = c === 'x' ? r : (r & 0x3) | 0x8;
@@ -22,10 +21,8 @@ interface InvitationRequest {
 }
 
 serve(async (req) => {
-  // SECURITY: Get secure CORS headers
   const corsHeaders = getCorsHeaders(req);
 
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return createCorsResponse(req);
   }
@@ -55,26 +52,41 @@ serve(async (req) => {
     }
 
     const { email, role }: InvitationRequest = await req.json();
+    console.log(`Processing invitation for ${email} with role ${role} from user ${user.id}`);
 
-    console.log(`Processing invitation for ${email} with role ${role}`);
-
-    // Get user's team and verify permission
-    const { data: userMembership } = await supabase
+    // Get user's team membership
+    const { data: userMembership, error: membershipError } = await supabase
       .from('team_members')
-      .select('team_id, role, teams!inner(*)')
+      .select('team_id, role')
       .eq('user_id', user.id)
       .single();
 
+    if (membershipError) {
+      console.error('Error fetching team membership:', membershipError);
+      return new Response(JSON.stringify({
+        error: 'Failed to verify team membership',
+        details: membershipError.message
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (!userMembership) {
-      return new Response(JSON.stringify({ error: 'User is not part of a team' }), {
+      console.log('User is not part of any team');
+      return new Response(JSON.stringify({
+        error: 'You are not part of a team. Please create a team first.'
+      }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
+    console.log(`User membership found: team_id=${userMembership.team_id}, role=${userMembership.role}`);
+
     // Verify user has permission to invite (owner or admin)
     if (!['owner', 'admin'].includes(userMembership.role)) {
-      return new Response(JSON.stringify({ error: 'Insufficient permissions' }), {
+      return new Response(JSON.stringify({ error: 'Insufficient permissions. Only owners and admins can invite.' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -82,23 +94,36 @@ serve(async (req) => {
 
     const teamId = userMembership.team_id;
 
+    // Get team name
+    const { data: team } = await supabase
+      .from('teams')
+      .select('name')
+      .eq('id', teamId)
+      .single();
+
+    const teamName = team?.name || 'TradieMate Team';
+
     // Check if user is already a team member
-    const { data: existingMember } = await supabase
-      .from('team_members')
+    const { data: existingProfile } = await supabase
+      .from('profiles')
       .select('user_id')
-      .eq('team_id', teamId)
-      .eq('user_id', (await supabase
-        .from('profiles')
-        .select('user_id')
-        .eq('email', email)
-        .maybeSingle())?.data?.user_id || '00000000-0000-0000-0000-000000000000')
+      .eq('email', email)
       .maybeSingle();
 
-    if (existingMember) {
-      return new Response(JSON.stringify({ error: 'User is already a team member' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (existingProfile?.user_id) {
+      const { data: existingMember } = await supabase
+        .from('team_members')
+        .select('user_id')
+        .eq('team_id', teamId)
+        .eq('user_id', existingProfile.user_id)
+        .maybeSingle();
+
+      if (existingMember) {
+        return new Response(JSON.stringify({ error: 'User is already a team member' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // Check if there's already a pending invitation
@@ -119,9 +144,9 @@ serve(async (req) => {
     }
 
     // Generate unique token
-    const token_value = generateUUID();
+    const inviteToken = generateUUID();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
+    expiresAt.setDate(expiresAt.getDate() + 7);
 
     // Create invitation
     const { data: invitation, error: invitationError } = await supabase
@@ -130,7 +155,7 @@ serve(async (req) => {
         team_id: teamId,
         email,
         role,
-        token: token_value,
+        token: inviteToken,
         invited_by: user.id,
         expires_at: expiresAt.toISOString(),
       })
@@ -145,32 +170,24 @@ serve(async (req) => {
       });
     }
 
-    // Send invitation email
+    // Build invitation URL
     const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
-    const invitationUrl = `${baseUrl}/join-team?token=${token_value}`;
-    const teamName = (userMembership as any).teams?.name || 'TradieMate Team';
+    const invitationUrl = `${baseUrl}/join-team?token=${inviteToken}`;
 
-    console.log(`Sending invitation email to ${email}`);
-    console.log(`Invitation URL: ${invitationUrl}`);
+    console.log(`Invitation created for ${email}, URL: ${invitationUrl}`);
 
-    // Send email using send-email function
+    // Try to send invitation email (non-blocking)
     try {
-      const { error: emailError } = await supabase.functions.invoke('send-email', {
+      await supabase.functions.invoke('send-email', {
         body: {
           type: 'team_invitation',
           recipient_email: email,
           subject: `You've been invited to join ${teamName}`,
-          message: `You've been invited to join ${teamName} as a ${role}. Click the link below to accept the invitation: ${invitationUrl}`,
+          message: `You've been invited to join ${teamName} as a ${role}. Click here to accept: ${invitationUrl}`,
         },
       });
-
-      if (emailError) {
-        console.error('Error sending email:', emailError);
-        // Don't fail the invitation if email fails
-      }
     } catch (emailErr) {
-      console.error('Exception sending email:', emailErr);
-      // Don't fail the invitation if email fails
+      console.error('Email sending failed (non-fatal):', emailErr);
     }
 
     console.log('Invitation created successfully');

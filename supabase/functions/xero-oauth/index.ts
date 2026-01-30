@@ -31,9 +31,21 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const action = url.searchParams.get('action');
-    const code = url.searchParams.get('code');
-    const state = url.searchParams.get('state'); // Contains user session info
+    let action = url.searchParams.get('action');
+    let code = url.searchParams.get('code');
+    let state = url.searchParams.get('state');
+
+    // Also check body for params (frontend sends them in body)
+    if (req.method === 'POST') {
+      try {
+        const body = await req.json();
+        action = body.action || action;
+        code = body.code || code;
+        state = body.state || state;
+      } catch {
+        // Body parsing failed, continue with URL params
+      }
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
