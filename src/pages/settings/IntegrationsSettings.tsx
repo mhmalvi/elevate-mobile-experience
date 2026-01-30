@@ -81,6 +81,13 @@ export default function IntegrationsSettings() {
               description: `Connected to Xero: ${data.tenant_name || 'Organization'}`,
             });
             await checkXeroStatus();
+          } else {
+            console.warn('Xero callback returned no success:', data);
+            toast({
+              title: 'Connection Issue',
+              description: data?.error || 'Unknown error occurred during connection',
+              variant: 'destructive',
+            });
           }
         } catch (err: any) {
           console.error('Xero callback exception:', err);
