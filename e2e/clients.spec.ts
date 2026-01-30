@@ -614,7 +614,7 @@ test.describe('Client Management', () => {
       const createButton = page.locator('button, a').filter({ hasText: /new|\+|add/i }).first();
 
       if (await createButton.isVisible()) {
-        await createButton.tap();
+        await createButton.click();
         await ctx.wait.waitForPageReady();
 
         expect(page.url()).toContain('/new');
@@ -634,7 +634,7 @@ test.describe('Client Management', () => {
 
       if (await nameInput.isVisible()) {
         // Tap to focus
-        await nameInput.tap();
+        await nameInput.click();
         await page.waitForTimeout(200);
 
         // Type with mobile keyboard

@@ -37,3 +37,7 @@ coverage/
 test-results/
 playwright-report/
 .playwright/
+
+# E2E Test Screenshots
+e2e-screenshots/
+e2e/screenshots/

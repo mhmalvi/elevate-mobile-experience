@@ -9,7 +9,12 @@ const corsHeaders = {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || "";
+
+// Validate API key is set
+if (!OPENROUTER_API_KEY) {
+    console.error("OPENROUTER_API_KEY environment variable is not set");
+}
 
 // Comprehensive System Prompt with Full App Context
 const SYSTEM_PROMPT = `
