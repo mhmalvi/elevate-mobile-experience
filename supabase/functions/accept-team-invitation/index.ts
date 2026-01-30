@@ -113,18 +113,20 @@ serve(async (req) => {
       });
     }
 
-    // Get user's email from profile
+    // Get user's email from profile OR from auth
     const { data: profile } = await supabase
       .from('profiles')
       .select('email')
       .eq('user_id', user.id)
       .single();
 
+    // Use profile email, or fallback to auth email
+    const userEmail = profile?.email || user.email;
+    console.log('Email check:', { userEmail, invitationEmail: invitation.email });
+
     // Verify the invitation email matches the user's email
-    // Note: In development we might skip this strict check if needed, but for prod it's important
-    if (profile?.email?.toLowerCase() !== invitation.email.toLowerCase()) {
-      // Create a more helpful error message
-      const msg = `This invitation was sent to ${invitation.email}, but you are signed in as ${profile?.email}. Please sign out and sign in with the correct account.`;
+    if (!userEmail || userEmail.toLowerCase() !== invitation.email.toLowerCase()) {
+      const msg = `This invitation was sent to ${invitation.email}, but you are signed in as ${userEmail || 'unknown'}. Please sign out and sign in with the correct account.`;
       return new Response(JSON.stringify({
         error: msg
       }), {
