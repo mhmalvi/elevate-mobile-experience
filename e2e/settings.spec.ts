@@ -571,7 +571,7 @@ test.describe('Settings', () => {
       const profileLink = page.locator('a, button').filter({ hasText: /profile/i }).first();
 
       if (await profileLink.isVisible()) {
-        await profileLink.tap();
+        await profileLink.click();
         await ctx.wait.waitForPageReady();
 
         await ctx.screenshot.capture('settings-mobile-profile');
