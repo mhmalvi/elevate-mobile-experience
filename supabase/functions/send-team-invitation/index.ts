@@ -62,7 +62,7 @@ serve(async (req) => {
       .single();
 
     if (membershipError) {
-      console.error('Error fetching team membership:', membershipError);
+      console.error('Error fetching team membership:', JSON.stringify(membershipError));
       return new Response(JSON.stringify({
         error: 'Failed to verify team membership',
         details: membershipError.message
@@ -148,6 +148,15 @@ serve(async (req) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
+    console.log('Creating invitation with data:', {
+      team_id: teamId,
+      email,
+      role,
+      token: inviteToken.substring(0, 8) + '...',
+      invited_by: user.id,
+      expires_at: expiresAt.toISOString(),
+    });
+
     // Create invitation
     const { data: invitation, error: invitationError } = await supabase
       .from('team_invitations')
@@ -163,18 +172,24 @@ serve(async (req) => {
       .single();
 
     if (invitationError) {
-      console.error('Error creating invitation:', invitationError);
-      return new Response(JSON.stringify({ error: invitationError.message }), {
+      console.error('Error creating invitation:', JSON.stringify(invitationError, null, 2));
+      return new Response(JSON.stringify({
+        error: 'Failed to create invitation',
+        details: invitationError.message,
+        code: invitationError.code
+      }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
+    console.log('Invitation created successfully:', invitation?.id);
+
     // Build invitation URL
     const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
     const invitationUrl = `${baseUrl}/join-team?token=${inviteToken}`;
 
-    console.log(`Invitation created for ${email}, URL: ${invitationUrl}`);
+    console.log(`Invitation URL: ${invitationUrl}`);
 
     // Try to send invitation email (non-blocking)
     try {
@@ -186,11 +201,10 @@ serve(async (req) => {
           message: `You've been invited to join ${teamName} as a ${role}. Click here to accept: ${invitationUrl}`,
         },
       });
+      console.log('Invitation email sent successfully');
     } catch (emailErr) {
       console.error('Email sending failed (non-fatal):', emailErr);
     }
-
-    console.log('Invitation created successfully');
 
     return new Response(JSON.stringify({
       success: true,
