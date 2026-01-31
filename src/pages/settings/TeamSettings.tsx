@@ -32,7 +32,7 @@ export default function TeamSettings() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
-  const { team, userRole, teamMembers, canManageTeam, refetch, loading, error } = useTeam();
+  const { team, userRole, teamMembers, canManageTeam, refetch, loading, error, allTeams, switchTeam } = useTeam();
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
   const [inviting, setInviting] = useState(false);
@@ -60,10 +60,11 @@ export default function TeamSettings() {
         description: 'You have successfully left the team.',
       });
 
-      // Navigate to dashboard which should refresh context (or fail gracefully)
-      // Since useTeam might fail now, we depend on dashboard to redirect or show empty state
+      // Refetch global team data to update context
+      await refetch();
+
+      // Navigate to dashboard
       navigate('/dashboard');
-      window.location.reload(); // Force reload to clear team context
 
     } catch (error) {
       console.error('Error leaving team:', error);
@@ -334,10 +335,35 @@ export default function TeamSettings() {
               <Users className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium text-primary">Collaboration</span>
             </div>
-            <h1 className="text-3xl font-bold text-foreground">Team</h1>
-            <p className="text-muted-foreground mt-1">
-              Manage team members and permissions
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-foreground">Team</h1>
+                <p className="text-muted-foreground mt-1">
+                  Manage team members and permissions
+                </p>
+              </div>
+
+              {/* Team Switcher */}
+              {allTeams.length > 1 && (
+                <div className="relative">
+                  <Select
+                    value={team?.id}
+                    onValueChange={(value) => switchTeam(value)}
+                  >
+                    <SelectTrigger className="w-[180px] bg-background/50 backdrop-blur-sm border-primary/20">
+                      <SelectValue placeholder="Switch Team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allTeams.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
