@@ -18,9 +18,20 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Constants } from '@/integrations/supabase/types';
+// import { Constants } from '@/integrations/supabase/types';
 
-const tradeTypes = Constants.public.Enums.trade_type;
+const tradeTypes = [
+  'electrician',
+  'plumber',
+  'carpenter',
+  'builder',
+  'painter',
+  'landscaper',
+  'hvac',
+  'tiler',
+  'cleaner',
+  'other'
+] as const;
 
 export default function BusinessSettings() {
   const navigate = useNavigate();
