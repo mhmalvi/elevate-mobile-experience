@@ -69,6 +69,7 @@ serve(async (req) => {
     }
 
     // -- ACTION: ACCEPT (Requires Auth) --
+    console.log('Processing ACCEPT action for token:', token);
 
     // Get user from auth header
     const authHeader = req.headers.get('Authorization');
