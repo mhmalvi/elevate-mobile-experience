@@ -78,6 +78,8 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         .eq('user_id', user.id)
         .order('joined_at', { ascending: false });
 
+      console.log('useTeam fetched memberships:', memberships?.length, memberships);
+
       if (membershipError) {
         console.error('Error fetching team memberships:', membershipError);
         setError(membershipError.message);
