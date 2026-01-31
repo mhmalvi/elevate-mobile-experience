@@ -44,20 +44,35 @@ export default function TeamSettings() {
 
     setLeaving(true);
     try {
-      if (!team) return;
+      if (!team) {
+        throw new Error('No team context found');
+      }
 
-      const { error } = await supabase.functions.invoke('leave-team', {
+      console.log('Attempting to leave team:', team.id, team.name);
+
+      const { data, error } = await supabase.functions.invoke('leave-team', {
         body: { team_id: team.id }
       });
 
-      if (error) throw error;
+      console.log('Leave team response:', { data, error });
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Failed to call leave-team function');
+      }
+
+      // Check if the response indicates success
+      if (data && !data.success) {
+        throw new Error(data.error || 'Unknown error from leave-team function');
+      }
 
       toast({
-        title: 'Left team',
-        description: 'You have successfully left the team.',
+        title: 'Left team successfully',
+        description: `You are no longer a member of ${team.name}.`,
       });
 
       // Refetch global team data to update context
+      console.log('Refetching team data...');
       await refetch();
 
       // Navigate to dashboard
@@ -65,9 +80,14 @@ export default function TeamSettings() {
 
     } catch (error) {
       console.error('Error leaving team:', error);
+
+      const errorMessage = error instanceof Error
+        ? error.message
+        : 'An unexpected error occurred. Please try again.';
+
       toast({
         title: 'Failed to leave team',
-        description: error instanceof Error ? error.message : 'Unknown error',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
