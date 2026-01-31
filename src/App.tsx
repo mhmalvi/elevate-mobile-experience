@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
@@ -82,6 +82,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <PageTransition>{children}</PageTransition>;
 }
 
+function AuthRedirect() {
+  const [searchParams] = useSearchParams();
+  const redirectParam = searchParams.get('redirect');
+  const redirectTo = redirectParam ? decodeURIComponent(redirectParam) : '/dashboard';
+  return <Navigate to={redirectTo} replace />;
+}
+
 function AppRoutes() {
   const { user, loading: authLoading } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
@@ -100,7 +107,14 @@ function AppRoutes() {
       <AnimatePresence mode="sync">
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/auth" replace />} />
-          <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <PageTransition><Auth /></PageTransition>} />
+          <Route path="/auth" element={
+            user ? (
+              // If user is logged in, redirect to the specified redirect URL or dashboard
+              <AuthRedirect />
+            ) : (
+              <PageTransition><Auth /></PageTransition>
+            )
+          } />
           <Route path="/onboarding" element={
             !user ? <Navigate to="/auth" replace /> :
               (profileLoading ? <PageLoader /> : profile?.onboarding_completed ? <Navigate to="/dashboard" replace /> : <PageTransition><Onboarding /></PageTransition>)
