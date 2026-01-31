@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useTeam } from '@/hooks/useTeam';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, Mail, Crown, Shield, User, Eye, UserMinus, Loader2, ArrowLeft, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -30,11 +31,51 @@ import {
 export default function TeamSettings() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const { team, userRole, teamMembers, canManageTeam, refetch, loading, error } = useTeam();
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('member');
   const [inviting, setInviting] = useState(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState(false);
+
+  const handleLeaveTeam = async () => {
+    if (!user || !userRole || userRole === 'owner') return;
+
+    setLeaving(true);
+    try {
+      // Find my membership ID
+      const myMembership = teamMembers.find(m => m.user_id === user.id);
+      if (!myMembership) throw new Error("Membership not found");
+
+      const { error } = await supabase
+        .from('team_members')
+        .delete()
+        .eq('id', myMembership.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Left team',
+        description: 'You have successfully left the team.',
+      });
+
+      // Navigate to dashboard which should refresh context (or fail gracefully)
+      // Since useTeam might fail now, we depend on dashboard to redirect or show empty state
+      navigate('/dashboard');
+      window.location.reload(); // Force reload to clear team context
+
+    } catch (error) {
+      console.error('Error leaving team:', error);
+      toast({
+        title: 'Failed to leave team',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setLeaving(false);
+    }
+  };
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,52 +306,12 @@ export default function TeamSettings() {
     );
   }
 
-  // User doesn't have permission (member or viewer role)
-  if (!canManageTeam) {
-    return (
-      <MobileLayout>
-        <div className="min-h-screen scrollbar-hide">
-          {/* Hero Section */}
-          <div className="relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
-            <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+  // User doesn't have permission (member or viewer role) BUT they should be able to LEAVE
+  // So we only restrict viewing the MANAGE parts, not the page itself if we want them to leave?
+  // Wait, if !canManageTeam, the page shows "Limited Access". We need to allow them to see the team list so they can leave!
 
-            <div className="relative px-4 pt-8 pb-6">
-              <button
-                onClick={() => navigate('/settings')}
-                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span className="text-sm font-medium">Back to Settings</span>
-              </button>
-
-              <div className="flex items-center gap-2 mb-1">
-                <Users className="w-4 h-4 text-primary" />
-                <span className="text-sm font-medium text-primary">Collaboration</span>
-              </div>
-              <h1 className="text-3xl font-bold text-foreground">Team</h1>
-              <p className="text-muted-foreground mt-1">
-                Manage team members and permissions
-              </p>
-            </div>
-          </div>
-
-          <div className="px-4 pb-32 text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-yellow-500/10 to-yellow-500/5 border border-yellow-500/10 flex items-center justify-center shadow-lg shadow-yellow-500/5">
-              <Shield className="w-8 h-8 text-yellow-500" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold">Limited Access</h2>
-              <p className="text-muted-foreground mt-1">
-                Your current role ({userRole}) doesn't have permission to manage team settings.
-                Contact a team admin or owner for access.
-              </p>
-            </div>
-          </div>
-        </div>
-      </MobileLayout>
-    );
-  }
+  // FIXED: Instead of blocking the whole page, we render the page but hide management features.
+  // This allows "Members" to see who else is on the team and LEAVE if they want.
 
   return (
     <MobileLayout>
@@ -343,63 +344,92 @@ export default function TeamSettings() {
         <div className="px-4 pb-32 space-y-6 animate-fade-in">
           {/* Team Info */}
           <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10 flex items-center justify-center shadow-sm">
-                <Users className="w-6 h-6 text-primary" />
-              </div>
-              <div>
-                <h2 className="font-semibold text-lg">{team?.name || 'Your Team'}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {teamMembers.length} {teamMembers.length === 1 ? 'member' : 'members'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Invite Form */}
-          <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-4 animate-fade-in" style={{ animationDelay: '0.05s' }}>
-            <div className="flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-primary" />
-              <h3 className="font-semibold">Invite Team Member</h3>
-            </div>
-
-            <form onSubmit={handleInvite} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="colleague@example.com"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    required
-                    className="pl-10 rounded-xl"
-                  />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10 flex items-center justify-center shadow-sm">
+                  <Users className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-lg">{team?.name || 'Your Team'}</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {teamMembers.length} {teamMembers.length === 1 ? 'member' : 'members'}
+                  </p>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="role" className="text-sm font-medium">Role</Label>
-                <Select value={inviteRole} onValueChange={(v: any) => setInviteRole(v)}>
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Admin - Full access except owner transfer</SelectItem>
-                    <SelectItem value="member">Member - Can create and edit</SelectItem>
-                    <SelectItem value="viewer">Viewer - Read-only access</SelectItem>
-                  </SelectContent>
-                </Select>
+              {/* Leave Team Button (for non-owners) */}
+              {userRole !== 'owner' && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" className="text-destructive hover:text-destructive/90 hover:bg-destructive/10 font-medium">
+                      {leaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Leave Team'}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Leave Team?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        You will lose access to all data in this team. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleLeaveTeam} className="bg-destructive hover:bg-destructive/90">
+                        Leave
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+          </div>
+
+          {/* Invite Form - Only visible to Admins/Owners */}
+          {canManageTeam && (
+            <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-4 animate-fade-in" style={{ animationDelay: '0.05s' }}>
+              <div className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold">Invite Team Member</h3>
               </div>
 
-              <Button type="submit" className="w-full rounded-xl" disabled={inviting}>
-                {inviting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Send Invitation
-              </Button>
-            </form>
-          </div>
+              <form onSubmit={handleInvite} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="colleague@example.com"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      required
+                      className="pl-10 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="role" className="text-sm font-medium">Role</Label>
+                  <Select value={inviteRole} onValueChange={(v: any) => setInviteRole(v)}>
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin - Full access except owner transfer</SelectItem>
+                      <SelectItem value="member">Member - Can create and edit</SelectItem>
+                      <SelectItem value="viewer">Viewer - Read-only access</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button type="submit" className="w-full rounded-xl" disabled={inviting}>
+                  {inviting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Send Invitation
+                </Button>
+              </form>
+            </div>
+          )}
 
           {/* Team Members List */}
           <div className="space-y-3 animate-fade-in" style={{ animationDelay: '0.1s' }}>
@@ -416,13 +446,17 @@ export default function TeamSettings() {
                     {getRoleIcon(member.role)}
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium">{member.profiles?.email || 'Unknown'}</p>
+                    <p className="font-medium">
+                      {member.profiles?.email || 'Unknown'}
+                      {member.user_id === user?.id && <span className="ml-2 text-primary text-xs bg-primary/10 px-2 py-0.5 rounded-full">You</span>}
+                    </p>
                     <p className="text-xs text-muted-foreground capitalize">{member.role}</p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {member.role !== 'owner' && canManageTeam && (
+                  {/* Management actions - only if I am admin/owner AND target is NOT owner AND target is NOT me */}
+                  {member.role !== 'owner' && canManageTeam && member.user_id !== user?.id && (
                     <>
                       <Select
                         value={member.role}
