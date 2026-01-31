@@ -89,9 +89,33 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // SECURITY: Verify user is authenticated  
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      console.error("Missing authorization header");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized - missing authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
+
+    if (authError || !user) {
+      console.error("Invalid or expired token:", authError?.message);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized - invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`Email request from user: ${user.id}`);
+
     const { type, id, recipient_email, recipient_name, subject, message }: EmailRequest = await req.json();
 
-    console.log(`Sending ${type} email to ${recipient_email}`);
+    console.log(`Sending ${type} email to ${recipient_email} for user ${user.id}`);
 
     if (!recipient_email) {
       return new Response(
