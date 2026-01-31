@@ -4,8 +4,8 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 
 interface EmailRequest {
-  type: "quote" | "invoice";
-  id: string;
+  type: "quote" | "invoice" | "team_invitation";
+  id?: string;
   recipient_email: string;
   recipient_name?: string;
   subject?: string;
