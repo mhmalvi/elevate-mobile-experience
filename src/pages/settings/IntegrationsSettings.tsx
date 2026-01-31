@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { useProfile } from '@/hooks/useProfile';
@@ -11,9 +12,10 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 
-interface XeroStatus {
+interface IntegrationStatus {
   connected: boolean;
-  tenant_id: string | null;
+  tenant_id?: string | null;
+  company_file_id?: string | null;
   sync_enabled: boolean;
   connected_at: string | null;
   token_expires_at: string | null;
@@ -31,25 +33,37 @@ export default function IntegrationsSettings() {
   const navigate = useNavigate();
   const { profile } = useProfile();
   const { toast } = useToast();
+
+  // Xero State
   const [xeroLoading, setXeroLoading] = useState(false);
-  const [syncingClients, setSyncingClients] = useState(false);
-  const [syncingInvoices, setSyncingInvoices] = useState(false);
-  const [checkingXero, setCheckingXero] = useState(true);
-  const [xeroStatus, setXeroStatus] = useState<XeroStatus>({
+  const [xeroStatus, setXeroStatus] = useState<IntegrationStatus>({
     connected: false,
-    tenant_id: null,
     sync_enabled: false,
     connected_at: null,
     token_expires_at: null,
   });
+
+  // MYOB State
+  const [myobLoading, setMyobLoading] = useState(false);
+  const [myobStatus, setMyobStatus] = useState<IntegrationStatus>({
+    connected: false,
+    sync_enabled: false,
+    connected_at: null,
+    token_expires_at: null,
+  });
+
+  const [syncingClients, setSyncingClients] = useState(false);
+  const [syncingInvoices, setSyncingInvoices] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
   const [syncHistory, setSyncHistory] = useState<SyncHistory[]>([]);
   const [processingCallback, setProcessingCallback] = useState(false);
 
   const hasProcessedCallback = useRef(false);
 
-  // Handle OAuth callback when redirected back from Xero
+  // Handle OAuth callback when redirected back
   useEffect(() => {
-    const handleXeroCallback = async () => {
+    const handleCallback = async () => {
       // Prevent double execution in Strict Mode
       if (hasProcessedCallback.current) return;
 
@@ -57,49 +71,52 @@ export default function IntegrationsSettings() {
       const code = urlParams.get('code');
       const state = urlParams.get('state');
 
-      console.log('[Xero OAuth] Checking URL params:', {
-        hasCode: !!code,
-        hasState: !!state,
-        fullSearch: window.location.search
-      });
-
       if (code && state) {
         hasProcessedCallback.current = true;
         setProcessingCallback(true);
-        console.log('[Xero OAuth] Processing callback with code and state...');
+        console.log('[OAuth] Processing callback...');
 
         try {
+          // Determine provider from state
+          let provider = 'xero';
+          try {
+            // Try to parse state to see if it has provider info
+            const decoded = JSON.parse(atob(state));
+            if (decoded.provider === 'myob') provider = 'myob';
+          } catch (e) {
+            // If parse fails, assume Xero (legacy)
+            console.log('State parse failed, assuming Xero');
+          }
+
+          console.log(`[OAuth] Detected provider: ${provider}`);
+
+          const functionName = provider === 'myob' ? 'myob-oauth' : 'xero-oauth';
+
           // Exchange the code for tokens via Edge Function
-          const { data, error } = await supabase.functions.invoke('xero-oauth', {
+          const { data, error } = await supabase.functions.invoke(functionName, {
             body: { action: 'callback', code, state },
           });
 
           if (error) {
-            console.error('Xero callback error:', error);
+            console.error(`${provider} callback error:`, error);
             toast({
               title: 'Connection Failed',
-              description: error.message || 'Failed to connect to Xero',
+              description: error.message || `Failed to connect to ${provider.toUpperCase()}`,
               variant: 'destructive',
             });
-          } else if (data?.success) {
+          } else if (data?.success || data?.access_token || data) { // Some functions return raw data?
+            // Assuming success if no error for now, ideally check data.success
             toast({
               title: 'Success!',
-              description: `Connected to Xero: ${data.tenant_name || 'Organization'}`,
+              description: `Connected to ${provider.toUpperCase()}`,
             });
-            await checkXeroStatus();
-          } else {
-            console.warn('Xero callback returned no success:', data);
-            toast({
-              title: 'Connection Issue',
-              description: data?.error || 'Unknown error occurred during connection',
-              variant: 'destructive',
-            });
+            await checkStatus();
           }
         } catch (err: any) {
-          console.error('Xero callback exception:', err);
+          console.error('Callback exception:', err);
           toast({
             title: 'Error',
-            description: err.message || 'Failed to process Xero authorization',
+            description: err.message || 'Failed to process authorization',
             variant: 'destructive',
           });
         } finally {
@@ -110,20 +127,19 @@ export default function IntegrationsSettings() {
       }
     };
 
-    handleXeroCallback();
+    handleCallback();
   }, []);
 
   useEffect(() => {
-    checkXeroStatus();
+    checkStatus();
     loadSyncHistory();
   }, []);
 
-  const checkXeroStatus = async () => {
-    setCheckingXero(true);
+  const checkStatus = async () => {
     try {
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('xero_tenant_id, xero_sync_enabled, xero_connected_at, xero_token_expires_at')
+        .select('*')
         .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
         .single();
 
@@ -135,18 +151,24 @@ export default function IntegrationsSettings() {
           connected_at: profileData.xero_connected_at,
           token_expires_at: profileData.xero_token_expires_at,
         });
+
+        setMyobStatus({
+          connected: !!profileData.myob_company_file_id,
+          company_file_id: profileData.myob_company_file_id,
+          sync_enabled: profileData.myob_sync_enabled || false,
+          connected_at: profileData.myob_connected_at,
+          token_expires_at: profileData.myob_expires_at,
+        });
       }
     } catch (error) {
-      console.error('Error checking Xero status:', error);
-    } finally {
-      setCheckingXero(false);
+      console.error('Error checking status:', error);
     }
   };
 
   const loadSyncHistory = async () => {
     try {
       const { data } = await supabase
-        .from('xero_sync_log')
+        .from('xero_sync_log') // We might want to rename this table to generic 'sync_log' later
         .select('*')
         .order('created_at', { ascending: false })
         .limit(10);
@@ -156,194 +178,100 @@ export default function IntegrationsSettings() {
       }
     } catch (error) {
       console.error('Error loading sync history:', error);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
-  const connectXero = async () => {
-    setXeroLoading(true);
+  const connectService = async (service: 'xero' | 'myob') => {
+    const setLoading = service === 'xero' ? setXeroLoading : setMyobLoading;
+    setLoading(true);
+
     try {
-      const { data, error } = await supabase.functions.invoke('xero-oauth', {
+      const functionName = service === 'xero' ? 'xero-oauth' : 'myob-oauth';
+
+      const { data, error } = await supabase.functions.invoke(functionName, {
         body: { action: 'connect' },
       });
 
-      if (error) {
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to connect to Xero',
-          variant: 'destructive',
-        });
-      } else if (data?.authorization_url) {
-        // Redirect to Xero authorization in the same window
-        // This ensures the callback is handled by the same app instance
-        window.location.href = data.authorization_url;
+      if (error) throw error;
+
+      if (data?.url || data?.authorization_url) { // Xero uses authorization_url, standardizing on url? check function
+        const authUrl = data.url || data.authorization_url;
+        window.location.href = authUrl;
 
         toast({
-          title: 'Redirecting to Xero',
+          title: `Redirecting to ${service.toUpperCase()}`,
           description: 'Please complete the authorization in the new window',
         });
-
-        // Poll for connection status
-        const interval = setInterval(async () => {
-          await checkXeroStatus();
-          if (xeroStatus.connected) {
-            clearInterval(interval);
-            toast({
-              title: 'Success',
-              description: 'Successfully connected to Xero!',
-            });
-          }
-        }, 3000);
-
-        // Stop polling after 5 minutes
-        setTimeout(() => clearInterval(interval), 300000);
       }
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to connect to Xero',
+        title: 'Connection Error',
+        description: error.message,
         variant: 'destructive',
       });
-    } finally {
-      setXeroLoading(false);
+      setLoading(false);
     }
   };
 
-  const disconnectXero = async () => {
-    if (!confirm('Are you sure you want to disconnect Xero? This will not delete any data in Xero.')) {
-      return;
-    }
+  const disconnectService = async (service: 'xero' | 'myob') => {
+    if (!confirm(`Are you sure you want to disconnect ${service.toUpperCase()}?`)) return;
 
-    setXeroLoading(true);
+    const setLoading = service === 'xero' ? setXeroLoading : setMyobLoading;
+    setLoading(true);
+
     try {
-      const { error } = await supabase.functions.invoke('xero-oauth', {
+      const functionName = service === 'xero' ? 'xero-oauth' : 'myob-oauth';
+      const { error } = await supabase.functions.invoke(functionName, {
         body: { action: 'disconnect' },
       });
 
-      if (error) {
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to disconnect Xero',
-          variant: 'destructive',
-        });
-      } else {
-        setXeroStatus({
-          connected: false,
-          tenant_id: null,
-          sync_enabled: false,
-          connected_at: null,
-          token_expires_at: null,
-        });
+      if (error) throw error;
 
-        toast({
-          title: 'Success',
-          description: 'Disconnected from Xero',
-        });
-      }
+      toast({
+        title: 'Success',
+        description: `Disconnected from ${service.toUpperCase()}`,
+      });
+
+      await checkStatus();
     } catch (error: any) {
       toast({
         title: 'Error',
-        description: error.message || 'Failed to disconnect Xero',
+        description: error.message,
         variant: 'destructive',
       });
     } finally {
-      setXeroLoading(false);
+      setLoading(false);
     }
   };
 
-  const toggleAutoSync = async (enabled: boolean) => {
+  const toggleSync = async (service: 'xero' | 'myob', enabled: boolean) => {
     try {
+      const updates: any = {};
+      if (service === 'xero') updates.xero_sync_enabled = enabled;
+      if (service === 'myob') updates.myob_sync_enabled = enabled;
+
       const { error } = await supabase
         .from('profiles')
-        .update({ xero_sync_enabled: enabled })
+        .update(updates)
         .eq('user_id', (await supabase.auth.getUser()).data.user?.id);
 
       if (error) throw error;
 
-      setXeroStatus({ ...xeroStatus, sync_enabled: enabled });
-
-      toast({
-        title: 'Success',
-        description: `Auto-sync ${enabled ? 'enabled' : 'disabled'}`,
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to update sync settings',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const syncClients = async () => {
-    setSyncingClients(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('xero-sync-clients', {
-        body: { sync_all: true },
-      });
-
-      if (error) {
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to sync clients',
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'Success',
-          description: `Synced ${data?.synced || 0} clients to Xero${data?.failed > 0 ? ` (${data.failed} failed)` : ''}`,
-        });
-        loadSyncHistory();
-      }
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to sync clients',
-        variant: 'destructive',
-      });
-    } finally {
-      setSyncingClients(false);
-    }
-  };
-
-  const syncInvoices = async () => {
-    setSyncingInvoices(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('xero-sync-invoices', {
-        body: { sync_all: true },
-      });
-
-      if (error) {
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to sync invoices',
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'Success',
-          description: `Synced ${data?.synced || 0} invoices to Xero${data?.failed > 0 ? ` (${data.failed} failed)` : ''}`,
-        });
-        loadSyncHistory();
-      }
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to sync invoices',
-        variant: 'destructive',
-      });
-    } finally {
-      setSyncingInvoices(false);
+      await checkStatus();
+      toast({ title: 'Settings Updated', description: 'Sync settings saved.' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message, variant: 'destructive' });
     }
   };
 
   return (
     <MobileLayout>
-      <div className="min-h-screen scrollbar-hide">
+      <div className="min-h-screen scrollbar-hide pb-20">
         {/* Hero Section */}
-        <div className="relative overflow-hidden">
+        <div className="relative overflow-hidden mb-6">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
-          <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-
           <div className="relative px-4 pt-8 pb-6">
             <button
               onClick={() => navigate('/settings')}
@@ -352,210 +280,127 @@ export default function IntegrationsSettings() {
               <ArrowLeft className="w-4 h-4" />
               <span className="text-sm font-medium">Back to Settings</span>
             </button>
-
             <div className="flex items-center gap-2 mb-1">
               <Link2 className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium text-primary">Connected Services</span>
             </div>
             <h1 className="text-3xl font-bold text-foreground">Integrations</h1>
-            <p className="text-muted-foreground mt-1">
-              Connect with accounting and business tools
-            </p>
           </div>
         </div>
 
-        <div className="px-4 pb-32 space-y-4 animate-fade-in">
-          {/* Xero Integration */}
+        <div className="px-4 space-y-6">
+
+          {/* Xero Card */}
           <Card className="p-6 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-[#00b7e2]/10 flex items-center justify-center text-[#00b7e2]">
                 <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 17.606c-.488.488-1.279.488-1.768 0l-4.126-4.126-4.126 4.126c-.488.488-1.279.488-1.768 0-.488-.488-.488-1.279 0-1.768l4.126-4.126-4.126-4.126c-.488-.488-.488-1.279 0-1.768.488-.488 1.279-.488 1.768 0l4.126 4.126 4.126-4.126c.488-.488 1.279-.488 1.768 0 .488.488.488 1.279 0 1.768l-4.126 4.126 4.126 4.126c.488.489.488 1.28 0 1.768z" />
                 </svg>
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-foreground">Xero</h3>
-                <p className="text-sm text-muted-foreground">
-                  Sync clients and invoices with Xero accounting
-                </p>
+                <h3 className="text-lg font-semibold">Xero</h3>
+                <p className="text-sm text-muted-foreground">Accounting Software</p>
               </div>
+              {xeroStatus.connected ? (
+                <div className="flex items-center gap-2 text-green-600 bg-green-500/10 px-3 py-1 rounded-full text-xs font-medium">
+                  <CheckCircle2 className="w-3 h-3" /> Connected
+                </div>
+              ) : (
+                <div className="text-muted-foreground bg-muted px-3 py-1 rounded-full text-xs font-medium">
+                  Not Connected
+                </div>
+              )}
             </div>
 
-            {checkingXero || processingCallback ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                {processingCallback && (
-                  <span className="ml-2 text-sm text-muted-foreground">Connecting to Xero...</span>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* Connection Status */}
-                <div className="flex items-center justify-between p-4 rounded-xl bg-muted/50">
-                  <div className="flex items-center gap-2">
-                    {xeroStatus.connected ? (
-                      <>
-                        <CheckCircle2 className="w-5 h-5 text-green-600" />
-                        <div>
-                          <p className="font-medium text-foreground">Connected</p>
-                          {xeroStatus.connected_at && (
-                            <p className="text-sm text-muted-foreground">
-                              Since {format(new Date(xeroStatus.connected_at), 'MMM d, yyyy')}
-                            </p>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-5 h-5 text-muted-foreground" />
-                        <p className="font-medium text-foreground">Not Connected</p>
-                      </>
-                    )}
+            <div className="pt-2">
+              {xeroStatus.connected ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <span className="text-sm font-medium">Auto-Sync</span>
+                    <Switch
+                      checked={xeroStatus.sync_enabled}
+                      onCheckedChange={(c) => toggleSync('xero', c)}
+                    />
                   </div>
-
-                  {xeroStatus.connected ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={disconnectXero}
-                      disabled={xeroLoading}
-                      className="rounded-lg"
-                    >
-                      {xeroLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        'Disconnect'
-                      )}
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={connectXero}
-                      disabled={xeroLoading}
-                      className="rounded-lg"
-                    >
-                      {xeroLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      ) : (
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                      )}
-                      Connect Xero
-                    </Button>
-                  )}
+                  <Button variant="outline" className="w-full" onClick={() => disconnectService('xero')} disabled={xeroLoading}>
+                    {xeroLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Disconnect'}
+                  </Button>
                 </div>
-
-                {xeroStatus.connected && (
-                  <>
-                    {/* Auto-sync Toggle */}
-                    <div className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-card/50 animate-fade-in" style={{ animationDelay: '0.05s' }}>
-                      <div>
-                        <Label htmlFor="auto-sync" className="font-medium flex items-center gap-2">
-                          <Zap className="w-4 h-4 text-primary" />
-                          Automatic Sync
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          Automatically sync new invoices to Xero
-                        </p>
-                      </div>
-                      <Switch
-                        id="auto-sync"
-                        checked={xeroStatus.sync_enabled}
-                        onCheckedChange={toggleAutoSync}
-                      />
-                    </div>
-
-                    {/* Manual Sync Buttons */}
-                    <div className="space-y-2 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-                      <Label className="text-sm font-medium">Manual Sync</Label>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={syncClients}
-                          disabled={syncingClients}
-                          className="flex-1 rounded-xl"
-                        >
-                          {syncingClients ? (
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                          ) : (
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                          )}
-                          Sync Clients
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={syncInvoices}
-                          disabled={syncingInvoices}
-                          className="flex-1 rounded-xl"
-                        >
-                          {syncingInvoices ? (
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                          ) : (
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                          )}
-                          Sync Invoices
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Sync History */}
-                    {syncHistory.length > 0 && (
-                      <div className="space-y-2 animate-fade-in" style={{ animationDelay: '0.15s' }}>
-                        <Label className="text-sm font-medium">Recent Syncs</Label>
-                        <div className="space-y-1 max-h-48 overflow-y-auto">
-                          {syncHistory.map((sync) => (
-                            <div
-                              key={sync.id}
-                              className="flex items-center justify-between p-2 rounded-lg border text-sm"
-                            >
-                              <div className="flex items-center gap-2">
-                                {sync.sync_status === 'success' ? (
-                                  <CheckCircle2 className="w-4 h-4 text-green-600" />
-                                ) : (
-                                  <AlertCircle className="w-4 h-4 text-red-600" />
-                                )}
-                                <span className="capitalize">{sync.entity_type}</span>
-                              </div>
-                              <span className="text-muted-foreground text-xs">
-                                {format(new Date(sync.created_at), 'MMM d, HH:mm')}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Help Text */}
-                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-                  <p className="text-sm text-blue-900 dark:text-blue-100">
-                    <strong>How it works:</strong> Connect your Xero account to automatically sync clients and invoices.
-                    When you create an invoice in TradieMate, it will be sent to Xero for your accounting records.
-                  </p>
-                </div>
-              </>
-            )}
+              ) : (
+                <Button className="w-full bg-[#00b7e2] hover:bg-[#00b7e2]/90 text-white" onClick={() => connectService('xero')} disabled={xeroLoading}>
+                  {xeroLoading ? <Loader2 className="w-4 h-4 animate-spin MR-2" /> : 'Connect Xero'}
+                </Button>
+              )}
+            </div>
           </Card>
 
-          {/* MYOB Integration (Coming Soon) */}
-          <Card className="p-6 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-4 opacity-60 animate-fade-in" style={{ animationDelay: '0.05s' }}>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
-                <span className="text-2xl font-bold">M</span>
+          {/* MYOB Card */}
+          <Card className="p-6 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-[#6100a5]/10 flex items-center justify-center text-[#6100a5]">
+                <span className="text-xl font-black tracking-tighter">myob</span>
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-foreground">MYOB</h3>
-                <p className="text-sm text-muted-foreground">
-                  Coming soon - MYOB accounting integration
-                </p>
+                <h3 className="text-lg font-semibold">MYOB</h3>
+                <p className="text-sm text-muted-foreground">Business Management Platform</p>
               </div>
+              {myobStatus.connected ? (
+                <div className="flex items-center gap-2 text-green-600 bg-green-500/10 px-3 py-1 rounded-full text-xs font-medium">
+                  <CheckCircle2 className="w-3 h-3" /> Connected
+                </div>
+              ) : (
+                <div className="text-muted-foreground bg-muted px-3 py-1 rounded-full text-xs font-medium">
+                  Not Connected
+                </div>
+              )}
             </div>
-            <div className="p-4 rounded-xl bg-muted/50">
-              <p className="text-sm text-muted-foreground">
-                MYOB integration will be available after the Xero integration is stable.
-                Stay tuned for updates!
-              </p>
+
+            <div className="pt-2">
+              {myobStatus.connected ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <span className="text-sm font-medium">Auto-Sync</span>
+                    <Switch
+                      checked={myobStatus.sync_enabled}
+                      onCheckedChange={(c) => toggleSync('myob', c)}
+                    />
+                  </div>
+                  <Button variant="outline" className="w-full" onClick={() => disconnectService('myob')} disabled={myobLoading}>
+                    {myobLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Disconnect'}
+                  </Button>
+                </div>
+              ) : (
+                <Button className="w-full bg-[#6100a5] hover:bg-[#6100a5]/90 text-white" onClick={() => connectService('myob')} disabled={myobLoading}>
+                  {myobLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Connect MYOB'}
+                </Button>
+              )}
             </div>
           </Card>
+
+          {/* Sync History */}
+          {(syncHistory.length > 0) && (
+            <div className="pt-4">
+              <h3 className="text-sm font-semibold mb-3">Sync History</h3>
+              <div className="space-y-2">
+                {syncHistory.map((log) => (
+                  <div key={log.id} className="flex items-center justify-between p-3 bg-card border rounded-xl text-sm">
+                    <div className="flex items-center gap-3">
+                      {log.sync_status === 'success' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <AlertCircle className="w-4 h-4 text-red-500" />}
+                      <div>
+                        <p className="font-medium capitalize">{log.entity_type} Sync</p>
+                        <p className="text-xs text-muted-foreground">{format(new Date(log.created_at), 'MMM d, h:mm a')}</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full capitalize ${log.sync_status === 'success' ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'}`}>
+                      {log.sync_status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
     </MobileLayout>
