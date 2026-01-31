@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const { user, signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
@@ -26,6 +26,14 @@ export default function Auth() {
   // Decode because it may be URL-encoded to preserve query params
   const redirectParam = searchParams.get('redirect');
   const redirectTo = redirectParam ? decodeURIComponent(redirectParam) : '/dashboard';
+
+  // Auto-redirect if user is already logged in
+  useEffect(() => {
+    if (user) {
+      console.log('=== AUTH: User already logged in, redirecting to:', redirectTo);
+      navigate(redirectTo, { replace: true });
+    }
+  }, [user, redirectTo, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +99,8 @@ export default function Auth() {
         }, 2000);
       } else {
         // Session established (Login or SignUp with auto-confirm)
+        console.log('=== AUTH SUCCESS ===');
+        console.log('Redirecting to:', redirectTo);
         navigate(redirectTo);
       }
     }
