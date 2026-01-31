@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,10 @@ export default function Auth() {
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+
+  // Get redirect URL from query params (for team invitations, etc.)
+  const redirectTo = searchParams.get('redirect') || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,7 +87,7 @@ export default function Auth() {
           setMode('login');
         }, 2000);
       } else {
-        navigate('/dashboard');
+        navigate(redirectTo);
       }
     }
     setLoading(false);
@@ -136,7 +140,7 @@ export default function Auth() {
               required
             />
           </div>
-          
+
           {mode !== 'forgot-password' && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -168,7 +172,7 @@ export default function Auth() {
               )}
             </div>
           )}
-          
+
           <Button type="submit" className="w-full" disabled={loading}>
             {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
             {mode === 'login' && 'Sign In'}
