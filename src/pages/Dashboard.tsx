@@ -4,6 +4,7 @@ import { MobileLayout } from '@/components/layout/MobileLayout';
 import { StatCard } from '@/components/ui/stat-card';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { useAuth } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 import { useProfile } from '@/hooks/useProfile';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,15 +20,24 @@ import {
   Sparkles,
   Clock,
   CheckCircle2,
-  ArrowUpRight
+  ArrowUpRight,
+  Users
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { team, allTeams, switchTeam, loading: teamLoading } = useTeam();
   const { profile } = useProfile();
   const { toast } = useToast();
   const [stats, setStats] = useState({
@@ -41,23 +51,23 @@ export default function Dashboard() {
   const [sendingReminders, setSendingReminders] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!user || !team) return;
     await Promise.all([fetchStats(), fetchRecentActivity(), fetchOverdueInvoices()]);
-  }, [user]);
+  }, [user, team]);
 
   useEffect(() => {
-    if (user) {
-      fetchStats();
-      fetchRecentActivity();
-      fetchOverdueInvoices();
+    if (user && team) {
+      fetchData();
     }
-  }, [user]);
+  }, [user, team]);
 
   const { containerProps, RefreshIndicator } = usePullToRefresh({
     onRefresh: fetchData,
   });
 
   const fetchStats = async () => {
+    if (!team) return;
+
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
@@ -65,25 +75,25 @@ export default function Dashboard() {
       supabase
         .from('jobs')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user?.id)
+        .eq('team_id', team.id)
         .in('status', ['approved', 'scheduled', 'in_progress']),
 
       supabase
         .from('quotes')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user?.id)
+        .eq('team_id', team.id)
         .in('status', ['sent', 'viewed']),
 
       supabase
         .from('invoices')
         .select('total, amount_paid')
-        .eq('user_id', user?.id)
+        .eq('team_id', team.id)
         .in('status', ['sent', 'viewed', 'partially_paid', 'overdue']),
 
       supabase
         .from('invoices')
         .select('amount_paid, paid_at')
-        .eq('user_id', user?.id)
+        .eq('team_id', team.id)
         .eq('status', 'paid')
         .gte('paid_at', startOfMonth),
     ]);
@@ -103,12 +113,14 @@ export default function Dashboard() {
   };
 
   const fetchOverdueInvoices = async () => {
+    if (!team) return;
+
     const today = new Date().toISOString().split('T')[0];
 
     const { data: overdue } = await supabase
       .from('invoices')
       .select('id, total, amount_paid')
-      .eq('user_id', user?.id)
+      .eq('team_id', team.id)
       .lt('due_date', today)
       .not('status', 'eq', 'paid')
       .not('status', 'eq', 'cancelled');
@@ -121,10 +133,12 @@ export default function Dashboard() {
   };
 
   const fetchRecentActivity = async () => {
+    if (!team) return;
+
     const { data: quotes } = await supabase
       .from('quotes')
       .select('id, title, status, created_at')
-      .eq('user_id', user?.id)
+      .eq('team_id', team.id)
       .order('created_at', { ascending: false })
       .limit(5);
 
@@ -135,7 +149,7 @@ export default function Dashboard() {
     setSendingReminders(true);
     try {
       const { data, error } = await supabase.functions.invoke('payment-reminder', {
-        body: { user_id: user?.id }
+        body: { user_id: user?.id, team_id: team?.id }
       });
 
       if (error) throw error;
@@ -184,20 +198,42 @@ export default function Dashboard() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
           <div className="relative px-4 pt-8 pb-6">
-            {/* Greeting */}
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="w-4 h-4 text-primary animate-pulse" />
-              <span className="text-sm font-medium text-primary">Welcome back</span>
+            <div className="flex items-start justify-between">
+              <div>
+                {/* Greeting */}
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+                  <span className="text-sm font-medium text-primary">Welcome back</span>
+                </div>
+                <h1 className="text-3xl font-bold text-foreground">
+                  {greeting()}, {profile?.business_name || 'Mate'}!
+                </h1>
+                <p className="text-muted-foreground mt-1">
+                  Here's your business snapshot this {getTimeOfDay()}
+                </p>
+              </div>
+
+              {/* Team Switcher */}
+              {allTeams.length > 1 && (
+                <div className="shrink-0 ml-4 mt-2">
+                  <Select value={team?.id} onValueChange={switchTeam}>
+                    <SelectTrigger className="w-[140px] h-10 bg-background/50 backdrop-blur-md border-primary/20 rounded-xl shadow-sm hover:bg-background/80 transition-all">
+                      <div className="flex items-center gap-2 truncate">
+                        <Users className="w-4 h-4 text-primary shrink-0" />
+                        <span className="truncate text-sm font-medium">{team?.name}</span>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent align="end" className="w-[200px]">
+                      {allTeams.map((t) => (
+                        <SelectItem key={t.id} value={t.id} className="cursor-pointer">
+                          <span className="font-medium">{t.name}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
-            <h1 className="text-3xl font-bold text-foreground">
-              {greeting()}, {profile?.business_name || 'Mate'}!
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Here's your business snapshot this {getTimeOfDay()}
-            </p>
-
-            {/* Settings Button */}
-
           </div>
         </div>
 

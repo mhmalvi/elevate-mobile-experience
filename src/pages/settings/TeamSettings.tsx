@@ -44,14 +44,11 @@ export default function TeamSettings() {
 
     setLeaving(true);
     try {
-      // Find my membership ID
-      const myMembership = teamMembers.find(m => m.user_id === user.id);
-      if (!myMembership) throw new Error("Membership not found");
+      if (!team) return;
 
-      const { error } = await supabase
-        .from('team_members')
-        .delete()
-        .eq('id', myMembership.id);
+      const { error } = await supabase.functions.invoke('leave-team', {
+        body: { team_id: team.id }
+      });
 
       if (error) throw error;
 
