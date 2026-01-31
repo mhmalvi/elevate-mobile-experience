@@ -257,6 +257,7 @@ serve(async (req) => {
                   "Authorization": `Bearer ${accessToken}`,
                   "Xero-Tenant-Id": profile.xero_tenant_id,
                   "Content-Type": "application/json",
+                  "Accept": "application/json",
                 },
                 body: JSON.stringify({ Invoices: [xeroInvoice] }),
               }
@@ -277,6 +278,7 @@ serve(async (req) => {
                 "Authorization": `Bearer ${accessToken}`,
                 "Xero-Tenant-Id": profile.xero_tenant_id,
                 "Content-Type": "application/json",
+                "Accept": "application/json",
               },
               body: JSON.stringify({ Invoices: [xeroInvoice] }),
             }
