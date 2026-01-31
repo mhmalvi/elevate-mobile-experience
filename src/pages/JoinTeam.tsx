@@ -10,7 +10,7 @@ export default function JoinTeam() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [invitation, setInvitation] = useState<any>(null);
@@ -55,6 +55,15 @@ export default function JoinTeam() {
   };
 
   const handleAccept = async () => {
+    // Wait for auth to be ready
+    if (authLoading) {
+      toast({
+        title: 'Please wait',
+        description: 'Loading your session...',
+      });
+      return;
+    }
+
     if (!user) {
       toast({
         title: 'Please sign in',
@@ -227,9 +236,9 @@ export default function JoinTeam() {
 
         {/* Actions */}
         <div className="space-y-2">
-          <Button onClick={handleAccept} className="w-full h-12" disabled={accepting}>
-            {accepting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Accept Invitation
+          <Button onClick={handleAccept} className="w-full h-12" disabled={accepting || authLoading}>
+            {(accepting || authLoading) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            {authLoading ? 'Loading...' : 'Accept Invitation'}
           </Button>
           <Button
             variant="outline"
