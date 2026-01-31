@@ -98,10 +98,11 @@ export default function Auth() {
           setMode('login');
         }, 2000);
       } else {
-        // Session established (Login or SignUp with auto-confirm)
+        // Session established - useEffect will handle the redirect
         console.log('=== AUTH SUCCESS ===');
-        console.log('Redirecting to:', redirectTo);
-        navigate(redirectTo);
+        console.log('Login successful, useEffect will redirect to:', redirectTo);
+        // Don't call navigate here - let the useEffect handle it
+        // to avoid race conditions with auth state changes
       }
     }
     setLoading(false);
