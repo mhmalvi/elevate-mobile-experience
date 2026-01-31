@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useSearchParams } 
 import { AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { TeamProvider } from "@/hooks/useTeam";
 import { useProfile } from "@/hooks/useProfile";
 import { ThemeProvider } from "next-themes";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -174,9 +175,11 @@ const App = () => (
             }}
           >
             <AuthProvider>
-              <OfflineProvider>
-                <AppRoutes />
-              </OfflineProvider>
+              <TeamProvider>
+                <OfflineProvider>
+                  <AppRoutes />
+                </OfflineProvider>
+              </TeamProvider>
             </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>
