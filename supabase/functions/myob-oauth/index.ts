@@ -1,8 +1,7 @@
-
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
-import { encryptToken } from "../_shared/encryption.ts"; // Ensure this exists
+import { createCorsResponse, getCorsHeaders } from "../_shared/cors.ts";
+import { encryptToken } from "../_shared/encryption.ts";
 
 const MYOB_CLIENT_ID = Deno.env.get("MYOB_CLIENT_ID")!;
 const MYOB_CLIENT_SECRET = Deno.env.get("MYOB_CLIENT_SECRET")!;
@@ -11,9 +10,12 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 serve(async (req) => {
+    // Handle CORS preflight requests
     if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: corsHeaders });
+        return createCorsResponse(req);
     }
+
+    const corsHeaders = getCorsHeaders(req);
 
     try {
         const url = new URL(req.url);
@@ -34,10 +36,8 @@ serve(async (req) => {
             if (error || !user) throw new Error("Invalid user token");
 
             // Generate state to prevent CSRF and store user ID
-            const state = btoa(JSON.stringify({ userId: user.id, nonce: crypto.randomUUID() }));
-
-            // Secure: Store state in DB (optional but recommended) or just pass through
-            // For simplicity in MVP we pass it through, but verify userId on return
+            // Added provider: 'myob' to distinguish from Xero
+            const state = btoa(JSON.stringify({ userId: user.id, provider: 'myob', nonce: crypto.randomUUID() }));
 
             const scopes = "CompanyFile"; // Standard scope for AccountRight
             const authUrl = `https://secure.myob.com/oauth2/account/authorize?client_id=${MYOB_CLIENT_ID}&redirect_uri=${encodeURIComponent(MYOB_REDIRECT_URI)}&response_type=code&scope=${scopes}&state=${state}`;
@@ -103,7 +103,6 @@ serve(async (req) => {
             }
 
             // For MVP, pick the first Company File
-            // Ideally, present a UI for the user to choose, but that requires a multi-step UI flow.
             const companyFile = cfData[0];
             const companyFileId = companyFile.Id;
             const companyFileUri = companyFile.Uri;
