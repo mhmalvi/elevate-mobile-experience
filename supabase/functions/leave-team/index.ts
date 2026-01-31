@@ -69,16 +69,25 @@ serve(async (req) => {
         }
 
         // Delete membership
-        const { error: deleteError } = await supabaseAdmin
+        const { error: deleteError, count } = await supabaseAdmin
             .from('team_members')
-            .delete()
+            .delete({ count: 'exact' })
             .eq('id', membership.id);
+
+        console.log(`Deleted membership ${membership.id}. Count: ${count}`);
 
         if (deleteError) {
             throw deleteError;
         }
 
-        return new Response(JSON.stringify({ success: true }), {
+        if (count === 0) {
+            return new Response(JSON.stringify({ error: 'Failed to delete membership. Record may not exist or permission denied.' }), {
+                status: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+        }
+
+        return new Response(JSON.stringify({ success: true, deleted_count: count }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
 
