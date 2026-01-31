@@ -55,6 +55,12 @@ export default function JoinTeam() {
   };
 
   const handleAccept = async () => {
+    // DEBUG: Immediate feedback to verify button click is working
+    console.log('=== handleAccept CALLED ===');
+    console.log('authLoading:', authLoading);
+    console.log('user:', user?.email || 'null');
+    console.log('token:', token);
+
     // Wait for auth to be ready
     if (authLoading) {
       toast({
@@ -65,6 +71,7 @@ export default function JoinTeam() {
     }
 
     if (!user) {
+      console.log('No user - redirecting to auth');
       toast({
         title: 'Please sign in',
         description: 'You need to be signed in to accept this invitation',
@@ -74,6 +81,7 @@ export default function JoinTeam() {
     }
 
     setAccepting(true);
+    console.log('Starting accept process...');
 
     try {
       console.log('Accepting invitation with token:', token);
