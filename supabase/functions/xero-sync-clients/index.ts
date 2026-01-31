@@ -80,10 +80,26 @@ serve(async (req) => {
     }
 
     // Decrypt the access token
-    let accessToken = await decryptToken(profile.xero_access_token);
+    let accessToken: string;
+    try {
+      accessToken = await decryptToken(profile.xero_access_token);
+      console.log("Token decrypted successfully, length:", accessToken?.length);
+    } catch (decryptError) {
+      console.error("Failed to decrypt Xero token:", decryptError);
+      return new Response(
+        JSON.stringify({
+          error: "Failed to decrypt Xero credentials. Please reconnect Xero.",
+          details: "Token decryption failed"
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Check if token needs refresh
-    if (new Date(profile.xero_token_expires_at) < new Date()) {
+    const tokenExpiry = new Date(profile.xero_token_expires_at);
+    console.log("Token expires at:", tokenExpiry, "Current time:", new Date());
+
+    if (tokenExpiry < new Date()) {
       console.log("Access token expired, refreshing...");
 
       // Call refresh endpoint
@@ -221,9 +237,12 @@ serve(async (req) => {
           );
         }
 
+        console.log(`Xero API response status: ${xeroResponse.status} ${xeroResponse.statusText}`);
+        console.log(`Xero API response headers:`, Object.fromEntries(xeroResponse.headers.entries()));
+
         if (!xeroResponse.ok) {
           const errorText = await xeroResponse.text();
-          console.error(`Failed to sync client ${client.id}:`, errorText);
+          console.error(`Failed to sync client ${client.id}. Status: ${xeroResponse.status}. Response:`, errorText.substring(0, 500));
 
           // Log error
           await supabase
