@@ -65,7 +65,7 @@ export default function Auth() {
       }
     }
 
-    const { error } = mode === 'login'
+    const { data, error } = mode === 'login'
       ? await signIn(email, password)
       : await signUp(email, password);
 
@@ -76,7 +76,8 @@ export default function Auth() {
         variant: "destructive",
       });
     } else {
-      if (mode === 'signup') {
+      if (mode === 'signup' && !data?.session) {
+        // Only show "check email" if no session was established immediately
         toast({
           title: "Welcome to TradieMate!",
           description: "Check your email to verify your account and get started.",
@@ -87,6 +88,7 @@ export default function Auth() {
           setMode('login');
         }, 2000);
       } else {
+        // Session established (Login or SignUp with auto-confirm)
         navigate(redirectTo);
       }
     }
