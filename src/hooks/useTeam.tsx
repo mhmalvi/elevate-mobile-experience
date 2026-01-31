@@ -64,7 +64,8 @@ export function useTeam(): UseTeamReturn {
         .from('team_members')
         .select('*, teams!inner(*)')
         .eq('user_id', user.id)
-        .limit(1);
+        .eq('user_id', user.id)
+        .order('joined_at', { ascending: false }); // Show most recently joined team first
 
       const membership = memberships?.[0];
 
