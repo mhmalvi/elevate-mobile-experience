@@ -83,10 +83,10 @@ export function useTeam(): UseTeamReturn {
       setUserRole(membership.role as TeamRole);
       setTeam((membership as any).teams);
 
-      // Fetch all team members
+      // Fetch all team members (using left join for profiles in case they don't exist)
       const { data: members, error: membersError } = await supabase
         .from('team_members')
-        .select('*, profiles!inner(email, business_name)')
+        .select('*, profiles(email, business_name)')
         .eq('team_id', membership.team_id)
         .order('joined_at', { ascending: true });
 
