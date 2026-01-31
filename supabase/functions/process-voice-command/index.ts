@@ -1,7 +1,9 @@
 // TradieMate Voice AI - Edge Function
 // Powered by OpenRouter (GPT-4o-mini)
+// SECURITY: Requires authenticated user to prevent API abuse
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -10,6 +12,8 @@ const corsHeaders = {
 };
 
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || "";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 // Validate API key is set
 if (!OPENROUTER_API_KEY) {
@@ -184,6 +188,42 @@ serve(async (req) => {
     }
 
     try {
+        // SECURITY: Verify user is authenticated to prevent API abuse
+        const authHeader = req.headers.get("Authorization");
+        if (!authHeader) {
+            console.log("Missing authorization header");
+            return new Response(JSON.stringify({
+                speak: "Sorry mate, you need to be logged in to use voice commands.",
+                action: "error",
+                data: {},
+                error: "Unauthorized"
+            }), {
+                status: 401,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+        }
+
+        // Validate the JWT token
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const { data: { user }, error: authError } = await supabase.auth.getUser(
+            authHeader.replace("Bearer ", "")
+        );
+
+        if (authError || !user) {
+            console.log("Invalid or expired token:", authError?.message);
+            return new Response(JSON.stringify({
+                speak: "Your session has expired, mate. Please log in again.",
+                action: "error",
+                data: {},
+                error: "Invalid token"
+            }), {
+                status: 401,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+        }
+
+        console.log(`Voice command from user: ${user.id}`);
+
         const body = await req.json();
         const { query, conversationHistory, accumulatedData } = body;
 
@@ -198,7 +238,7 @@ serve(async (req) => {
             });
         }
 
-        console.log(`Processing voice command for user. Query length: ${query.length}`);
+        console.log(`Processing voice command for user ${user.id}. Query length: ${query.length}`);
 
         // Build conversation messages
         const messages = [
