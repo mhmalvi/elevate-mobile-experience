@@ -201,10 +201,17 @@ serve(async (req) => {
         }
 
         // Parse line items (stored as JSONB)
-        const lineItems = invoice.line_items || [];
+        // Parse line items (stored as JSONB)
+        let lineItems = invoice.line_items || [];
 
+        // If no line items, create a default one using the invoice total
         if (lineItems.length === 0) {
-          throw new Error("Invoice has no line items");
+          console.log(`Invoice ${invoice.invoice_number} has no line items, using total amount as fallback.`);
+          lineItems = [{
+            description: "Services",
+            quantity: 1,
+            unit_price: invoice.total_amount || 0
+          }];
         }
 
         // Build Xero line items
@@ -233,13 +240,15 @@ serve(async (req) => {
             ContactID: invoice.clients.xero_contact_id,
           },
           Date: invoice.created_at.split('T')[0], // YYYY-MM-DD
-          DueDate: invoice.due_date ? invoice.due_date.split('T')[0] : undefined,
+          DueDate: invoice.due_date
+            ? invoice.due_date.split('T')[0]
+            : new Date(new Date(invoice.created_at).setDate(new Date(invoice.created_at).getDate() + 14)).toISOString().split('T')[0],
           LineAmountTypes: "Exclusive", // Prices exclude tax
           LineItems: xeroLineItems,
           InvoiceNumber: invoice.invoice_number,
           Reference: `TradieMate Invoice ${invoice.invoice_number}`,
           Status: xeroStatus,
-          CurrencyCode: "AUD",
+          // CurrencyCode removed to use organization default
         };
 
         // If invoice already has Xero ID, update; otherwise create
