@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -39,15 +39,27 @@ interface UseTeamReturn {
 
   // Actions
   refetch: () => Promise<void>;
+
+  // Multi-team support
+  allTeams: Team[];
+  switchTeam: (teamId: string) => void;
 }
 
-export function useTeam(): UseTeamReturn {
+const TeamContext = createContext<UseTeamReturn | undefined>(undefined);
+
+export function TeamProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [team, setTeam] = useState<Team | null>(null);
   const [userRole, setUserRole] = useState<TeamRole | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [allTeams, setAllTeams] = useState<Team[]>([]);
+
+  // Persistent team selection
+  const [currentTeamId, setCurrentTeamId] = useState<string | null>(() => {
+    return localStorage.getItem('tradie_mate_active_team_id');
+  });
 
   const fetchTeamData = async () => {
     if (!user) {
@@ -59,42 +71,65 @@ export function useTeam(): UseTeamReturn {
       setLoading(true);
       setError(null);
 
-      // Get user's team membership
+      // Get ALL user's team memberships
       const { data: memberships, error: membershipError } = await supabase
         .from('team_members')
         .select('*, teams!inner(*)')
         .eq('user_id', user.id)
-        .eq('user_id', user.id)
-        .order('joined_at', { ascending: false }); // Show most recently joined team first
-
-      const membership = memberships?.[0];
+        .order('joined_at', { ascending: false });
 
       if (membershipError) {
-        console.error('Error fetching team membership:', membershipError);
+        console.error('Error fetching team memberships:', membershipError);
         setError(membershipError.message);
         setLoading(false);
         return;
       }
 
-      if (!membership) {
+      if (!memberships || memberships.length === 0) {
+        setAllTeams([]);
+        setTeam(null);
+        setTeamMembers([]);
         setLoading(false);
         return;
       }
 
-      setUserRole(membership.role as TeamRole);
-      setTeam((membership as any).teams);
+      // Extract all unique teams
+      const teamsList = memberships.map((m: any) => m.teams);
+      setAllTeams(teamsList);
 
-      // Fetch all team members (using left join for profiles in case they don't exist)
-      const { data: members, error: membersError } = await supabase
-        .from('team_members')
-        .select('*, profiles(email, business_name)')
-        .eq('team_id', membership.team_id)
-        .order('joined_at', { ascending: true });
+      // Determine active membership
+      // 1. Try to find membership matching currentTeamId
+      // 2. Default to the first one (most recently joined)
+      let activeMembership = null;
+      if (currentTeamId) {
+        activeMembership = memberships.find(m => m.team_id === currentTeamId);
+      }
 
-      if (membersError) {
-        console.error('Error fetching team members:', membersError);
-      } else {
-        setTeamMembers(members || []);
+      if (!activeMembership) {
+        activeMembership = memberships[0];
+        // Update current ID to match the fallback
+        if (activeMembership) {
+          setCurrentTeamId(activeMembership.team_id);
+          localStorage.setItem('tradie_mate_active_team_id', activeMembership.team_id);
+        }
+      }
+
+      if (activeMembership) {
+        setUserRole(activeMembership.role as TeamRole);
+        setTeam((activeMembership as any).teams);
+
+        // Fetch team members for the ACTIVE team
+        const { data: members, error: membersError } = await supabase
+          .from('team_members')
+          .select('*, profiles(email, business_name)')
+          .eq('team_id', activeMembership.team_id)
+          .order('joined_at', { ascending: true });
+
+        if (membersError) {
+          console.error('Error fetching team members:', membersError);
+        } else {
+          setTeamMembers(members || []);
+        }
       }
 
       setLoading(false);
@@ -107,7 +142,13 @@ export function useTeam(): UseTeamReturn {
 
   useEffect(() => {
     fetchTeamData();
-  }, [user]);
+  }, [user, currentTeamId]); // Refetch if user or currentTeamId changes
+
+  const switchTeam = (teamId: string) => {
+    setCurrentTeamId(teamId);
+    localStorage.setItem('tradie_mate_active_team_id', teamId);
+    // The useEffect will trigger fetchTeamData
+  };
 
   // Permission helpers based on role hierarchy
   const canCreate = userRole !== null && ['owner', 'admin', 'member'].includes(userRole);
@@ -115,7 +156,7 @@ export function useTeam(): UseTeamReturn {
   const canDelete = userRole !== null && ['owner', 'admin'].includes(userRole);
   const canManageTeam = userRole !== null && ['owner', 'admin'].includes(userRole);
 
-  return {
+  const value = {
     team,
     userRole,
     teamMembers,
@@ -126,5 +167,17 @@ export function useTeam(): UseTeamReturn {
     canDelete,
     canManageTeam,
     refetch: fetchTeamData,
+    allTeams,
+    switchTeam
   };
+
+  return <TeamContext.Provider value={value}>{children}</TeamContext.Provider>;
+}
+
+export function useTeam(): UseTeamReturn {
+  const context = useContext(TeamContext);
+  if (context === undefined) {
+    throw new Error('useTeam must be used within a TeamProvider');
+  }
+  return context;
 }
