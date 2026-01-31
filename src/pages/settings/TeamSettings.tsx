@@ -40,7 +40,15 @@ export default function TeamSettings() {
   const [leaving, setLeaving] = useState(false);
 
   const handleLeaveTeam = async () => {
-    if (!user || !userRole || userRole === 'owner') return;
+    console.log("handleLeaveTeam initiated");
+    console.log("User:", user?.id);
+    console.log("UserRole:", userRole);
+    console.log("Team:", team?.id);
+
+    if (!user || userRole === 'owner') {
+      console.log("Blocking leave team due to:", { hasUser: !!user, isOwner: userRole === 'owner' });
+      return;
+    }
 
     setLeaving(true);
     try {
@@ -417,8 +425,23 @@ export default function TeamSettings() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleLeaveTeam} className="bg-destructive hover:bg-destructive/90">
-                        Leave
+                      <AlertDialogAction
+                        onClick={(e) => {
+                          e.preventDefault();
+                          console.log("Leave Team button clicked");
+                          handleLeaveTeam();
+                        }}
+                        className="bg-destructive hover:bg-destructive/90"
+                        disabled={leaving}
+                      >
+                        {leaving ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Leaving...
+                          </>
+                        ) : (
+                          'Leave'
+                        )}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
