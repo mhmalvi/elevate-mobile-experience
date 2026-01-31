@@ -23,7 +23,9 @@ export default function Auth() {
   const [searchParams] = useSearchParams();
 
   // Get redirect URL from query params (for team invitations, etc.)
-  const redirectTo = searchParams.get('redirect') || '/dashboard';
+  // Decode because it may be URL-encoded to preserve query params
+  const redirectParam = searchParams.get('redirect');
+  const redirectTo = redirectParam ? decodeURIComponent(redirectParam) : '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

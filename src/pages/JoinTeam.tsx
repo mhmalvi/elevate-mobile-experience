@@ -76,7 +76,9 @@ export default function JoinTeam() {
         title: 'Please sign in',
         description: 'You need to be signed in to accept this invitation',
       });
-      navigate(`/auth?redirect=/join-team?token=${token}`);
+      // URL-encode the redirect to preserve the token parameter
+      const redirectUrl = encodeURIComponent(`/join-team?token=${token}`);
+      navigate(`/auth?redirect=${redirectUrl}`);
       return;
     }
 
