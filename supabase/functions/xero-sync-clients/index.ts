@@ -217,6 +217,7 @@ serve(async (req) => {
                 "Authorization": `Bearer ${accessToken}`,
                 "Xero-Tenant-Id": profile.xero_tenant_id,
                 "Content-Type": "application/json",
+                "Accept": "application/json",
               },
               body: JSON.stringify({ Contacts: [xeroContact] }),
             }
@@ -231,6 +232,7 @@ serve(async (req) => {
                 "Authorization": `Bearer ${accessToken}`,
                 "Xero-Tenant-Id": profile.xero_tenant_id,
                 "Content-Type": "application/json",
+                "Accept": "application/json",
               },
               body: JSON.stringify({ Contacts: [xeroContact] }),
             }
@@ -270,11 +272,30 @@ serve(async (req) => {
           continue;
         }
 
-        const xeroData: XeroContactsResponse = await xeroResponse.json();
+        const responseText = await xeroResponse.text();
+        console.log(`Xero API raw response for ${client.name}:`, responseText.substring(0, 500));
+
+        let xeroData: XeroContactsResponse;
+        try {
+          xeroData = JSON.parse(responseText);
+        } catch (parseError) {
+          throw new Error(`Failed to parse Xero response: ${responseText.substring(0, 200)}`);
+        }
+
+        console.log(`Xero API parsed response:`, JSON.stringify(xeroData).substring(0, 300));
+
+        if (!xeroData.Contacts || xeroData.Contacts.length === 0) {
+          throw new Error(`Xero returned empty Contacts array: ${JSON.stringify(xeroData).substring(0, 200)}`);
+        }
+
         const createdContact = xeroData.Contacts[0];
 
+        if (!createdContact.ContactID) {
+          throw new Error(`Xero Contact missing ContactID: ${JSON.stringify(createdContact).substring(0, 200)}`);
+        }
+
         // Update client with Xero contact ID
-        await supabase
+        const { error: updateError } = await supabase
           .from("clients")
           .update({
             xero_contact_id: createdContact.ContactID,
@@ -282,6 +303,11 @@ serve(async (req) => {
             xero_sync_error: null,
           })
           .eq("id", client.id);
+
+        if (updateError) {
+          console.error(`Failed to update client ${client.id} in database:`, updateError);
+          throw new Error(`Database update failed: ${updateError.message}`);
+        }
 
         // Log success
         await supabase.from("xero_sync_log").insert({
