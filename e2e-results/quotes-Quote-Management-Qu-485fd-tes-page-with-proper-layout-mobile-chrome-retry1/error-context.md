@@ -1,0 +1,97 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - img [ref=e5]
+    - button "Open Tanstack query devtools" [ref=e53] [cursor=pointer]:
+      - img [ref=e54]
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e103]:
+    - main [ref=e104]:
+      - generic [ref=e105]:
+        - generic [ref=e109]:
+          - generic [ref=e110]:
+            - img [ref=e111]
+            - generic [ref=e114]: Quote Management
+          - heading "Quotes" [level=1] [ref=e115]
+          - paragraph [ref=e116]: 3 quotes ready to send
+          - button [ref=e118] [cursor=pointer]:
+            - img [ref=e119]
+        - generic [ref=e120]:
+          - generic [ref=e121]:
+            - img [ref=e122]
+            - textbox "Search quotes, clients..." [ref=e125]
+          - generic [ref=e126]:
+            - button "Kitchen Renovation (Voice) No client • Q-AI-813 Draft $420 Valid until 15 Feb" [ref=e127] [cursor=pointer]:
+              - generic [ref=e128]:
+                - generic [ref=e129]:
+                  - img [ref=e131]
+                  - generic [ref=e134]:
+                    - heading "Kitchen Renovation (Voice)" [level=3] [ref=e135]
+                    - paragraph [ref=e136]: No client • Q-AI-813
+                - generic [ref=e137]:
+                  - generic [ref=e138]: Draft
+                  - img [ref=e142]
+              - generic [ref=e144]:
+                - paragraph [ref=e145]: $420
+                - generic [ref=e146]:
+                  - img [ref=e147]
+                  - text: Valid until 15 Feb
+            - button "Kitchen Renovation (Voice) No client • Q-AI-11 Draft $420 Valid until 15 Feb" [ref=e149] [cursor=pointer]:
+              - generic [ref=e150]:
+                - generic [ref=e151]:
+                  - img [ref=e153]
+                  - generic [ref=e156]:
+                    - heading "Kitchen Renovation (Voice)" [level=3] [ref=e157]
+                    - paragraph [ref=e158]: No client • Q-AI-11
+                - generic [ref=e159]:
+                  - generic [ref=e160]: Draft
+                  - img [ref=e164]
+              - generic [ref=e166]:
+                - paragraph [ref=e167]: $420
+                - generic [ref=e168]:
+                  - img [ref=e169]
+                  - text: Valid until 15 Feb
+            - button "Air Conditioning Installation No client • Q20251230-F33V Accepted $2,420 Valid until 29 Jan" [ref=e171] [cursor=pointer]:
+              - generic [ref=e172]:
+                - generic [ref=e173]:
+                  - img [ref=e175]
+                  - generic [ref=e178]:
+                    - heading "Air Conditioning Installation" [level=3] [ref=e179]
+                    - paragraph [ref=e180]: No client • Q20251230-F33V
+                - generic [ref=e181]:
+                  - generic [ref=e182]: Accepted
+                  - img [ref=e186]
+              - generic [ref=e188]:
+                - paragraph [ref=e189]: $2,420
+                - generic [ref=e190]:
+                  - img [ref=e191]
+                  - text: Valid until 29 Jan
+    - generic [ref=e194]:
+      - button [ref=e199] [cursor=pointer]:
+        - img
+      - generic [ref=e201]:
+        - generic [ref=e202]:
+          - button "Home" [ref=e203] [cursor=pointer]:
+            - img [ref=e205]
+            - generic: Home
+          - button "Quotes" [ref=e210] [cursor=pointer]:
+            - img [ref=e213]
+            - generic [ref=e217]: Quotes
+          - button "Jobs" [ref=e218] [cursor=pointer]:
+            - img [ref=e220]
+            - generic: Jobs
+        - generic [ref=e223]:
+          - button "Invoices" [ref=e224] [cursor=pointer]:
+            - img [ref=e226]
+            - generic: Invoices
+          - button "Clients" [ref=e229] [cursor=pointer]:
+            - img [ref=e231]
+            - generic: Clients
+          - button "Settings" [ref=e236] [cursor=pointer]:
+            - img [ref=e238]
+            - generic: Settings
+```

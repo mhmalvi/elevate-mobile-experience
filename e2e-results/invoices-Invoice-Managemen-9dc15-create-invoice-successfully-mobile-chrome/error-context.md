@@ -1,0 +1,231 @@
+# Page snapshot
+
+```yaml
+- generic:
+  - generic:
+    - generic:
+      - generic:
+        - img
+      - button:
+        - img
+    - list
+    - region "Notifications alt+T"
+    - generic:
+      - generic:
+        - main:
+          - generic:
+            - generic:
+              - generic:
+                - button:
+                  - img
+                  - generic: Back to Invoices
+                - generic:
+                  - img
+                  - generic: New Invoice
+                - heading [level=1]: Create Invoice
+                - paragraph: Add items and set payment details
+            - generic:
+              - generic:
+                - text: Client
+                - combobox [expanded]:
+                  - generic: Select a client (optional)
+                  - img
+                - combobox
+              - generic:
+                - text: Invoice Title *
+                - textbox:
+                  - /placeholder: e.g., Kitchen Renovation
+                  - text: Invoice - Handcrafted Granite SoapBespoke Plastic Shirt
+              - generic:
+                - text: Due Date
+                - textbox: 2026-02-15
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: Line Items
+                  - button:
+                    - img
+                    - text: Add Item
+                - generic:
+                  - generic:
+                    - generic: Item 1
+                  - textbox:
+                    - /placeholder: Description
+                  - generic:
+                    - generic:
+                      - text: Qty
+                      - spinbutton: "1"
+                    - generic:
+                      - text: Unit
+                      - combobox:
+                        - generic: Each
+                        - img
+                      - combobox
+                    - generic:
+                      - text: Price
+                      - spinbutton: "0"
+                  - generic: $0.00
+              - generic:
+                - generic:
+                  - generic: Subtotal
+                  - generic: $0.00
+                - generic:
+                  - generic: GST (10%)
+                  - generic: $0.00
+                - generic:
+                  - generic: Total
+                  - generic: $0.00
+              - generic:
+                - text: Notes
+                - textbox:
+                  - /placeholder: Payment instructions, terms, etc...
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - text: Recurring Invoice
+                      - paragraph: Auto-generate and send on schedule
+                  - switch
+                  - checkbox
+              - button: Create Invoice
+  - listbox [ref=e1]:
+    - option "Abel Farrell" [active] [ref=e2]:
+      - generic [ref=e5]:
+        - img [ref=e6]
+        - text: Abel Farrell
+    - option "Andrea Gerlach" [ref=e9]:
+      - generic [ref=e12]:
+        - img [ref=e13]
+        - text: Andrea Gerlach
+    - option "Angel Jakubowski" [ref=e16]:
+      - generic [ref=e19]:
+        - img [ref=e20]
+        - text: Angel Jakubowski
+    - option "Antoinette Murray" [ref=e23]:
+      - generic [ref=e26]:
+        - img [ref=e27]
+        - text: Antoinette Murray
+    - option "Bertha Roob-Mitchell" [ref=e30]:
+      - generic [ref=e33]:
+        - img [ref=e34]
+        - text: Bertha Roob-Mitchell
+    - option "Byron Littel" [ref=e37]:
+      - generic [ref=e40]:
+        - img [ref=e41]
+        - text: Byron Littel
+    - option "Claude Miller" [ref=e44]:
+      - generic [ref=e47]:
+        - img [ref=e48]
+        - text: Claude Miller
+    - option "Darrin Paucek III" [ref=e51]:
+      - generic [ref=e54]:
+        - img [ref=e55]
+        - text: Darrin Paucek III
+    - option "Dr. Keith Braun" [ref=e58]:
+      - generic [ref=e61]:
+        - img [ref=e62]
+        - text: Dr. Keith Braun
+    - option "Dr. Melanie Stanton" [ref=e65]:
+      - generic [ref=e68]:
+        - img [ref=e69]
+        - text: Dr. Melanie Stanton
+    - option "Erika Lindgren PhD" [ref=e72]:
+      - generic [ref=e75]:
+        - img [ref=e76]
+        - text: Erika Lindgren PhD
+    - option "Fred Will-Prohaska" [ref=e79]:
+      - generic [ref=e82]:
+        - img [ref=e83]
+        - text: Fred Will-Prohaska
+    - option "Hannah McKenzie" [ref=e86]:
+      - generic [ref=e89]:
+        - img [ref=e90]
+        - text: Hannah McKenzie
+    - option "Herbert Von" [ref=e93]:
+      - generic [ref=e96]:
+        - img [ref=e97]
+        - text: Herbert Von
+    - option "Jeffery Rau" [ref=e100]:
+      - generic [ref=e103]:
+        - img [ref=e104]
+        - text: Jeffery Rau
+    - option "Jimmy Schaden" [ref=e107]:
+      - generic [ref=e110]:
+        - img [ref=e111]
+        - text: Jimmy Schaden
+    - option "John Block" [ref=e114]:
+      - generic [ref=e117]:
+        - img [ref=e118]
+        - text: John Block
+    - option "Justin Baumbach" [ref=e121]:
+      - generic [ref=e124]:
+        - img [ref=e125]
+        - text: Justin Baumbach
+    - option "Kayla McCullough" [ref=e128]:
+      - generic [ref=e131]:
+        - img [ref=e132]
+        - text: Kayla McCullough
+    - option "Lonnie Franecki" [ref=e135]:
+      - generic [ref=e138]:
+        - img [ref=e139]
+        - text: Lonnie Franecki
+    - option "Mandy Buckridge" [ref=e142]:
+      - generic [ref=e145]:
+        - img [ref=e146]
+        - text: Mandy Buckridge
+    - option "Mandy Schimmel" [ref=e149]:
+      - generic [ref=e152]:
+        - img [ref=e153]
+        - text: Mandy Schimmel
+    - option "Margarita Kertzmann" [ref=e156]:
+      - generic [ref=e159]:
+        - img [ref=e160]
+        - text: Margarita Kertzmann
+    - option "Mario Moen" [ref=e163]:
+      - generic [ref=e166]:
+        - img [ref=e167]
+        - text: Mario Moen
+    - option "Mr. Leo Bins" [ref=e170]:
+      - generic [ref=e173]:
+        - img [ref=e174]
+        - text: Mr. Leo Bins
+    - option "Noel Stokes" [ref=e177]:
+      - generic [ref=e180]:
+        - img [ref=e181]
+        - text: Noel Stokes
+    - option "Opal Schroeder" [ref=e184]:
+      - generic [ref=e187]:
+        - img [ref=e188]
+        - text: Opal Schroeder
+    - option "Randy Volkman" [ref=e191]:
+      - generic [ref=e194]:
+        - img [ref=e195]
+        - text: Randy Volkman
+    - option "Rosie Erdman" [ref=e198]:
+      - generic [ref=e201]:
+        - img [ref=e202]
+        - text: Rosie Erdman
+    - option "Sarah Marquardt" [ref=e205]:
+      - generic [ref=e208]:
+        - img [ref=e209]
+        - text: Sarah Marquardt
+    - option "Stanley Sanford" [ref=e212]:
+      - generic [ref=e215]:
+        - img [ref=e216]
+        - text: Stanley Sanford
+    - option "Victor Greenholt" [ref=e219]:
+      - generic [ref=e222]:
+        - img [ref=e223]
+        - text: Victor Greenholt
+    - option "Wayne Thiel" [ref=e226]:
+      - generic [ref=e229]:
+        - img [ref=e230]
+        - text: Wayne Thiel
+    - option "wewwwww" [ref=e233]:
+      - generic [ref=e236]:
+        - img [ref=e237]
+        - text: wewwwww
+    - img [ref=e241]
+```

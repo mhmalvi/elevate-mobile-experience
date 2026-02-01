@@ -152,13 +152,24 @@ export function MagicMic() {
                 throw new Error("Please log in first");
             }
 
-            console.log('Voice: Invoking Edge Function...');
-            // Call the voice command Edge Function
+            // Get the current session to ensure we have a valid token
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) {
+                console.warn('Voice: No valid session token');
+                throw new Error("Session expired - please log in again");
+            }
+
+            console.log('Voice: Invoking Edge Function with auth token...');
+            // Call the voice command Edge Function with explicit auth header
+            // This ensures the token is included even with async storage adapters
             const { data, error } = await supabase.functions.invoke('process-voice-command', {
                 body: {
                     query: messageText,
                     conversationHistory: [],
                     accumulatedData: {}
+                },
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`
                 }
             });
 
@@ -170,25 +181,38 @@ export function MagicMic() {
             console.log('Voice: Response received', data);
             const { speak: responseText, action, data: responseData } = data;
 
+            // Speak the response using text-to-speech for premium feel
+            if (responseText && 'speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(responseText);
+                utterance.rate = 1.05;
+                utterance.pitch = 1.0;
+                utterance.lang = 'en-AU';
+                window.speechSynthesis.speak(utterance);
+            }
+
             // Handle different actions from the AI
             switch (action) {
                 case 'create_quote':
                     console.log('Voice: Action create_quote');
+                    toast({ title: "✨ Creating Quote...", description: responseText });
                     await createQuoteFromVoice(responseData);
                     break;
 
                 case 'create_invoice':
                     console.log('Voice: Action create_invoice');
+                    toast({ title: "💰 Creating Invoice...", description: responseText });
                     await createInvoiceFromVoice(responseData);
                     break;
 
                 case 'create_client':
                     console.log('Voice: Action create_client');
+                    toast({ title: "👤 Adding Client...", description: responseText });
                     await createClientFromVoice(responseData);
                     break;
 
                 case 'schedule_job':
                     console.log('Voice: Action schedule_job');
+                    toast({ title: "📅 Scheduling Job...", description: responseText });
                     await createJobFromVoice(responseData);
                     break;
 
@@ -201,15 +225,51 @@ export function MagicMic() {
                 case 'navigate':
                     console.log('Voice: Action navigate');
                     if (responseData.destination) {
+                        toast({ title: "🚀 Navigating...", description: responseText });
                         navigate(responseData.destination);
                     }
                     break;
 
-                default:
-                    console.log('Voice: Action default/chat');
-                    // Continue conversation - show result
+                case 'add_job_note':
+                    console.log('Voice: Action add_job_note');
                     toast({
-                        title: "🎙️ Matey says:",
+                        title: "📝 Note Added!",
+                        description: responseData.note?.substring(0, 50) + (responseData.note?.length > 50 ? '...' : '')
+                    });
+                    // Note: In a real implementation, we would save this to the current job
+                    // For now, show success and store in localStorage as pending note
+                    if (responseData.note) {
+                        const pendingNotes = JSON.parse(localStorage.getItem('pendingJobNotes') || '[]');
+                        pendingNotes.push({ note: responseData.note, timestamp: new Date().toISOString() });
+                        localStorage.setItem('pendingJobNotes', JSON.stringify(pendingNotes));
+                    }
+                    break;
+
+                case 'send_document':
+                    console.log('Voice: Action send_document');
+                    toast({ title: "📤 Preparing to send...", description: responseText });
+                    // Navigate to the appropriate document for sending
+                    if (responseData.document_type === 'quote' && responseData.document_id) {
+                        navigate(`/quotes/${responseData.document_id}?action=send`);
+                    } else if (responseData.document_type === 'invoice' && responseData.document_id) {
+                        navigate(`/invoices/${responseData.document_id}?action=send`);
+                    }
+                    break;
+
+                case 'ask_details':
+                    console.log('Voice: Action ask_details - continuing conversation');
+                    toast({
+                        title: "🎙️ Matey:",
+                        description: responseText
+                    });
+                    break;
+
+                case 'general_reply':
+                default:
+                    console.log('Voice: Action general_reply/default');
+                    // Show conversational response
+                    toast({
+                        title: "🎙️ Matey:",
                         description: responseText
                     });
                     break;
