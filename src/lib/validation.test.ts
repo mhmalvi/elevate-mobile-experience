@@ -7,6 +7,11 @@ import {
   validateABN,
   validatePassword,
   validatePostcode,
+  validateRequired,
+  validateNumeric,
+  validateURL,
+  validateFutureDate,
+  validateLength,
 } from './validation';
 
 describe('Email Validation', () => {
@@ -142,6 +147,12 @@ describe('BSB Validation', () => {
     });
   });
 
+  it('should reject BSB with non-numeric characters', () => {
+    const result = validateBSB('abc-def');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('only numbers');
+  });
+
   it('should handle different separators', () => {
     expect(validateBSB('062-000').valid).toBe(true);
     expect(validateBSB('062 000').valid).toBe(true);
@@ -209,6 +220,12 @@ describe('ABN Validation', () => {
       expect(result.error).toBeDefined();
     });
   });
+
+  it('should reject ABN with invalid checksum', () => {
+    const result = validateABN('12345678901');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('checksum');
+  });
 });
 
 describe('Password Validation', () => {
@@ -242,6 +259,13 @@ describe('Password Validation', () => {
       expect(result.valid).toBe(false);
       expect(result.error).toBeDefined();
     });
+  });
+
+  it('should reject password that is too long', () => {
+    const longPassword = 'A1!' + 'a'.repeat(130);
+    const result = validatePassword(longPassword);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('too long');
   });
 
   it('should provide helpful error messages', () => {
@@ -291,4 +315,172 @@ describe('Postcode Validation', () => {
       expect(result.error).toBeDefined();
     });
   });
+
+  it('should validate boundary postcodes', () => {
+    expect(validatePostcode('0200').valid).toBe(true); // Minimum valid
+    expect(validatePostcode('9999').valid).toBe(true); // Maximum valid
+    expect(validatePostcode('0199').valid).toBe(false); // Below minimum
+  });
 });
+
+describe('Required Field Validation', () => {
+  it('should validate non-empty values', () => {
+    const result = validateRequired('Hello World', 'Name');
+    expect(result.valid).toBe(true);
+    expect(result.error).toBeUndefined();
+  });
+
+  it('should reject empty values', () => {
+    const result = validateRequired('', 'Name');
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('Name is required');
+  });
+
+  it('should reject whitespace-only values', () => {
+    const result = validateRequired('   ', 'Email');
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('Email is required');
+  });
+});
+
+describe('Numeric Validation', () => {
+  it('should validate numeric values', () => {
+    const result = validateNumeric('42', 'Quantity');
+    expect(result.valid).toBe(true);
+  });
+
+  it('should validate decimal values', () => {
+    const result = validateNumeric('3.14', 'Price');
+    expect(result.valid).toBe(true);
+  });
+
+  it('should reject empty values', () => {
+    const result = validateNumeric('', 'Amount');
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('Amount is required');
+  });
+
+  it('should reject non-numeric values', () => {
+    const result = validateNumeric('abc', 'Price');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('must be a number');
+  });
+
+  it('should enforce minimum value', () => {
+    const result = validateNumeric('5', 'Quantity', 10);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('at least 10');
+  });
+
+  it('should enforce maximum value', () => {
+    const result = validateNumeric('100', 'Percentage', 0, 50);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('at most 50');
+  });
+
+  it('should accept value within range', () => {
+    const result = validateNumeric('25', 'Score', 0, 100);
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe('URL Validation', () => {
+  it('should validate correct URLs', () => {
+    const validUrls = [
+      'https://example.com',
+      'http://localhost:3000',
+      'https://www.tradiemate.com.au/about',
+      'http://192.168.1.1:8080/api',
+    ];
+
+    validUrls.forEach(url => {
+      const result = validateURL(url);
+      expect(result.valid).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+  });
+
+  it('should reject empty URL', () => {
+    const result = validateURL('');
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('URL is required');
+  });
+
+  it('should reject invalid URLs', () => {
+    const result = validateURL('not-a-url');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('valid URL');
+  });
+
+  it('should reject non-http protocols', () => {
+    const result = validateURL('ftp://example.com');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('HTTP or HTTPS');
+  });
+
+  it('should reject javascript protocol (XSS prevention)', () => {
+    const result = validateURL('javascript:alert(1)');
+    expect(result.valid).toBe(false);
+  });
+});
+
+describe('Future Date Validation', () => {
+  it('should validate future dates', () => {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 7);
+    const result = validateFutureDate(futureDate.toISOString(), 'Due Date');
+    expect(result.valid).toBe(true);
+  });
+
+  it('should validate today as valid', () => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0); // Set to noon to avoid timezone issues
+    const result = validateFutureDate(today.toISOString(), 'Due Date');
+    expect(result.valid).toBe(true);
+  });
+
+  it('should reject empty date', () => {
+    const result = validateFutureDate('', 'Due Date');
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('Due Date is required');
+  });
+
+  it('should reject past dates', () => {
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 7);
+    const result = validateFutureDate(pastDate.toISOString(), 'Start Date');
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('cannot be in the past');
+  });
+});
+
+describe('Text Length Validation', () => {
+  it('should validate text within length limits', () => {
+    const result = validateLength('Hello', 'Message', 1, 10);
+    expect(result.valid).toBe(true);
+  });
+
+  it('should reject text that is too short', () => {
+    const result = validateLength('Hi', 'Description', 5, 100);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('at least 5 characters');
+  });
+
+  it('should reject text that is too long', () => {
+    const result = validateLength('This is a very long message', 'Title', 1, 10);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('at most 10 characters');
+  });
+
+  it('should handle empty or null values', () => {
+    const result = validateLength('', 'Notes', 0, 1000);
+    expect(result.valid).toBe(true);
+  });
+
+  it('should handle exact boundary values', () => {
+    expect(validateLength('12345', 'Code', 5, 5).valid).toBe(true);
+    expect(validateLength('1234', 'Code', 5, 5).valid).toBe(false);
+    expect(validateLength('123456', 'Code', 5, 5).valid).toBe(false);
+  });
+});
+

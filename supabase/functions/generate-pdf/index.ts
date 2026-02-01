@@ -201,8 +201,8 @@ function generatePDFHTML(data: {
   const headerBg = headerStyle === 'gradient'
     ? `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
     : headerStyle === 'solid'
-    ? primaryColor
-    : '#ffffff';
+      ? primaryColor
+      : '#ffffff';
   const headerTextColor = headerStyle !== 'minimal' ? '#ffffff' : textColor;
 
   return `

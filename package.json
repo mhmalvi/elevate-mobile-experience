@@ -16,7 +16,13 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
-    "test:all": "npm run test:run && npm run test:e2e"
+    "test:all": "npm run test:run && npm run test:e2e",
+    "test:integration": "npx tsx scripts/run-integration-tests.ts",
+    "test:integration:verbose": "npx tsx scripts/run-integration-tests.ts --verbose",
+    "test:functions": "playwright test e2e/edge-functions.spec.ts",
+    "test:full": "npm run test:coverage && npm run test:e2e && npm run test:integration",
+    "test:ci": "npm run lint && npm run test:coverage && npm run test:e2e -- --project=chromium",
+    "test:production": "npx tsx scripts/production-test-with-logs.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",
@@ -93,7 +99,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^22.16.5",
+    "@types/node": "^22.19.7",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react-swc": "^3.11.0",

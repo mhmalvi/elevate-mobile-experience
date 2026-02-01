@@ -1,0 +1,113 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - img [ref=e5]
+    - button "Open Tanstack query devtools" [ref=e53] [cursor=pointer]:
+      - img [ref=e54]
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - generic [ref=e103]:
+    - main [ref=e104]:
+      - generic [ref=e105]:
+        - generic [ref=e110]:
+          - generic [ref=e111]:
+            - generic [ref=e112]:
+              - img [ref=e113]
+              - generic [ref=e115]: Welcome back
+            - heading "Evening, t34ewtrtwerw!" [level=1] [ref=e116]
+            - paragraph [ref=e117]: Here's your business snapshot this evening
+          - combobox [ref=e119] [cursor=pointer]:
+            - generic [ref=e120]:
+              - img [ref=e121]
+              - generic [ref=e126]: My Team
+            - img [ref=e127]
+        - generic [ref=e129]:
+          - generic [ref=e130]:
+            - generic [ref=e131]:
+              - img [ref=e132]
+              - heading "Quick Actions" [level=2] [ref=e133]
+            - generic [ref=e134]:
+              - button "New Quote Create professional quote" [ref=e135] [cursor=pointer]:
+                - generic [ref=e137]:
+                  - img [ref=e139]
+                  - paragraph [ref=e142]: New Quote
+                  - paragraph [ref=e143]: Create professional quote
+                - img [ref=e144]
+              - button "New Job Schedule a new job" [ref=e147] [cursor=pointer]:
+                - img [ref=e149]
+                - paragraph [ref=e152]: New Job
+                - paragraph [ref=e153]: Schedule a new job
+                - img [ref=e154]
+          - generic [ref=e157]:
+            - generic [ref=e158]:
+              - img [ref=e159]
+              - heading "Business Overview" [level=2] [ref=e162]
+            - generic [ref=e163]:
+              - generic [ref=e167]:
+                - generic [ref=e168]:
+                  - paragraph [ref=e169]: Outstanding
+                  - paragraph [ref=e170]: $0
+                - img [ref=e172]
+              - generic [ref=e177]:
+                - generic [ref=e178]:
+                  - paragraph [ref=e179]: Active Jobs
+                  - paragraph [ref=e180]: "0"
+                - img [ref=e182]
+              - generic [ref=e188]:
+                - generic [ref=e189]:
+                  - paragraph [ref=e190]: Pending Quotes
+                  - paragraph [ref=e191]: "0"
+                - img [ref=e193]
+              - generic [ref=e199]:
+                - generic [ref=e200]:
+                  - paragraph [ref=e201]: This Month
+                  - paragraph [ref=e202]: $0
+                - img [ref=e204]
+          - generic [ref=e207]:
+            - generic [ref=e208]:
+              - generic [ref=e209]:
+                - img [ref=e210]
+                - heading "Recent Quotes" [level=2] [ref=e213]
+              - button "View all" [ref=e214] [cursor=pointer]:
+                - text: View all
+                - img
+            - generic [ref=e215]:
+              - img [ref=e217]
+              - paragraph [ref=e220]: No quotes yet, mate!
+              - paragraph [ref=e221]: Create your first quote to get started
+              - button "Create Quote" [ref=e222] [cursor=pointer]:
+                - img
+                - text: Create Quote
+          - generic [ref=e224]:
+            - img [ref=e226]
+            - generic [ref=e229]:
+              - heading "Pro Tip" [level=3] [ref=e230]
+              - paragraph [ref=e231]: Use the voice button at the bottom to quickly create quotes and manage your jobs hands-free!
+    - generic [ref=e233]:
+      - button [ref=e238] [cursor=pointer]:
+        - img
+      - generic [ref=e240]:
+        - generic [ref=e241]:
+          - button "Home" [ref=e242] [cursor=pointer]:
+            - img [ref=e245]
+            - generic [ref=e251]: Home
+          - button "Quotes" [ref=e252] [cursor=pointer]:
+            - img [ref=e254]
+            - generic: Quotes
+          - button "Jobs" [ref=e257] [cursor=pointer]:
+            - img [ref=e259]
+            - generic: Jobs
+        - generic [ref=e262]:
+          - button "Invoices" [ref=e263] [cursor=pointer]:
+            - img [ref=e265]
+            - generic: Invoices
+          - button "Clients" [ref=e268] [cursor=pointer]:
+            - img [ref=e270]
+            - generic: Clients
+          - button "Settings" [ref=e275] [cursor=pointer]:
+            - img [ref=e277]
+            - generic: Settings
+```

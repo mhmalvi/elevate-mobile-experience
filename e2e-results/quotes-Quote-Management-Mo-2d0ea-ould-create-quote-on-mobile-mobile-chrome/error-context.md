@@ -1,0 +1,61 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - img [ref=e5]
+    - button "Open Tanstack query devtools" [ref=e53] [cursor=pointer]:
+      - img [ref=e54]
+  - region "Notifications (F8)":
+    - list
+  - region "Notifications alt+T"
+  - main [ref=e104]:
+    - generic [ref=e105]:
+      - generic [ref=e109]:
+        - button "Back to Quotes" [ref=e110] [cursor=pointer]:
+          - img [ref=e111]
+          - generic [ref=e113]: Back to Quotes
+        - generic [ref=e114]:
+          - img [ref=e115]
+          - generic [ref=e118]: New Quote
+        - heading "Choose Template" [level=1] [ref=e119]
+        - paragraph [ref=e120]: Start with a template or from scratch
+      - generic [ref=e121]:
+        - generic [ref=e122]:
+          - img [ref=e124]
+          - heading "Start with a template?" [level=2] [ref=e126]
+          - paragraph [ref=e127]: Save time with pre-built line items
+        - generic [ref=e128]:
+          - heading "Other templates" [level=3] [ref=e129]
+          - button "Air Conditioning Installation HVAC Technician" [ref=e130] [cursor=pointer]:
+            - generic [ref=e131]:
+              - img [ref=e133]
+              - generic [ref=e136]:
+                - heading "Air Conditioning Installation" [level=4] [ref=e137]
+                - paragraph [ref=e138]: HVAC Technician
+          - button "Bathroom Renovation Plumber" [ref=e139] [cursor=pointer]:
+            - generic [ref=e140]:
+              - img [ref=e142]
+              - generic [ref=e145]:
+                - heading "Bathroom Renovation" [level=4] [ref=e146]
+                - paragraph [ref=e147]: Plumber
+          - button "Bathroom Renovation Builder" [ref=e148] [cursor=pointer]:
+            - generic [ref=e149]:
+              - img [ref=e151]
+              - generic [ref=e154]:
+                - heading "Bathroom Renovation" [level=4] [ref=e155]
+                - paragraph [ref=e156]: Builder
+          - button "Blocked Drain plumber" [ref=e157] [cursor=pointer]:
+            - generic [ref=e158]:
+              - img [ref=e160]
+              - generic [ref=e163]:
+                - heading "Blocked Drain" [level=4] [ref=e164]
+                - paragraph [ref=e165]: plumber
+          - button "Blocked Drain Service Plumber" [ref=e166] [cursor=pointer]:
+            - generic [ref=e167]:
+              - img [ref=e169]
+              - generic [ref=e172]:
+                - heading "Blocked Drain Service" [level=4] [ref=e173]
+                - paragraph [ref=e174]: Plumber
+        - button "Start from scratch" [ref=e175] [cursor=pointer]
+```
