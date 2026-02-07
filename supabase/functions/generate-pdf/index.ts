@@ -390,7 +390,7 @@ function generatePDFHTML(data: {
   <div class="header">
     <div class="logo-section">
       ${showLogo && logoUrl ? `<img src="${logoUrl}" alt="Logo" />` : ''}
-      <h1>${profile?.business_name || "TradieMate"}</h1>
+      <h1>${profile?.business_name || "Your Business"}</h1>
       <p>${profile?.phone || ""}</p>
       <p>${profile?.email || ""}</p>
       <p>${profile?.address || ""}</p>

@@ -188,7 +188,7 @@ export function SendNotificationButton({
       }
 
       // If direct email fails, fall back to mailto
-      const subject = encodeURIComponent(`${type === 'quote' ? 'Quote' : 'Invoice'} from TradieMate`);
+      const subject = encodeURIComponent(`Your ${type === 'quote' ? 'Quote' : 'Invoice'}`);
       const body = encodeURIComponent(`Hi ${recipient.name || 'there'},\n\nPlease find your ${type} attached.\n\nView it online: ${window.location.origin}/${type === 'quote' ? 'q' : 'i'}/${id}\n\nThank you!`);
       window.location.href = `mailto:${recipient.email}?subject=${subject}&body=${body}`;
       toast({

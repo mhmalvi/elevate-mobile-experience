@@ -226,9 +226,9 @@ export default function Dashboard() {
 
   const greeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return "G'day";
-    if (hour < 17) return "Good arvo";
-    return "Evening";
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
   };
 
   const getTimeOfDay = () => {
@@ -258,7 +258,7 @@ export default function Dashboard() {
                   <span className="text-sm font-medium text-primary">Welcome back</span>
                 </div>
                 <h1 className="text-3xl font-bold text-foreground">
-                  {greeting()}, {profile?.business_name || 'Mate'}!
+                  {greeting()}, {profile?.business_name || 'there'}!
                 </h1>
                 <p className="text-muted-foreground mt-1">
                   Here's your business snapshot this {getTimeOfDay()}
@@ -480,7 +480,7 @@ export default function Dashboard() {
                 <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
                   <FileText className="w-7 h-7 text-primary" />
                 </div>
-                <p className="font-semibold text-foreground">No quotes yet, mate!</p>
+                <p className="font-semibold text-foreground">No quotes yet!</p>
                 <p className="text-sm text-muted-foreground mt-1">Create your first quote to get started</p>
                 <Button
                   onClick={() => navigate('/quotes/new')}

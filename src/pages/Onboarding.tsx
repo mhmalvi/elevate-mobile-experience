@@ -126,8 +126,8 @@ export default function Onboarding() {
       console.log('Profile saved successfully:', data);
 
       toast({
-        title: "You're all set, mate! 🎉",
-        description: "Let's get you some quotes sorted.",
+        title: "You're all set! 🎉",
+        description: "Let's get your first quote sorted.",
       });
 
       navigate('/dashboard');
@@ -137,7 +137,7 @@ export default function Onboarding() {
       console.error('Error details:', JSON.stringify(error, null, 2));
       toast({
         title: "Something went wrong",
-        description: error?.message || "No worries, give it another go.",
+        description: error?.message || "Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -171,10 +171,10 @@ export default function Onboarding() {
                 </div>
               </div>
               <h1 className="text-4xl font-extrabold text-foreground mb-3 tracking-tight">
-                G'day, <span className="text-gradient">mate!</span> 👋
+                Hey there! 👋
               </h1>
               <p className="text-xl text-muted-foreground font-medium px-4">
-                Welcome to TradieMate. Let's get your business sorted.
+                Let's get your business set up.
               </p>
             </div>
 
@@ -203,7 +203,7 @@ export default function Onboarding() {
                 </div>
                 <div>
                   <p className="font-bold text-foreground">Local & Ready</p>
-                  <p className="text-sm text-muted-foreground">Built for Aussie tradies 🇦🇺</p>
+                  <p className="text-sm text-muted-foreground">Works offline, on any device</p>
                 </div>
               </div>
             </div>

@@ -186,7 +186,7 @@ serve(async (req) => {
 
               // Send notification email directly via Resend
               await resend.emails.send({
-                from: "TradieMate <noreply@tradiemate.com.au>",
+                from: `${businessName} <onboarding@resend.dev>`,
                 to: [ownerEmail],
                 subject: `💰 Payment Received - Invoice ${invoiceNumber}`,
                 html: `
@@ -228,12 +228,12 @@ serve(async (req) => {
                       ${newStatus === 'paid' ? '<p style="background: #d1fae5; padding: 15px; border-radius: 8px; color: #065f46; text-align: center; font-weight: bold;">✓ This invoice has been fully paid</p>' : ''}
 
                       <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
-                        Log in to TradieMate to view the complete invoice details.
+                        Log in to view the complete invoice details.
                       </p>
 
                       <div style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
                         <p style="color: #9ca3af; font-size: 12px; margin: 0;">
-                          Powered by TradieMate
+
                         </p>
                       </div>
                     </div>

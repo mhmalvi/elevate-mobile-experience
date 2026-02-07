@@ -139,7 +139,7 @@ serve(async (req) => {
       },
       business_type: "individual",
       business_profile: {
-        name: profile?.business_name || "TradieMate Business",
+        name: profile?.business_name || "My Business",
         product_description: profile?.trade_type || "Trade services",
         mcc: "1799", // Special Trade Contractors
         // Only include URL if it's a valid public URL (not localhost/local IP)

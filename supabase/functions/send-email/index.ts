@@ -216,21 +216,20 @@ serve(async (req) => {
 
     } else if (type === "team_invitation") {
       // Simple handling for team invitations
-      const businessName = "TradieMate";
-      const fromEmail = `${businessName} <onboarding@resend.dev>`;
+      const invitationSender = "Team Invitation";
+      const fromEmail = `${invitationSender} <onboarding@resend.dev>`;
 
       console.log(`Sending invitation email to ${recipient_email}`);
 
       const emailResponse = await resend.emails.send({
         from: fromEmail,
         to: [recipient_email],
-        subject: subject || "You've been invited to join a team on TradieMate",
+        subject: subject || "You've been invited to join a team",
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
             <h2>Team Invitation</h2>
             <p>${message}</p>
             <p>If you didn't expect this invitation, you can ignore this email.</p>
-            <p>Powered by <a href="https://tradiemate.com.au">TradieMate</a></p>
           </div>
         `,
       });
@@ -268,7 +267,7 @@ serve(async (req) => {
       );
     }
 
-    const businessName = profile?.business_name || "TradieMate";
+    const businessName = profile?.business_name || "Your Business";
     const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
     const viewUrl = `${baseUrl}/${type === 'quote' ? 'q' : 'i'}/${id}`;
 
@@ -451,7 +450,7 @@ serve(async (req) => {
               ${profile?.phone ? `<p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">${profile.phone}</p>` : ''}
               ${profile?.email ? `<p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">${profile.email}</p>` : ''}
               <p style="margin: 16px 0 0; color: #9ca3af; font-size: 11px; text-align: center;">
-                Powered by TradieMate
+
               </p>
             </td>
           </tr>
@@ -465,9 +464,9 @@ serve(async (req) => {
     `;
 
     // Get sender email - use custom domain if configured, otherwise use Resend's default
-    const customEmailDomain = Deno.env.get("EMAIL_FROM_DOMAIN"); // e.g., "noreply@tradiemate.com.au"
+    const customEmailDomain = Deno.env.get("EMAIL_FROM_DOMAIN");
     const appUrl = Deno.env.get("APP_URL") || "";
-    const isProduction = appUrl.includes("tradiemate.com.au") || appUrl.includes("production");
+    const isProduction = appUrl.includes("production") || !appUrl.includes("vercel.app");
 
     // Use custom domain or default to Resend's onboarding domain (no verification needed)
     let fromEmail: string;

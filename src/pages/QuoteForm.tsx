@@ -220,7 +220,7 @@ export default function QuoteForm() {
     } else {
       // Increment usage counter
       await incrementUsage();
-      toast({ title: 'Quote created! 🎉', description: 'Looking good, mate.' });
+      toast({ title: 'Quote created! 🎉', description: 'Looking good.' });
       navigate('/quotes');
     }
     setLoading(false);

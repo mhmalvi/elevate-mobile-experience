@@ -330,7 +330,7 @@ export default function BrandingSettings() {
         </div>
 
         <div className="pt-4 mt-4 border-t text-center text-gray-400 text-[10px]">
-          {form.email_footer_text || "Sent via TradieMate"}
+          {form.email_footer_text || "Sent via your business"}
         </div>
       </div>
     </div>

@@ -56,7 +56,7 @@ serve(async (req) => {
         });
       }
 
-      const teamName = (invitation.teams as any)?.name || 'TradieMate Team';
+      const teamName = (invitation.teams as any)?.name || 'the team';
 
       return new Response(JSON.stringify({
         team_name: teamName,
@@ -190,7 +190,7 @@ serve(async (req) => {
 
     console.log('Team invitation accepted successfully');
 
-    const teamName = (invitation as any).teams?.name || 'TradieMate Team';
+    const teamName = (invitation as any).teams?.name || 'the team';
 
     return new Response(JSON.stringify({
       success: true,

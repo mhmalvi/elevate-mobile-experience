@@ -1,4 +1,4 @@
-// Professional PDF Template for TradieMate
+// Professional PDF Template
 // Modern, clean design with better typography and spacing
 
 export function generateProfessionalPDFHTML(data: {
@@ -507,7 +507,7 @@ export function generateProfessionalPDFHTML(data: {
           <img src="${logoUrl}" alt="${profile?.business_name || 'Business'} Logo" />
         </div>
         ` : ''}
-        <h1 class="business-name">${profile?.business_name || 'TradieMate'}</h1>
+        <h1 class="business-name">${profile?.business_name || 'Your Business'}</h1>
         <div class="business-details">
           ${profile?.address ? `<p>${profile.address}</p>` : ''}
           ${profile?.phone ? `<p>📞 ${profile.phone}</p>` : ''}
@@ -681,7 +681,7 @@ export function generateProfessionalPDFHTML(data: {
         ${profile?.email ? `<p><strong>Email:</strong> ${profile.email}</p>` : ''}
       </div>
       <div class="footer-branding">
-        Generated with <a href="https://tradiemate.com.au" target="_blank">TradieMate</a> • Professional ${isQuote ? 'Quote' : 'Invoice'} Management
+        Professional ${isQuote ? 'Quote' : 'Invoice'} Management
       </div>
     </div>
   </div>

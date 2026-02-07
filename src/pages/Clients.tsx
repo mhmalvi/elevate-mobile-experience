@@ -170,7 +170,7 @@ export default function Clients() {
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
                 <Users className="w-7 h-7 text-primary" />
               </div>
-              <p className="font-semibold text-foreground">No clients yet, mate!</p>
+              <p className="font-semibold text-foreground">No clients yet!</p>
               <p className="text-sm text-muted-foreground mt-1">Add your first client to get started</p>
               <Button
                 onClick={() => navigate('/clients/new')}

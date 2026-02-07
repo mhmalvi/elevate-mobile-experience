@@ -52,7 +52,7 @@ export default function Auth() {
         });
       } else {
         toast({
-          title: "Check ya inbox, mate! 📬",
+          title: "Check your inbox! 📬",
           description: "Password reset link sent to your email.",
         });
         setMode('login');
@@ -89,7 +89,7 @@ export default function Auth() {
       if (mode === 'signup' && !data?.session) {
         // Only show "check email" if no session was established immediately
         toast({
-          title: "Welcome to TradieMate!",
+          title: "Welcome!",
           description: "Check your email to verify your account and get started.",
           duration: 6000,
         });
@@ -118,7 +118,7 @@ export default function Auth() {
           </div>
           <h1 className="text-2xl font-bold">TradieMate</h1>
           <p className="text-muted-foreground text-sm">
-            Fair dinkum job management for Aussie tradies
+            Professional job management for trades
           </p>
         </div>
 

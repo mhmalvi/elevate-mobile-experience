@@ -102,7 +102,7 @@ serve(async (req) => {
       .eq('id', teamId)
       .single();
 
-    const teamName = team?.name || 'TradieMate Team';
+    const teamName = team?.name || 'the team';
 
     // Check if user is already a team member
     const { data: existingProfile } = await supabase
