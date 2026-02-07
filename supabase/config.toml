@@ -92,5 +92,14 @@ verify_jwt = false
 [functions.update-payment-settings]
 verify_jwt = false
 
+[functions.quickbooks-oauth]
+verify_jwt = false
+
+[functions.quickbooks-sync-clients]
+verify_jwt = false
+
+[functions.quickbooks-sync-invoices]
+verify_jwt = false
+
 [functions.leave-team]
 verify_jwt = false

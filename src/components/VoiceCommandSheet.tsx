@@ -60,6 +60,15 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     // Refs
     const recognitionRef = useRef<any>(null);
     const timerRef = useRef<any>(null);
+    const silenceTimerRef = useRef<any>(null);
+    const lastSpeechRef = useRef<number>(0);
+    const hasSpeechRef = useRef<boolean>(false);
+    const sendMessageRef = useRef<(() => void) | null>(null);
+
+    // Keep sendMessageRef current for silence auto-send
+    useEffect(() => {
+        sendMessageRef.current = () => sendMessage();
+    }, [sendMessage]);
 
     // Load voices
     useEffect(() => {
@@ -104,6 +113,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             try { recognitionRef.current.stop(); } catch (e) { }
         }
         if (timerRef.current) clearInterval(timerRef.current);
+        if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
         window.speechSynthesis.cancel();
     };
 
@@ -129,9 +139,26 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         recognition.lang = 'en-AU';
         recognition.maxAlternatives = 1;
 
+        // Reset silence tracking
+        hasSpeechRef.current = false;
+        lastSpeechRef.current = 0;
+        if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+
         recognition.onstart = () => {
             setStatus('listening');
             setTranscript('');
+
+            // Start silence detection: auto-send after 3s of silence (once speech has started)
+            silenceTimerRef.current = setInterval(() => {
+                if (hasSpeechRef.current && lastSpeechRef.current > 0) {
+                    const silenceDuration = Date.now() - lastSpeechRef.current;
+                    if (silenceDuration > 3000) {
+                        // Auto-send after 3 seconds of silence
+                        if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+                        sendMessageRef.current?.();
+                    }
+                }
+            }, 500);
         };
 
         recognition.onresult = (event: any) => {
@@ -146,6 +173,10 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                     interim += result[0].transcript;
                 }
             }
+
+            // Track speech activity for silence detection
+            lastSpeechRef.current = Date.now();
+            if (interim || final) hasSpeechRef.current = true;
 
             setTranscript(interim);
             if (final) {
@@ -162,15 +193,12 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         };
 
         recognition.onend = () => {
-            // Only process if we have content and were actively listening
-            if (status === 'listening' && (fullTranscript || transcript)) {
-                // Don't auto-process, let user click "Send"
-            }
+            if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
         };
 
         recognitionRef.current = recognition;
         recognition.start();
-    }, [status, fullTranscript, transcript]);
+    }, []);
 
     const stopRecording = useCallback(() => {
         if (recognitionRef.current) {
@@ -196,11 +224,31 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         setFullTranscript('');
 
         try {
-            // Read session directly from sessionStorage to avoid Supabase client
-            // cross-origin frame issues with getSession()
+            // Try multiple sources for auth token (sessionStorage, localStorage, then Supabase client)
             const storageKey = `sb-${import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]}-auth-token`;
-            const raw = sessionStorage.getItem(storageKey);
-            const accessToken = raw ? JSON.parse(raw)?.access_token : null;
+            let accessToken: string | null = null;
+
+            // Try sessionStorage first
+            const sessionRaw = sessionStorage.getItem(storageKey);
+            if (sessionRaw) {
+                try { accessToken = JSON.parse(sessionRaw)?.access_token; } catch { }
+            }
+
+            // Fallback: try localStorage (some browsers/configs use this)
+            if (!accessToken) {
+                const localRaw = localStorage.getItem(storageKey);
+                if (localRaw) {
+                    try { accessToken = JSON.parse(localRaw)?.access_token; } catch { }
+                }
+            }
+
+            // Final fallback: use Supabase client getSession
+            if (!accessToken) {
+                try {
+                    const { data: sessionData } = await supabase.auth.getSession();
+                    accessToken = sessionData?.session?.access_token || null;
+                } catch { }
+            }
 
             if (!accessToken) {
                 setStatus('error');
@@ -346,6 +394,104 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                         navigate(`/clients?search=${encodeURIComponent(searchTerm)}`);
                         setOpen(false);
                     });
+                }
+                break;
+
+            case 'mark_paid':
+                setStatus('processing');
+                try {
+                    if (data.invoice_number || data.invoice_id) {
+                        const query = supabase.from('invoices').update({ status: 'paid' }).eq('user_id', user?.id || '');
+                        if (data.invoice_id) {
+                            await query.eq('id', data.invoice_id);
+                        } else {
+                            await query.ilike('invoice_number', `%${data.invoice_number}%`);
+                        }
+                        setStatus('success');
+                        speakThenDo(responseText, () => {
+                            navigate('/invoices');
+                            setOpen(false);
+                        });
+                    } else if (data.client_name) {
+                        // Find most recent unpaid invoice for this client
+                        const { data: clients } = await supabase
+                            .from('clients').select('id').eq('user_id', user?.id || '')
+                            .ilike('name', `%${data.client_name}%`).limit(1);
+                        if (clients?.[0]) {
+                            const { data: inv } = await supabase
+                                .from('invoices').select('id').eq('client_id', clients[0].id)
+                                .in('status', ['sent', 'draft', 'overdue']).order('created_at', { ascending: false }).limit(1);
+                            if (inv?.[0]) {
+                                await supabase.from('invoices').update({ status: 'paid' }).eq('id', inv[0].id);
+                                setStatus('success');
+                                speakThenDo(responseText, () => { navigate('/invoices'); setOpen(false); });
+                            } else {
+                                setStatus('error');
+                                setAiMessage(`No unpaid invoices found for ${data.client_name}.`);
+                                speak(`Couldn't find any unpaid invoices for ${data.client_name}.`, true);
+                            }
+                        }
+                    } else {
+                        speak(responseText, true);
+                    }
+                } catch {
+                    setStatus('error');
+                    setAiMessage('Failed to update invoice.');
+                    speak("Sorry, had trouble marking that invoice as paid.", true);
+                }
+                break;
+
+            case 'complete_job':
+                setStatus('processing');
+                try {
+                    if (data.job_id) {
+                        await supabase.from('jobs').update({ status: 'completed' }).eq('id', data.job_id).eq('user_id', user?.id || '');
+                        setStatus('success');
+                        speakThenDo(responseText, () => { navigate('/jobs'); setOpen(false); });
+                    } else if (data.client_name || data.job_title) {
+                        let jobQuery = supabase.from('jobs').select('id').eq('user_id', user?.id || '').neq('status', 'completed');
+                        if (data.client_name) {
+                            const { data: clients } = await supabase
+                                .from('clients').select('id').eq('user_id', user?.id || '')
+                                .ilike('name', `%${data.client_name}%`).limit(1);
+                            if (clients?.[0]) jobQuery = jobQuery.eq('client_id', clients[0].id);
+                        }
+                        if (data.job_title) jobQuery = jobQuery.ilike('title', `%${data.job_title}%`);
+                        const { data: jobs } = await jobQuery.order('created_at', { ascending: false }).limit(1);
+                        if (jobs?.[0]) {
+                            await supabase.from('jobs').update({ status: 'completed' }).eq('id', jobs[0].id);
+                            setStatus('success');
+                            speakThenDo(responseText, () => { navigate('/jobs'); setOpen(false); });
+                        } else {
+                            setStatus('error');
+                            setAiMessage('No matching active job found.');
+                            speak("Couldn't find a matching job to complete.", true);
+                        }
+                    } else {
+                        speak(responseText, true);
+                    }
+                } catch {
+                    setStatus('error');
+                    setAiMessage('Failed to update job.');
+                    speak("Sorry, had trouble marking that job as complete.", true);
+                }
+                break;
+
+            case 'update_status':
+                setStatus('processing');
+                try {
+                    const table = data.entity_type === 'invoice' ? 'invoices' : 'jobs';
+                    const newStatus = data.new_status || 'in_progress';
+                    if (data.entity_id) {
+                        await supabase.from(table).update({ status: newStatus }).eq('id', data.entity_id).eq('user_id', user?.id || '');
+                        setStatus('success');
+                        speakThenDo(responseText, () => { navigate(`/${table}`); setOpen(false); });
+                    } else {
+                        speak(responseText, true);
+                    }
+                } catch {
+                    setStatus('error');
+                    speak("Sorry, had trouble updating that status.", true);
                 }
                 break;
 
@@ -599,7 +745,9 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         utterance.onerror = onComplete;
 
         // Fallback: if onend never fires (common in mobile/emulated browsers), force complete
-        const estimatedDuration = Math.max(2000, text.length * 60);
+        // Use word count (~150 wpm = ~400ms/word) instead of char length for better accuracy
+        const wordCount = text.split(/\s+/).length;
+        const estimatedDuration = Math.max(1500, wordCount * 400 + 500);
         setTimeout(onComplete, estimatedDuration);
 
         window.speechSynthesis.speak(utterance);
@@ -764,7 +912,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                     {/* Helper Text */}
                     <p className="text-center text-xs font-medium text-muted-foreground/70 mt-6 tracking-wide">
                         {status === 'listening'
-                            ? "Speak naturally. Tap the send button when done."
+                            ? "Speak naturally. I'll send automatically when you pause."
                             : "Tap the mic to start speaking"}
                     </p>
                 </div>
