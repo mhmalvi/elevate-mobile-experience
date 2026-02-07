@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createCorsResponse, getCorsHeaders } from "../_shared/cors.ts";
-import { encryptToken } from "../_shared/encryption.ts";
+import { encryptToken, decryptToken } from "../_shared/encryption.ts";
+import { signState, verifyState } from "../_shared/oauth-security.ts";
 
 const MYOB_CLIENT_ID = Deno.env.get("MYOB_CLIENT_ID")!;
 const MYOB_CLIENT_SECRET = Deno.env.get("MYOB_CLIENT_SECRET")!;
@@ -18,8 +19,30 @@ serve(async (req) => {
     const corsHeaders = getCorsHeaders(req);
 
     try {
-        const url = new URL(req.url);
-        const action = url.searchParams.get("action"); // "connect", "callback", "disconnect"
+        // Read action from request body (frontend sends via supabase.functions.invoke)
+        // Fall back to query params for direct OAuth redirects
+        let action: string | null = null;
+        let bodyData: any = {};
+
+        if (req.method === "POST") {
+            try {
+                bodyData = await req.json();
+                action = bodyData.action || null;
+            } catch {
+                // Body might not be JSON for some requests
+            }
+        }
+
+        if (!action) {
+            const url = new URL(req.url);
+            action = url.searchParams.get("action");
+            // Also check for direct OAuth callback params
+            if (!action && url.searchParams.get("code")) {
+                action = "callback";
+                bodyData.code = url.searchParams.get("code");
+                bodyData.state = url.searchParams.get("state");
+            }
+        }
 
         // Initialize Supabase client
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -35,11 +58,10 @@ serve(async (req) => {
             const { data: { user }, error } = await supabase.auth.getUser(token);
             if (error || !user) throw new Error("Invalid user token");
 
-            // Generate state to prevent CSRF and store user ID
-            // Added provider: 'myob' to distinguish from Xero
-            const state = btoa(JSON.stringify({ userId: user.id, provider: 'myob', nonce: crypto.randomUUID() }));
+            // Use HMAC-signed state for CSRF protection
+            const state = await signState({ userId: user.id, provider: 'myob' });
 
-            const scopes = "CompanyFile"; // Standard scope for AccountRight
+            const scopes = "CompanyFile";
             const authUrl = `https://secure.myob.com/oauth2/account/authorize?client_id=${MYOB_CLIENT_ID}&redirect_uri=${encodeURIComponent(MYOB_REDIRECT_URI)}&response_type=code&scope=${scopes}&state=${state}`;
 
             return new Response(JSON.stringify({ url: authUrl }), {
@@ -51,19 +73,20 @@ serve(async (req) => {
         // 2. CALLBACK - Handle return from MYOB
         // ------------------------------------------------------------------
         if (action === "callback") {
-            const code = url.searchParams.get("code");
-            const state = url.searchParams.get("state");
+            const code = bodyData.code;
+            const state = bodyData.state;
 
             if (!code || !state) throw new Error("Missing code or state");
 
-            // Decode state to get user ID
-            let userId;
-            try {
-                const decodedState = JSON.parse(atob(state));
-                userId = decodedState.userId;
-            } catch (e) {
-                throw new Error("Invalid state parameter");
+            // Verify state with HMAC signature and expiry check
+            const verification = await verifyState(state);
+            if (!verification.valid) {
+                console.error("MYOB OAuth state verification failed:", verification.error);
+                throw new Error(`State verification failed: ${verification.error}`);
             }
+
+            const userId = verification.data!.userId;
+            if (!userId) throw new Error("Missing userId in state");
 
             // Exchange code for tokens
             const tokenResponse = await fetch("https://secure.myob.com/oauth2/v1/authorize", {
@@ -80,13 +103,14 @@ serve(async (req) => {
 
             if (!tokenResponse.ok) {
                 const txt = await tokenResponse.text();
+                console.error("MYOB token exchange failed:", txt);
                 throw new Error(`Failed to exchange token: ${txt}`);
             }
 
             const tokenData = await tokenResponse.json();
             const { access_token, refresh_token, expires_in } = tokenData;
 
-            // Fetch Company Files (We need to select one to connect to)
+            // Fetch Company Files
             const cfResponse = await fetch("https://api.myob.com/accountright/", {
                 headers: {
                     "Authorization": `Bearer ${access_token}`,
@@ -95,7 +119,11 @@ serve(async (req) => {
                 },
             });
 
-            if (!cfResponse.ok) throw new Error("Failed to fetch company files");
+            if (!cfResponse.ok) {
+                const cfError = await cfResponse.text();
+                console.error("MYOB company files fetch failed:", cfError);
+                throw new Error("Failed to fetch company files");
+            }
 
             const cfData = await cfResponse.json();
             if (!cfData || cfData.length === 0) {
@@ -127,15 +155,83 @@ serve(async (req) => {
 
             if (updateError) throw updateError;
 
-            // Return HTML that closes the popup and notifies the parent window
-            return new Response(
-                `<html><body><script>window.opener.postMessage("myob-success", "*"); window.close();</script></body></html>`,
-                { headers: { ...corsHeaders, "Content-Type": "text/html" } }
-            );
+            return new Response(JSON.stringify({
+                success: true,
+                company_file: companyFile.Name || companyFileId,
+            }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
         }
 
         // ------------------------------------------------------------------
-        // 3. DISCONNECT
+        // 3. REFRESH - Refresh expired access token
+        // ------------------------------------------------------------------
+        if (action === "refresh") {
+            const authHeader = req.headers.get("Authorization");
+            if (!authHeader) throw new Error("No authorization header");
+
+            const token = authHeader.replace("Bearer ", "");
+            const { data: { user }, error } = await supabase.auth.getUser(token);
+            if (error || !user) throw new Error("Invalid user token");
+
+            // Get current refresh token
+            const { data: profile } = await supabase
+                .from("profiles")
+                .select("myob_refresh_token, myob_sync_enabled")
+                .eq("id", user.id)
+                .single();
+
+            if (!profile?.myob_refresh_token || !profile.myob_sync_enabled) {
+                throw new Error("MYOB not connected");
+            }
+
+            const refreshToken = await decryptToken(profile.myob_refresh_token);
+
+            // Exchange refresh token for new access token
+            const tokenResponse = await fetch("https://secure.myob.com/oauth2/v1/authorize", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                    client_id: MYOB_CLIENT_ID,
+                    client_secret: MYOB_CLIENT_SECRET,
+                    grant_type: "refresh_token",
+                    refresh_token: refreshToken,
+                }),
+            });
+
+            if (!tokenResponse.ok) {
+                const txt = await tokenResponse.text();
+                console.error("MYOB token refresh failed:", txt);
+                // If refresh fails, clear connection so user can reconnect
+                await supabase.from("profiles").update({
+                    myob_access_token: null,
+                    myob_refresh_token: null,
+                    myob_expires_at: null,
+                    myob_sync_enabled: false,
+                }).eq("id", user.id);
+                throw new Error("Token refresh failed. Please reconnect MYOB.");
+            }
+
+            const tokenData = await tokenResponse.json();
+            const { access_token, refresh_token: newRefreshToken, expires_in } = tokenData;
+
+            // Encrypt and store new tokens
+            const encryptedAccess = await encryptToken(access_token);
+            const encryptedRefresh = await encryptToken(newRefreshToken || refreshToken);
+
+            await supabase.from("profiles").update({
+                myob_access_token: encryptedAccess,
+                myob_refresh_token: encryptedRefresh,
+                myob_expires_at: new Date(Date.now() + expires_in * 1000).toISOString(),
+            }).eq("id", user.id);
+
+            return new Response(JSON.stringify({ success: true }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
+
+        // ------------------------------------------------------------------
+        // 4. DISCONNECT
         // ------------------------------------------------------------------
         if (action === "disconnect") {
             const authHeader = req.headers.get("Authorization");
@@ -152,6 +248,7 @@ serve(async (req) => {
                 myob_company_file_id: null,
                 myob_company_file_uri: null,
                 myob_expires_at: null,
+                myob_connected_at: null,
                 myob_sync_enabled: false,
             }).eq("id", user.id);
 
