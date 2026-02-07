@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
@@ -14,8 +14,9 @@ import { Users, MapPin, WifiOff, ChevronRight, Plus, Mail } from 'lucide-react';
 
 export default function Clients() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.get('search') || '');
 
   // Use offline-first hook
   const { clients, loading, isOnline } = useOfflineClients(user?.id || '');
