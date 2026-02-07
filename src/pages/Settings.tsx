@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { LogOut, User, Building2, CreditCard, ChevronRight, Sparkles, Sun, Moon, Crown, Palette, Users, Settings as SettingsIcon, Link2, HardHat, FileText } from 'lucide-react';
+import { LogOut, User, Building2, CreditCard, ChevronRight, Sparkles, Sun, Moon, Crown, Palette, Users, Settings as SettingsIcon, Link2, HardHat, FileText, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 
@@ -25,6 +25,7 @@ export default function Settings() {
     { icon: Palette, label: 'Branding', description: 'Colors, logos & templates', path: '/settings/branding' },
     { icon: Users, label: 'Team', description: 'Manage team members & roles', path: '/settings/team' },
     { icon: HardHat, label: 'Subcontractors', description: 'Manage your subbies network', path: '/settings/subcontractors' },
+    { icon: Clock, label: 'Timesheets', description: 'Staff hours & weekly timesheets', path: '/timesheets' },
     { icon: CreditCard, label: 'Payment Details', description: 'Bank account for invoices', path: '/settings/payments' },
     { icon: Link2, label: 'Integrations', description: 'Connect Xero, MYOB & more', path: '/settings/integrations' },
     { icon: FileText, label: 'BAS Report', description: 'Quarterly GST summary', path: '/settings/bas-report' },
