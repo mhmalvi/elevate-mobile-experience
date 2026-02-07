@@ -160,24 +160,31 @@ export function MagicMic() {
             }
 
             console.log('Voice: Invoking Edge Function with auth token...');
-            // Call the voice command Edge Function with explicit auth header
-            // This ensures the token is included even with async storage adapters
-            const { data, error } = await supabase.functions.invoke('process-voice-command', {
-                body: {
-                    query: messageText,
-                    conversationHistory: [],
-                    accumulatedData: {}
-                },
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`
+            // Use direct fetch to avoid Supabase client cross-origin frame issues
+            const res = await fetch(
+                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-voice-command`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+                    },
+                    body: JSON.stringify({
+                        query: messageText,
+                        conversationHistory: [],
+                        accumulatedData: {}
+                    })
                 }
-            });
+            );
 
-            if (error) {
-                console.error('Voice: Supabase invoke error', error);
-                throw error;
+            if (!res.ok) {
+                const errBody = await res.json().catch(() => ({}));
+                console.error('Voice: Edge Function error', errBody);
+                throw new Error(errBody.error || `Voice command failed (${res.status})`);
             }
 
+            const data = await res.json();
             console.log('Voice: Response received', data);
             const { speak: responseText, action, data: responseData } = data;
 

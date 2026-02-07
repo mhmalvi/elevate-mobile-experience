@@ -205,19 +205,30 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 return;
             }
 
-            const { data, error } = await supabase.functions.invoke('process-voice-command', {
-                body: {
-                    query: messageText,
-                    conversationHistory: conversationHistory,
-                    accumulatedData: accumulatedData
-                },
-                headers: {
-                    Authorization: `Bearer ${session.access_token}`
+            // Use direct fetch to avoid Supabase client cross-origin frame issues
+            const res = await fetch(
+                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-voice-command`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+                    },
+                    body: JSON.stringify({
+                        query: messageText,
+                        conversationHistory: conversationHistory,
+                        accumulatedData: accumulatedData
+                    })
                 }
-            });
+            );
 
-            if (error) throw error;
+            if (!res.ok) {
+                const errBody = await res.json().catch(() => ({}));
+                throw new Error(errBody.error || `Voice command failed (${res.status})`);
+            }
 
+            const data = await res.json();
             const { speak: response, action, data: responseData } = data;
 
             // Update conversation history
