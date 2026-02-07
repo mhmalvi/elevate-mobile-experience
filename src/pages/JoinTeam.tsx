@@ -177,7 +177,7 @@ export default function JoinTeam() {
     );
   }
 
-  const teamName = invitation?.team_name || (invitation?.teams as any)?.name || 'TradieMate Team';
+  const teamName = invitation?.team_name || (invitation?.teams as any)?.name || 'the team';
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">

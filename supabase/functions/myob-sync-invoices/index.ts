@@ -209,7 +209,7 @@ serve(async (req) => {
                     },
                     Lines: myobLines,
                     IsTaxInclusive: false,
-                    Comment: `TradieMate Invoice ${invoice.invoice_number}`,
+                    Comment: `Invoice ${invoice.invoice_number}`,
                 };
 
                 // Set status

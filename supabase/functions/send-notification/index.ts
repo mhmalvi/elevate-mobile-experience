@@ -201,7 +201,7 @@ serve(async (req) => {
       ? `${baseUrl}/q/${id}`
       : `${baseUrl}/i/${id}`;
 
-    const businessName = profile?.business_name || 'Your Tradie';
+    const businessName = profile?.business_name || 'Your Business';
     const documentNumber = type === 'quote' ? document.quote_number : document.invoice_number;
     const total = Number(document.total).toFixed(2);
 
@@ -214,22 +214,22 @@ serve(async (req) => {
         ? `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <h2 style="color: #45201c;">Quote from ${businessName}</h2>
-            <p>G'day ${recipient.name || 'mate'},</p>
+            <p>Hi ${recipient.name || 'there'},</p>
             <p>Here's your quote for <strong>$${total}</strong>.</p>
             <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
               <p style="margin: 0;"><strong>Quote Number:</strong> ${documentNumber}</p>
               <p style="margin: 10px 0 0 0;"><strong>Total:</strong> $${total}</p>
             </div>
             <a href="${shareUrl}" style="display: inline-block; background: #45201c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">View Quote</a>
-            <p>Cheers,<br>${businessName}</p>
+            <p>Thanks,<br>${businessName}</p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            <p style="color: #888; font-size: 12px;">Powered by TradieMate</p>
+            <p style="color: #888; font-size: 12px;">Powered by your business management app</p>
           </div>
         `
         : `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <h2 style="color: #45201c;">Invoice from ${businessName}</h2>
-            <p>G'day ${recipient.name || 'mate'},</p>
+            <p>Hi ${recipient.name || 'there'},</p>
             <p>Here's your invoice for <strong>$${total}</strong>.</p>
             <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
               <p style="margin: 0;"><strong>Invoice Number:</strong> ${documentNumber}</p>
@@ -237,15 +237,15 @@ serve(async (req) => {
             </div>
             <a href="${shareUrl}" style="display: inline-block; background: #45201c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">View & Pay Invoice</a>
             <p>Payment details are included in the invoice.</p>
-            <p>Cheers,<br>${businessName}</p>
+            <p>Thanks,<br>${businessName}</p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            <p style="color: #888; font-size: 12px;">Powered by TradieMate</p>
+            <p style="color: #888; font-size: 12px;">Powered by your business management app</p>
           </div>
         `;
 
       const plainTextBody = type === 'quote'
-        ? `G'day ${recipient.name || 'mate'},\n\nHere's your quote from ${businessName}.\n\nQuote: ${documentNumber}\nTotal: $${total}\n\nView and accept your quote here:\n${shareUrl}\n\nCheers,\n${businessName}`
-        : `G'day ${recipient.name || 'mate'},\n\nHere's your invoice from ${businessName}.\n\nInvoice: ${documentNumber}\nTotal: $${total}\n\nView your invoice here:\n${shareUrl}\n\nPayment details are included in the invoice.\n\nCheers,\n${businessName}`;
+        ? `Hi ${recipient.name || 'there'},\n\nHere's your quote from ${businessName}.\n\nQuote: ${documentNumber}\nTotal: $${total}\n\nView and accept your quote here:\n${shareUrl}\n\nThanks,\n${businessName}`
+        : `Hi ${recipient.name || 'there'},\n\nHere's your invoice from ${businessName}.\n\nInvoice: ${documentNumber}\nTotal: $${total}\n\nView your invoice here:\n${shareUrl}\n\nPayment details are included in the invoice.\n\nThanks,\n${businessName}`;
 
       // Try to send via Resend first
       const resendApiKey = Deno.env.get('RESEND_API_KEY');
@@ -317,8 +317,8 @@ serve(async (req) => {
       }
     } else if (method === 'sms') {
       const smsBody = type === 'quote'
-        ? `G'day! Here's your quote from ${businessName} for $${total}. View it here: ${shareUrl}`
-        : `G'day! Here's your invoice from ${businessName} for $${total}. View it here: ${shareUrl}`;
+        ? `Hi! Here's your quote from ${businessName} for $${total}. View it here: ${shareUrl}`
+        : `Hi! Here's your invoice from ${businessName} for $${total}. View it here: ${shareUrl}`;
 
       // Try to send via Twilio first
       const twilioResult = await sendTwilioSms(recipient.phone!, smsBody);

@@ -298,7 +298,7 @@ export function MagicMic() {
                 case 'ask_details':
                     console.log('Voice: Action ask_details - continuing conversation');
                     toast({
-                        title: "🎙️ Matey:",
+                        title: "Voice Assistant:",
                         description: responseText
                     });
                     break;
@@ -308,7 +308,7 @@ export function MagicMic() {
                     console.log('Voice: Action general_reply/default');
                     // Show conversational response
                     toast({
-                        title: "🎙️ Matey:",
+                        title: "Voice Assistant:",
                         description: responseText
                     });
                     break;

@@ -173,7 +173,7 @@ export default function Jobs() {
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
                 <Briefcase className="w-7 h-7 text-primary" />
               </div>
-              <p className="font-semibold text-foreground">No jobs yet, mate!</p>
+              <p className="font-semibold text-foreground">No jobs yet!</p>
               <p className="text-sm text-muted-foreground mt-1">Track your jobs from quote to completion</p>
               <Button
                 onClick={() => navigate('/jobs/new')}

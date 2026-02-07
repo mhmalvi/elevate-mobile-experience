@@ -487,7 +487,7 @@ export default function PublicQuote() {
                 {profile?.email && <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>Email:</strong> {profile.email}</p>}
               </div>
               <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f3f4f6', fontSize: 11, color: '#9ca3af' }}>
-                Generated with <a href="https://tradiemate.com.au" target="_blank" rel="noopener noreferrer" style={{ color: primaryColor, textDecoration: 'none', fontWeight: 500 }}>TradieMate</a> &bull; Professional Quote Management
+                Professional Quote Management
               </div>
             </div>
 

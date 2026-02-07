@@ -19,8 +19,8 @@ declare global {
     }
 }
 
-// Premium Australian voice selection
-const getAussieVoice = (): SpeechSynthesisVoice | null => {
+// Voice selection for text-to-speech
+const getPreferredVoice = (): SpeechSynthesisVoice | null => {
     const voices = window.speechSynthesis.getVoices();
     const priority = ['Karen', 'Catherine', 'Tessa', 'Moira', 'Samantha', 'Victoria'];
 
@@ -67,7 +67,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
 
     // Load voices
     useEffect(() => {
-        const loadVoices = () => setSelectedVoice(getAussieVoice());
+        const loadVoices = () => setSelectedVoice(getPreferredVoice());
         loadVoices();
         window.speechSynthesis.onvoiceschanged = loadVoices;
         return () => { window.speechSynthesis.onvoiceschanged = null; };
@@ -77,8 +77,8 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     useEffect(() => {
         if (open) {
             resetConversation();
-            setAiMessage("G'day mate! What can I help you with today?");
-            setTimeout(() => speak("G'day! What can I help you with?", false), 500);
+            setAiMessage("Hey! What can I help you with today?");
+            setTimeout(() => speak("Hey! What can I help you with?", false), 500);
         } else {
             cleanup();
         }
@@ -385,7 +385,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                     } else {
                         setStatus('error');
                         setAiMessage(`No clients found matching "${searchTerm}". Want me to add them?`);
-                        speak(`Sorry mate, couldn't find anyone called ${searchTerm}. Want me to add them as a new client?`, true);
+                        speak(`Sorry, couldn't find anyone called ${searchTerm}. Want me to add them as a new client?`, true);
                     }
                 } catch {
                     // Fallback to basic search if RPC not available
@@ -779,7 +779,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 {/* Hidden accessibility */}
                 <SheetHeader className="sr-only">
                     <SheetTitle>Voice Assistant</SheetTitle>
-                    <SheetDescription>TradieMate AI Voice Assistant</SheetDescription>
+                    <SheetDescription>AI Voice Assistant</SheetDescription>
                 </SheetHeader>
 
                 {/* Header - Custom Close Button Removed (relies on default SheetClose) */}
@@ -798,7 +798,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                                         <Sparkles className="w-6 h-6 text-primary" />}
                         </div>
                         <div>
-                            <h3 className="font-bold text-lg text-foreground tracking-tight">Matey</h3>
+                            <h3 className="font-bold text-lg text-foreground tracking-tight">Voice Assistant</h3>
                             <p className="text-xs font-medium text-muted-foreground/80 uppercase tracking-wider">
                                 {status === 'listening' ? `Listening (${formatTime(recordingTime)})` :
                                     status === 'processing' ? 'Thinking...' :
@@ -828,7 +828,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                                     status === 'error' ? "text-red-700 dark:text-red-300" :
                                         "text-foreground"
                             )}>
-                                {aiMessage || "G'day! I'm Matey. Need a hand with a quote, invoice, or job today?"}
+                                {aiMessage || "Hey! Need a hand with a quote, invoice, or job today?"}
                             </p>
                         </div>
                     </div>

@@ -80,8 +80,8 @@ serve(async (req) => {
       .eq("user_id", invoice.user_id)
       .single();
 
-    const businessName = profile?.business_name || "TradieMate";
-    const baseUrl = success_url?.split('/i/')[0] || 'https://app.tradiemate.com.au';
+    const businessName = profile?.business_name || "Your Business";
+    const baseUrl = success_url?.split('/i/')[0] || Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
 
     console.log(`Creating Checkout session for platform account, invoice: ${invoice.invoice_number}, balance: $${balance}`);
 
