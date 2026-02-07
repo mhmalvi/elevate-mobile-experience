@@ -2,6 +2,7 @@ import { db, SyncQueueItem } from './db';
 import { encryptedDb } from './encryptedDb';
 import { supabase } from '@/integrations/supabase/client';
 import { resolveConflict, hasConflict } from './conflictResolver';
+import { validateSyncQueueItem } from './syncQueueValidator';
 
 /**
  * Sanitize data for IndexedDB storage
@@ -220,14 +221,15 @@ export class SyncManager {
     data: any
   ) {
     // Validate inputs to prevent corrupt queue entries
-    if (!entityType || !entityId || !action || !data) {
-      console.error('[SyncManager] Invalid queue data, skipping:', { entityType, entityId, action });
-      return;
-    }
+    const validation = validateSyncQueueItem({
+      entity_type: entityType,
+      entity_id: entityId,
+      action,
+      data,
+    });
 
-    // Ensure entity_id is a string
-    if (typeof entityId !== 'string') {
-      console.error('[SyncManager] entity_id must be a string, got:', typeof entityId);
+    if (!validation.valid) {
+      console.warn('[SyncManager] Invalid queue item, skipping:', validation.errors);
       return;
     }
 
