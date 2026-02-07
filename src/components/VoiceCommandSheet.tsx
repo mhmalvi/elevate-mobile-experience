@@ -262,45 +262,45 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     }, [fullTranscript, transcript, conversationHistory, accumulatedData, stopRecording]);
 
     const handleAction = async (action: string, data: any, responseText: string) => {
+        const speakThenDo = (text: string, fn: () => void) => {
+            speak(text, false);
+            // Run action after a short delay so speech starts, but don't depend on onend
+            setTimeout(fn, 1500);
+        };
+
         switch (action) {
             case 'create_quote':
                 setStatus('success');
-                speak(responseText, false);
-                setTimeout(() => createQuote(data), 2500);
+                speakThenDo(responseText, () => createQuote(data));
                 break;
 
             case 'create_invoice':
                 setStatus('success');
-                speak(responseText, false);
-                setTimeout(() => createInvoice(data), 2500);
+                speakThenDo(responseText, () => createInvoice(data));
                 break;
 
             case 'create_client':
                 setStatus('success');
-                speak(responseText, false);
-                setTimeout(() => createClient(data), 2500);
+                speakThenDo(responseText, () => createClient(data));
                 break;
 
             case 'schedule_job':
                 setStatus('success');
-                speak(responseText, false);
-                setTimeout(() => createJob(data), 2500);
+                speakThenDo(responseText, () => createJob(data));
                 break;
 
             case 'find_client':
-                speak(responseText, false);
-                setTimeout(() => {
+                speakThenDo(responseText, () => {
                     setOpen(false);
                     navigate(`/clients?search=${encodeURIComponent(data.search_name || '')}`);
-                }, 2000);
+                });
                 break;
 
             case 'navigate':
-                speak(responseText, false);
-                setTimeout(() => {
+                speakThenDo(responseText, () => {
                     setOpen(false);
                     if (data.destination) navigate(data.destination);
-                }, 2000);
+                });
                 break;
 
             case 'ask_details':
@@ -414,7 +414,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 .from('invoices')
                 .insert({
                     user_id: user.id,
-                    client_id: clientId, // Link to client!
+                    client_id: clientId,
                     invoice_number: `INV-${Date.now().toString().slice(-6)}`,
                     title: data.client_name ? `Invoice for ${data.client_name}` : 'Voice Invoice',
                     status: 'draft',
@@ -423,10 +423,22 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 .select()
                 .single();
 
+            // Add line items if any
+            if (invoice && data.items?.length > 0) {
+                const items = data.items.map((item: any) => ({
+                    invoice_id: invoice.id,
+                    description: item.description || 'Service',
+                    quantity: item.quantity || 1,
+                    unit_price: item.price || 0,
+                    total: (item.quantity || 1) * (item.price || 0)
+                }));
+                await supabase.from('invoice_line_items').insert(items);
+            }
+
             if (invoice) {
                 setOpen(false);
                 toast({
-                    title: "Invoice Created! 💰",
+                    title: "Invoice Created!",
                     description: `${data.client_name ? `For ${data.client_name}` : ''}`
                 });
                 navigate(`/invoices/${invoice.id}`);
@@ -503,14 +515,24 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     const speak = (text: string, autoListen: boolean) => {
         window.speechSynthesis.cancel();
 
+        if (!('speechSynthesis' in window) || !text) {
+            // No speech synthesis - just handle the auto-listen directly
+            if (autoListen && open) {
+                setTimeout(() => startRecording(), 500);
+            }
+            return;
+        }
+
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 0.95;
         utterance.pitch = 1.05;
         utterance.volume = 1.0;
         if (selectedVoice) utterance.voice = selectedVoice;
 
-        utterance.onstart = () => setStatus('speaking');
-        utterance.onend = () => {
+        let ended = false;
+        const onComplete = () => {
+            if (ended) return;
+            ended = true;
             if (autoListen && open) {
                 setStatus('idle');
                 setTimeout(() => startRecording(), 500);
@@ -518,6 +540,14 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 setStatus('idle');
             }
         };
+
+        utterance.onstart = () => setStatus('speaking');
+        utterance.onend = onComplete;
+        utterance.onerror = onComplete;
+
+        // Fallback: if onend never fires (common in mobile/emulated browsers), force complete
+        const estimatedDuration = Math.max(2000, text.length * 60);
+        setTimeout(onComplete, estimatedDuration);
 
         window.speechSynthesis.speak(utterance);
     };
