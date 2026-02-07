@@ -179,8 +179,8 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         setStatus('idle');
     }, []);
 
-    const sendMessage = useCallback(async (directText?: string) => {
-        const messageText = directText || (fullTranscript + transcript).trim();
+    const sendMessage = useCallback(async (directText?: string | unknown) => {
+        const messageText = (typeof directText === 'string' ? directText : '') || (fullTranscript + transcript).trim();
 
         if (!messageText) {
             setAiMessage("I didn't hear anything. Please try again.");
@@ -649,7 +649,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
 
                                 <Button
                                     size="lg"
-                                    onClick={sendMessage}
+                                    onClick={() => sendMessage()}
                                     disabled={!transcript && !fullTranscript}
                                     className="rounded-full h-16 w-16 p-0 bg-primary shadow-lg shadow-primary/25 hover:scale-110 transition-transform hover:shadow-xl"
                                 >
