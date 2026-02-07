@@ -69,3 +69,9 @@ verify_jwt = false
 
 [functions.xero-sync-invoices]
 verify_jwt = false
+
+[functions.process-voice-command]
+verify_jwt = false
+
+[functions.myob-oauth]
+verify_jwt = false
