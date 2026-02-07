@@ -8,9 +8,10 @@ import { QuickContact } from '@/components/ui/quick-contact';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useOfflineClients } from '@/lib/offline/offlineHooks';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
-import { Users, MapPin, WifiOff, ChevronRight, Plus, Mail } from 'lucide-react';
+import { Users, MapPin, WifiOff, ChevronRight, Plus, Mail, Search } from 'lucide-react';
 
 export default function Clients() {
   const navigate = useNavigate();
@@ -29,6 +30,9 @@ export default function Clients() {
   // Use offline-first hook
   const { clients, loading, isOnline } = useOfflineClients(user?.id || '');
 
+  const [fuzzyResults, setFuzzyResults] = useState<any[]>([]);
+  const [fuzzyLoading, setFuzzyLoading] = useState(false);
+
   const filteredClients = useMemo(() => {
     if (!search.trim()) return clients;
     const term = search.toLowerCase();
@@ -39,6 +43,26 @@ export default function Clients() {
       client.suburb?.toLowerCase().includes(term)
     );
   }, [clients, search]);
+
+  // When local filter finds nothing, try fuzzy DB search
+  useEffect(() => {
+    if (filteredClients.length === 0 && search.trim() && clients.length > 0 && isOnline && user?.id) {
+      setFuzzyLoading(true);
+      supabase.rpc('search_clients_fuzzy', {
+        p_user_id: user.id,
+        p_search_term: search,
+        p_limit: 5
+      }).then(({ data }) => {
+        setFuzzyResults(data || []);
+        setFuzzyLoading(false);
+      }).catch(() => {
+        setFuzzyResults([]);
+        setFuzzyLoading(false);
+      });
+    } else {
+      setFuzzyResults([]);
+    }
+  }, [filteredClients.length, search, clients.length, isOnline, user?.id]);
 
   return (
     <MobileLayout>
@@ -91,11 +115,56 @@ export default function Clients() {
           {loading ? (
             <ListSkeleton count={5} />
           ) : filteredClients.length === 0 && search ? (
-            <EmptyState
-              icon={<Users className="w-8 h-8" />}
-              title="No matches found"
-              description={`No clients matching "${search}". Try a different search term.`}
-            />
+            fuzzyLoading ? (
+              <ListSkeleton count={3} />
+            ) : fuzzyResults.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 px-1">
+                  <Search className="w-4 h-4 text-primary" />
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Did you mean?
+                  </p>
+                </div>
+                {fuzzyResults.map((client, index) => (
+                  <button
+                    key={client.id}
+                    onClick={() => navigate(`/clients/${client.id}`)}
+                    className={cn(
+                      "w-full p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-primary/20",
+                      "hover:bg-card hover:border-primary/30 hover:shadow-lg",
+                      "transition-all duration-300 group animate-fade-in text-left"
+                    )}
+                    style={{ animationDelay: `${index * 0.05}s` }}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0">
+                          <span className="text-base font-bold text-primary">
+                            {(client.name || 'C')[0].toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-foreground">{client.name}</h3>
+                          {client.email && (
+                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-0.5">
+                              <Mail className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">{client.email}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={<Users className="w-8 h-8" />}
+                title="No matches found"
+                description={`No clients matching "${search}". Try a different search term.`}
+              />
+            )
           ) : clients.length === 0 ? (
             <div className="p-8 text-center rounded-2xl bg-card/50 border border-dashed border-border/50 backdrop-blur-sm">
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
