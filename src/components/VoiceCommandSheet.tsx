@@ -196,23 +196,27 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         setFullTranscript('');
 
         try {
-            // Get session for explicit auth header (prevents 401 with async storage adapters)
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.access_token) {
+            // Read session directly from sessionStorage to avoid Supabase client
+            // cross-origin frame issues with getSession()
+            const storageKey = `sb-${import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]}-auth-token`;
+            const raw = sessionStorage.getItem(storageKey);
+            const accessToken = raw ? JSON.parse(raw)?.access_token : null;
+
+            if (!accessToken) {
                 setStatus('error');
                 setAiMessage('Please log in to use voice commands.');
                 speak("You need to be logged in to use voice commands.", false);
                 return;
             }
 
-            // Use direct fetch to avoid Supabase client cross-origin frame issues
+            // Direct fetch to avoid Supabase client cross-origin frame issues
             const res = await fetch(
                 `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-voice-command`,
                 {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`,
+                        'Authorization': `Bearer ${accessToken}`,
                         'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
                     },
                     body: JSON.stringify({
