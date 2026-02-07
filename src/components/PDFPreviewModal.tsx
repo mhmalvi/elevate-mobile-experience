@@ -100,11 +100,13 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
     }
   };
 
-  // SECURITY: Sanitize HTML to prevent XSS attacks
-  // Allow essential document structure tags for proper PDF rendering
+  // SECURITY: Sanitize HTML for contexts where scripts CAN execute (print, download).
+  // The iframe preview uses sandbox="allow-same-origin" (no allow-scripts), so scripts
+  // cannot execute there — raw HTML is safe in the iframe.
   const sanitizedHtml = useMemo(() => {
     if (!html) return null;
     return DOMPurify.sanitize(html, {
+      WHOLE_DOCUMENT: true,
       ALLOWED_TAGS: [
         'html', 'head', 'body', 'style', 'meta', 'title', 'link',
         'div', 'p', 'span', 'table', 'tr', 'td', 'th', 'thead', 'tbody',
@@ -116,8 +118,6 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
         'href', 'target', 'rel', 'charset', 'name', 'content', 'lang'
       ],
       ALLOW_DATA_ATTR: false,
-      // Allow @import in styles for Google Fonts
-      FORCE_BODY: false,
     });
   }, [html]);
 
@@ -257,14 +257,14 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
             <div className="flex items-center justify-center h-full">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
-          ) : sanitizedHtml ? (
+          ) : html ? (
             <div className="bg-background rounded-lg shadow-lg overflow-hidden">
               <iframe
                 ref={iframeRef}
-                srcDoc={sanitizedHtml}
+                srcDoc={html}
                 className="w-full h-[500px] border-0"
                 title={`Preview ${documentNumber}`}
-                sandbox="allow-same-origin allow-scripts"
+                sandbox="allow-same-origin"
               />
             </div>
           ) : (
