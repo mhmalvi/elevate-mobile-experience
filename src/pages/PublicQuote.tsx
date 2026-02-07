@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { SignaturePad } from '@/components/ui/signature-pad';
 import { Check, FileText, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -101,7 +100,7 @@ export default function PublicQuote() {
     if (error) {
       toast({ title: 'Error', description: 'Failed to accept quote', variant: 'destructive' });
     } else {
-      toast({ title: 'Quote accepted! 🎉', description: 'Thanks for your business!' });
+      toast({ title: 'Quote accepted!', description: 'Thanks for your business!' });
       setShowSignature(false);
       fetchQuote();
     }
@@ -112,20 +111,34 @@ export default function PublicQuote() {
     handleAccept(signatureData);
   };
 
+  // --- Branding ---
+  const primaryColor = branding?.primary_color || '#2563eb';
+  const secondaryColor = branding?.secondary_color || '#1e40af';
+  const accentColor = branding?.accent_color || '#10b981';
+  const logoUrl = branding?.logo_url || profile?.logo_url;
+  const showLogo = branding?.show_logo_on_documents ?? true;
+  const footerText = branding?.document_footer_text || 'Thank you for your business!';
+
+  const formatCurrency = (amount: number) => `$${safeNumber(amount).toFixed(2)}`;
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    return format(new Date(dateStr), 'dd MMM yyyy');
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: primaryColor }} />
       </div>
     );
   }
 
   if (error || !quote) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-        <FileText className="w-16 h-16 text-muted-foreground mb-4" />
-        <h1 className="text-xl font-bold text-foreground mb-2">Quote Not Found</h1>
-        <p className="text-muted-foreground text-center">
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
+        <FileText className="w-16 h-16 text-gray-400 mb-4" />
+        <h1 className="text-xl font-bold text-gray-900 mb-2">Quote Not Found</h1>
+        <p className="text-gray-500 text-center">
           This quote may have been removed or the link is invalid.
         </p>
       </div>
@@ -135,190 +148,350 @@ export default function PublicQuote() {
   const isAccepted = quote.status === 'accepted';
   const isDeclined = quote.status === 'declined';
   const isExpired = quote.valid_until && new Date(quote.valid_until) < new Date();
+  const client = quote.clients;
 
-  // Extract branding values with fallbacks
-  const primaryColor = branding?.primary_color || '#3b82f6';
-  const logoUrl = branding?.logo_url || profile?.logo_url;
-  const showLogo = branding?.show_logo_on_documents ?? true;
-
+  // ====================================================================
+  // PROFESSIONAL QUOTE DESIGN — matches generate-pdf/improved-template
+  // ====================================================================
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-primary/10 to-primary/5 border-b border-border/50 p-6" style={{ background: `linear-gradient(to bottom right, ${primaryColor}15, ${primaryColor}08)` }}>
-        <div className="max-w-2xl mx-auto">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
-              {showLogo && logoUrl && (
-                <img
-                  src={logoUrl}
-                  alt="Business logo"
-                  className="max-w-[120px] max-h-[60px] object-contain"
-                />
-              )}
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">
+    <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      {/* Google Fonts */}
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+      {/* Expired Banner */}
+      {isExpired && !isAccepted && (
+        <div style={{ backgroundColor: '#fef3c7', borderBottom: '1px solid #fcd34d', padding: '10px 16px', textAlign: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>
+            This quote has expired. Please contact {profile?.business_name || 'us'} for an updated quote.
+          </span>
+        </div>
+      )}
+
+      <div style={{ maxWidth: 800, margin: '0 auto', padding: '24px 16px' }}>
+        <div style={{ background: '#ffffff', borderRadius: 12, boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 4px 24px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
+
+          {/* ========== HEADER ========== */}
+          <div style={{ padding: '28px 32px 20px', borderBottom: `2px solid ${primaryColor}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+              {/* Business Info */}
+              <div style={{ flex: 1, minWidth: 200 }}>
+                {showLogo && logoUrl && (
+                  <div style={{ marginBottom: 10 }}>
+                    <img src={logoUrl} alt="Logo" style={{ maxWidth: 140, maxHeight: 56, objectFit: 'contain', display: 'block' }} />
+                  </div>
+                )}
+                <h1 style={{ fontSize: 22, fontWeight: 700, color: '#111827', letterSpacing: -0.5, margin: 0, lineHeight: 1.3 }}>
                   {profile?.business_name || 'Quote'}
                 </h1>
-                {profile?.phone && (
-                  <p className="text-sm text-muted-foreground">{profile.phone}</p>
+                <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.7, marginTop: 4 }}>
+                  {profile?.address && <p style={{ margin: 0 }}>{profile.address}</p>}
+                  {profile?.phone && <p style={{ margin: 0 }}>{profile.phone}</p>}
+                  {profile?.email && <p style={{ margin: 0 }}>{profile.email}</p>}
+                </div>
+              </div>
+
+              {/* Document Badge & Meta */}
+              <div style={{ textAlign: 'right', minWidth: 180 }}>
+                <div style={{
+                  display: 'inline-block',
+                  background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`,
+                  color: '#ffffff',
+                  padding: '7px 18px',
+                  borderRadius: 6,
+                  fontSize: 15,
+                  fontWeight: 700,
+                  letterSpacing: 1.5,
+                  marginBottom: 8,
+                }}>
+                  QUOTE
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+                  #{quote.quote_number}
+                </div>
+                <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.7 }}>
+                  <p style={{ margin: 0 }}><strong style={{ color: '#374151', fontWeight: 600 }}>Date:</strong> {formatDate(quote.created_at)}</p>
+                  {quote.valid_until && (
+                    <p style={{ margin: 0, color: isExpired && !isAccepted ? '#dc2626' : '#6b7280', fontWeight: isExpired && !isAccepted ? 600 : 400 }}>
+                      <strong style={{ color: isExpired && !isAccepted ? '#dc2626' : '#374151', fontWeight: 600 }}>Valid Until:</strong> {formatDate(quote.valid_until)}
+                      {isExpired && !isAccepted && ' (EXPIRED)'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ========== BODY ========== */}
+          <div style={{ padding: '24px 32px 32px' }}>
+
+            {/* Title & Description */}
+            {quote.title && (
+              <div style={{ marginBottom: 20 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 600, color: '#111827', margin: 0, lineHeight: 1.3 }}>{quote.title}</h2>
+                {quote.description && (
+                  <div style={{ marginTop: 8, padding: 12, background: '#fef3c7', borderLeft: `3px solid #f59e0b`, borderRadius: 3, fontSize: 13, color: '#78350f', lineHeight: 1.5 }}>
+                    {quote.description}
+                  </div>
                 )}
               </div>
-            </div>
-            <StatusBadge status={isExpired && !isAccepted ? 'expired' : quote.status} />
-          </div>
-          <div className="text-sm text-muted-foreground">
-            <p><strong>Quote:</strong> {quote.quote_number}</p>
-            <p><strong>Date:</strong> {format(new Date(quote.created_at), 'd MMMM yyyy')}</p>
-            {quote.valid_until && (
-              <p><strong>Valid until:</strong> {format(new Date(quote.valid_until), 'd MMMM yyyy')}</p>
             )}
-          </div>
-        </div>
-      </div>
 
-      {/* Content */}
-      <div className="max-w-2xl mx-auto p-6 space-y-6">
-        {/* Quote Title */}
-        <div>
-          <h2 className="text-xl font-semibold text-foreground">{quote.title}</h2>
-          {quote.description && (
-            <p className="text-muted-foreground mt-1">{quote.description}</p>
-          )}
-        </div>
-
-        {/* Client */}
-        {quote.clients && (
-          <div className="p-4 bg-card/50 rounded-xl border border-border/50">
-            <p className="text-sm text-muted-foreground mb-1">Prepared for</p>
-            <p className="font-semibold text-foreground">{quote.clients.name}</p>
-            {quote.clients.email && (
-              <p className="text-sm text-muted-foreground">{quote.clients.email}</p>
-            )}
-          </div>
-        )}
-
-        {/* Line Items */}
-        <div className="space-y-3">
-          <h3 className="font-semibold text-foreground">Items</h3>
-          {lineItems.map((item) => (
-            <div key={item.id} className="p-4 bg-card/50 rounded-xl border border-border/50">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="font-medium text-foreground">{item.description}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {item.quantity} × ${safeNumber(item.unit_price).toFixed(2)} / {item.unit}
-                  </p>
+            {/* Client & Document Details Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 24 }}>
+              {/* Quote For */}
+              {client && (
+                <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, color: primaryColor, marginBottom: 10 }}>
+                    Quote For
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#111827', marginBottom: 4 }}>
+                    {client.name}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.7 }}>
+                    {client.address && <p style={{ margin: 0 }}>{client.address}</p>}
+                    {(client.suburb || client.state || client.postcode) && (
+                      <p style={{ margin: 0 }}>{[client.suburb, client.state, client.postcode].filter(Boolean).join(', ')}</p>
+                    )}
+                    {client.phone && <p style={{ margin: 0 }}>{client.phone}</p>}
+                    {client.email && <p style={{ margin: 0 }}>{client.email}</p>}
+                  </div>
                 </div>
-                <p className="font-semibold text-foreground">${safeNumber(item.total).toFixed(2)}</p>
+              )}
+
+              {/* Document Details */}
+              <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, color: primaryColor, marginBottom: 10 }}>
+                  Document Details
+                </div>
+                <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.9 }}>
+                  <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>Number:</strong> {quote.quote_number}</p>
+                  <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>Date:</strong> {formatDate(quote.created_at)}</p>
+                  {quote.valid_until && (
+                    <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>Valid Until:</strong> {formatDate(quote.valid_until)}</p>
+                  )}
+                  {profile?.abn && (
+                    <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>ABN:</strong> {profile.abn}</p>
+                  )}
+                </div>
               </div>
             </div>
-          ))}
-        </div>
 
-        {/* Totals */}
-        <div className="p-4 bg-card rounded-xl border border-border space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Subtotal</span>
-            <span className="text-foreground">${safeNumber(quote.subtotal).toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">GST (10%)</span>
-            <span className="text-foreground">${safeNumber(quote.gst).toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between font-bold text-xl pt-2 border-t border-border">
-            <span className="text-foreground">Total</span>
-            <span style={{ color: primaryColor }}>${safeNumber(quote.total).toFixed(2)}</span>
-          </div>
-        </div>
-
-        {/* Notes */}
-        {quote.notes && (
-          <div className="p-4 bg-muted/50 rounded-xl">
-            <p className="text-sm text-muted-foreground">{quote.notes}</p>
-          </div>
-        )}
-
-        {/* Signature Pad or Accept Button */}
-        {!isAccepted && !isDeclined && !isExpired && (
-          <>
-            {showSignature ? (
-              <div className="space-y-4">
-                <h3 className="font-semibold text-center text-foreground">Sign to Accept</h3>
-                <p className="text-sm text-muted-foreground text-center">
-                  By signing below, you accept this quote and agree to the terms.
-                </p>
-                <SignaturePad onSave={handleSignatureComplete} />
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setShowSignature(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Button
-                  onClick={() => setShowSignature(true)}
-                  className="w-full h-14 text-lg shadow-premium"
-                  disabled={accepting}
-                >
-                  {accepting ? (
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  ) : (
-                    <Check className="w-5 h-5 mr-2" />
+            {/* ========== LINE ITEMS TABLE ========== */}
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: 24 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'linear-gradient(to bottom, #f9fafb, #f3f4f6)' }}>
+                    <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6b7280', borderBottom: '1px solid #e5e7eb' }}>
+                      Description
+                    </th>
+                    <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6b7280', borderBottom: '1px solid #e5e7eb', width: '15%' }}>
+                      Qty
+                    </th>
+                    <th style={{ padding: '10px 14px', textAlign: 'right', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6b7280', borderBottom: '1px solid #e5e7eb', width: '18%' }}>
+                      Unit Price
+                    </th>
+                    <th style={{ padding: '10px 14px', textAlign: 'right', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.8, color: '#6b7280', borderBottom: '1px solid #e5e7eb', width: '18%' }}>
+                      Amount
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineItems.map((item, idx) => (
+                    <tr key={item.id} style={{ borderBottom: idx < lineItems.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                      <td style={{ padding: '10px 14px', verticalAlign: 'top' }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: '#111827', marginBottom: 2 }}>{item.description}</div>
+                        {item.item_type && (
+                          <div style={{ fontSize: 11, color: '#9ca3af', textTransform: 'capitalize' }}>{item.item_type}</div>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', fontSize: 12, color: '#6b7280' }}>
+                        {item.quantity || 1} {item.unit || 'ea'}
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontSize: 12, color: '#6b7280' }}>
+                        {formatCurrency(item.unit_price)}
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: '#111827' }}>
+                        {formatCurrency(item.total)}
+                      </td>
+                    </tr>
+                  ))}
+                  {lineItems.length === 0 && (
+                    <tr>
+                      <td colSpan={4} style={{ padding: '20px 14px', textAlign: 'center', fontSize: 13, color: '#9ca3af' }}>
+                        No items
+                      </td>
+                    </tr>
                   )}
-                  Accept Quote with Signature
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleAccept()}
-                  className="w-full"
-                  disabled={accepting}
-                >
-                  Accept Without Signature
-                </Button>
+                </tbody>
+              </table>
+            </div>
+
+            {/* ========== TOTALS ========== */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
+              <div style={{ minWidth: 280, maxWidth: 340, width: '100%', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 13, color: '#6b7280' }}>
+                  <span>Subtotal</span>
+                  <span>{formatCurrency(quote.subtotal)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 10px', fontSize: 13, color: '#6b7280', borderBottom: '1px solid #e5e7eb', marginBottom: 6 }}>
+                  <span>GST (10%)</span>
+                  <span>{formatCurrency(quote.gst)}</span>
+                </div>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`,
+                  color: '#ffffff', fontSize: 18, fontWeight: 700,
+                  padding: '12px 16px', margin: '0 -16px -16px', borderRadius: '0 0 8px 8px',
+                }}>
+                  <span>Total AUD</span>
+                  <span>{formatCurrency(quote.total)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ========== ACCEPT / SIGNATURE ========== */}
+            {!isAccepted && !isDeclined && !isExpired && (
+              <div style={{ marginBottom: 20 }}>
+                {showSignature ? (
+                  <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 24 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 600, color: '#111827', textAlign: 'center', marginBottom: 4 }}>Sign to Accept</h3>
+                    <p style={{ fontSize: 13, color: '#6b7280', textAlign: 'center', marginBottom: 16 }}>
+                      By signing below, you accept this quote and agree to the terms.
+                    </p>
+                    <SignaturePad onSave={handleSignatureComplete} />
+                    <div style={{ marginTop: 12 }}>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setShowSignature(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <button
+                      onClick={() => setShowSignature(true)}
+                      disabled={accepting}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        padding: '14px 24px', fontSize: 16, fontWeight: 700, color: '#ffffff', border: 'none', cursor: 'pointer',
+                        background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`,
+                        borderRadius: 8, boxShadow: `0 4px 14px ${primaryColor}40`,
+                        transition: 'transform 0.15s, box-shadow 0.15s',
+                        opacity: accepting ? 0.7 : 1,
+                      }}
+                      onMouseEnter={e => { if (!accepting) { (e.target as any).style.transform = 'translateY(-1px)'; (e.target as any).style.boxShadow = `0 6px 20px ${primaryColor}50`; } }}
+                      onMouseLeave={e => { (e.target as any).style.transform = 'translateY(0)'; (e.target as any).style.boxShadow = `0 4px 14px ${primaryColor}40`; }}
+                    >
+                      <Check style={{ width: 20, height: 20 }} />
+                      Accept Quote with Signature
+                    </button>
+                    <button
+                      onClick={() => handleAccept()}
+                      disabled={accepting}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        padding: '12px 24px', fontSize: 14, fontWeight: 600,
+                        color: '#374151', backgroundColor: '#ffffff',
+                        border: '1px solid #d1d5db', borderRadius: 8, cursor: 'pointer',
+                        transition: 'background-color 0.15s',
+                        opacity: accepting ? 0.7 : 1,
+                      }}
+                      onMouseEnter={e => { (e.target as any).style.backgroundColor = '#f9fafb'; }}
+                      onMouseLeave={e => { (e.target as any).style.backgroundColor = '#ffffff'; }}
+                    >
+                      {accepting ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+                      ) : (
+                        'Accept Without Signature'
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
-          </>
-        )}
 
-        {isAccepted && (
-          <div className="p-4 bg-success/10 border border-success/30 rounded-xl text-center">
-            <Check className="w-8 h-8 text-success mx-auto mb-2" />
-            <p className="font-semibold text-success">Quote Accepted</p>
-            <p className="text-sm text-muted-foreground">
-              Accepted on {format(new Date(quote.accepted_at), 'd MMMM yyyy')}
-            </p>
-            {quote.signature_data && (
-              <div className="mt-4 pt-4 border-t border-success/30">
-                <p className="text-xs text-muted-foreground mb-2">Signature</p>
-                <img
-                  src={quote.signature_data}
-                  alt="Customer signature"
-                  className="max-w-[200px] h-auto mx-auto bg-background rounded border p-2"
-                />
+            {/* ========== ACCEPTED STATUS ========== */}
+            {isAccepted && (
+              <div style={{
+                background: `${accentColor}10`, border: `1px solid ${accentColor}30`,
+                borderRadius: 8, padding: '20px 24px', textAlign: 'center', marginBottom: 20,
+              }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: `${accentColor}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <Check style={{ width: 28, height: 28, color: accentColor }} />
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: accentColor, marginBottom: 4 }}>Quote Accepted</div>
+                {quote.accepted_at && (
+                  <div style={{ fontSize: 12, color: '#6b7280' }}>
+                    Accepted on {formatDate(quote.accepted_at)}
+                  </div>
+                )}
+                {quote.signature_data && (
+                  <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${accentColor}30` }}>
+                    <p style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>Customer Signature</p>
+                    <img
+                      src={quote.signature_data}
+                      alt="Customer signature"
+                      style={{ maxWidth: 220, height: 'auto', margin: '0 auto', display: 'block', background: '#ffffff', borderRadius: 6, border: '1px solid #e5e7eb', padding: 8 }}
+                    />
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {isExpired && !isAccepted && (
-          <div className="p-4 bg-warning/10 border border-warning/30 rounded-xl text-center">
-            <p className="font-semibold text-warning">Quote Expired</p>
-            <p className="text-sm text-muted-foreground">
-              Please contact {profile?.business_name || 'us'} for an updated quote.
-            </p>
-          </div>
-        )}
+            {/* ========== DECLINED STATUS ========== */}
+            {isDeclined && (
+              <div style={{
+                background: '#fef2f2', border: '1px solid #fecaca',
+                borderRadius: 8, padding: '16px 20px', textAlign: 'center', marginBottom: 20,
+              }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: '#dc2626', marginBottom: 4 }}>Quote Declined</div>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>
+                  Please contact {profile?.business_name || 'us'} if you'd like to discuss further.
+                </div>
+              </div>
+            )}
 
-        {/* Footer */}
-        <div className="text-center pt-4 text-sm text-muted-foreground">
-          {profile?.abn && <p>ABN: {profile.abn}</p>}
-          {branding?.document_footer_text && (
-            <p className="mt-2">{branding.document_footer_text}</p>
-          )}
-          <p className="mt-2 text-xs">Powered by TradieMate</p>
+            {/* ========== NOTES ========== */}
+            {quote.notes && (
+              <div style={{
+                background: '#fef9f5', border: '1px solid #fed7aa', borderRadius: 8,
+                padding: 14, marginBottom: 16,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#c2410c', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Notes</div>
+                <div style={{ fontSize: 13, color: '#7c2d12', lineHeight: 1.5, whiteSpace: 'pre-line' }}>{quote.notes}</div>
+              </div>
+            )}
+
+            {/* ========== TERMS ========== */}
+            {(quote.terms || branding?.default_quote_terms) && (
+              <div style={{ background: '#ffffff', border: '1px solid #f3f4f6', borderRadius: 8, padding: 14, marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Terms & Conditions</div>
+                <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.5, whiteSpace: 'pre-line' }}>
+                  {quote.terms || branding?.default_quote_terms}
+                </div>
+              </div>
+            )}
+
+            {/* ========== FOOTER ========== */}
+            <div style={{ textAlign: 'center', paddingTop: 24, borderTop: '2px solid #f3f4f6' }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: '#111827', marginBottom: 10 }}>
+                {footerText}
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.9 }}>
+                {profile?.abn && <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>ABN:</strong> {profile.abn}</p>}
+                {(profile as any)?.license_number && <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>License:</strong> {(profile as any).license_number}</p>}
+                {profile?.phone && <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>Phone:</strong> {profile.phone}</p>}
+                {profile?.email && <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>Email:</strong> {profile.email}</p>}
+              </div>
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f3f4f6', fontSize: 11, color: '#9ca3af' }}>
+                Generated with <a href="https://tradiemate.com.au" target="_blank" rel="noopener noreferrer" style={{ color: primaryColor, textDecoration: 'none', fontWeight: 500 }}>TradieMate</a> &bull; Professional Quote Management
+              </div>
+            </div>
+
+          </div>
         </div>
       </div>
     </div>
