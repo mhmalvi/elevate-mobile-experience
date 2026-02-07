@@ -73,34 +73,35 @@ export default function Dashboard() {
   });
 
   const fetchStats = async () => {
-    if (!team) return;
+    if (!team || !user) return;
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const ownershipFilter = `team_id.eq.${team.id},and(team_id.is.null,user_id.eq.${user.id})`;
 
     const [jobsRes, quotesRes, outstandingRes, paidRes] = await Promise.all([
       supabase
         .from('jobs')
         .select('*', { count: 'exact', head: true })
-        .eq('team_id', team.id)
+        .or(ownershipFilter)
         .in('status', ['approved', 'scheduled', 'in_progress']),
 
       supabase
         .from('quotes')
         .select('*', { count: 'exact', head: true })
-        .eq('team_id', team.id)
+        .or(ownershipFilter)
         .in('status', ['sent', 'viewed']),
 
       supabase
         .from('invoices')
         .select('total, amount_paid')
-        .eq('team_id', team.id)
+        .or(ownershipFilter)
         .in('status', ['sent', 'viewed', 'partially_paid', 'overdue']),
 
       supabase
         .from('invoices')
         .select('amount_paid, paid_at')
-        .eq('team_id', team.id)
+        .or(ownershipFilter)
         .eq('status', 'paid')
         .gte('paid_at', startOfMonth),
     ]);
@@ -120,14 +121,15 @@ export default function Dashboard() {
   };
 
   const fetchOverdueInvoices = async () => {
-    if (!team) return;
+    if (!team || !user) return;
 
     const today = new Date().toISOString().split('T')[0];
+    const ownershipFilter = `team_id.eq.${team.id},and(team_id.is.null,user_id.eq.${user.id})`;
 
     const { data: overdue } = await supabase
       .from('invoices')
       .select('id, total, amount_paid')
-      .eq('team_id', team.id)
+      .or(ownershipFilter)
       .lt('due_date', today)
       .not('status', 'eq', 'paid')
       .not('status', 'eq', 'cancelled');
@@ -140,12 +142,14 @@ export default function Dashboard() {
   };
 
   const fetchRecentActivity = async () => {
-    if (!team) return;
+    if (!team || !user) return;
+
+    const ownershipFilter = `team_id.eq.${team.id},and(team_id.is.null,user_id.eq.${user.id})`;
 
     const { data: quotes } = await supabase
       .from('quotes')
       .select('id, title, status, created_at')
-      .eq('team_id', team.id)
+      .or(ownershipFilter)
       .order('created_at', { ascending: false })
       .limit(5);
 
@@ -188,30 +192,32 @@ export default function Dashboard() {
   }, [selectedMember, team]);
 
   const fetchMemberStats = async (memberId: string) => {
-    if (!team) return;
+    if (!team || !user) return;
+
+    const ownershipFilter = `team_id.eq.${team.id},and(team_id.is.null,user_id.eq.${user.id})`;
 
     const [jobsRes, completedRes, invoicesRes] = await Promise.all([
       supabase
         .from('jobs')
         .select('*', { count: 'exact', head: true })
-        .eq('team_id', team.id)
+        .or(ownershipFilter)
         .eq('assigned_to', memberId),
       supabase
         .from('jobs')
         .select('*', { count: 'exact', head: true })
-        .eq('team_id', team.id)
+        .or(ownershipFilter)
         .eq('assigned_to', memberId)
         .in('status', ['completed', 'invoiced']),
       supabase
         .from('invoices')
         .select('total')
-        .eq('team_id', team.id)
+        .or(ownershipFilter)
         .eq('status', 'paid')
         .in('job_id', (
           await supabase
             .from('jobs')
             .select('id')
-            .eq('team_id', team.id)
+            .or(ownershipFilter)
             .eq('assigned_to', memberId)
         ).data?.map(j => j.id) || []),
     ]);
