@@ -540,6 +540,9 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             .select()
             .single();
 
+        if (error) {
+            console.error('Create client error:', error.message, error.details, error.hint);
+        }
         if (newClient) {
             console.log('Created new client:', newClient.name);
             toast({ title: "New client added!", description: clientName });
@@ -573,6 +576,8 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 })
                 .select()
                 .single();
+
+            if (error) console.error('Create quote error:', error.message, error.details);
 
             // Step 3: Add line items if any
             if (quote && data.items?.length > 0) {
@@ -609,7 +614,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 clientId = await findOrCreateClient(data.client_name, data);
             }
 
-            const { data: invoice } = await supabase
+            const { data: invoice, error } = await supabase
                 .from('invoices')
                 .insert({
                     user_id: user.id,
@@ -621,6 +626,8 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 })
                 .select()
                 .single();
+
+            if (error) console.error('Create invoice error:', error.message, error.details);
 
             // Add line items if any
             if (invoice && data.items?.length > 0) {
@@ -663,6 +670,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 .select()
                 .single();
 
+            if (error) console.error('Create client error:', error.message, error.details);
             if (client) {
                 setOpen(false);
                 toast({ title: "Client Added! 👤" });
@@ -683,7 +691,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 clientId = await findOrCreateClient(data.client_name, data);
             }
 
-            const { data: job } = await supabase
+            const { data: job, error } = await supabase
                 .from('jobs')
                 .insert({
                     user_id: user.id,
@@ -696,6 +704,8 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 })
                 .select()
                 .single();
+
+            if (error) console.error('Create job error:', error.message, error.details);
 
             if (job) {
                 setOpen(false);
