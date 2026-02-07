@@ -257,35 +257,19 @@ serve(async (req) => {
             });
         }
 
-        // Validate the JWT token by creating a client with the user's token
+        // Validate the JWT token using service role key + token argument
         const userToken = authHeader.replace("Bearer ", "");
 
-        console.log(`Debug: SUPABASE_URL present: ${!!SUPABASE_URL}`);
-        console.log(`Debug: SUPABASE_ANON_KEY present: ${!!SUPABASE_ANON_KEY}`);
-
-        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-            global: {
-                headers: {
-                    Authorization: `Bearer ${userToken}`
-                }
-            }
-        });
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const { data: { user }, error: authError } = await supabase.auth.getUser(userToken);
 
         if (authError || !user) {
             console.log("Invalid or expired token:", authError?.message);
-            console.log("Debug: Auth error details:", JSON.stringify(authError));
             return new Response(JSON.stringify({
                 speak: "Your session has expired, mate. Please log in again.",
                 action: "error",
                 data: {},
-                error: "Invalid token",
-                debug: {
-                    error: authError,
-                    hasUrl: !!SUPABASE_URL,
-                    hasAnon: !!SUPABASE_ANON_KEY,
-                    urlStart: SUPABASE_URL ? SUPABASE_URL.substring(0, 10) : 'missing'
-                }
+                error: "Invalid token"
             }), {
                 status: 401,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
