@@ -297,33 +297,50 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 }
                 setStatus('processing');
                 try {
-                    const { data: matches } = await supabase
-                        .from('clients')
-                        .select('id, name')
-                        .eq('user_id', user?.id || '')
-                        .ilike('name', `%${searchTerm}%`)
-                        .limit(5);
+                    // Fuzzy + phonetic search: handles Mohammad→Muhammad, Sean→Shaun, etc.
+                    const { data: matches, error: searchErr } = await supabase
+                        .rpc('search_clients_fuzzy', {
+                            p_user_id: user?.id || '',
+                            p_search_term: searchTerm,
+                            p_limit: 5
+                        });
+
+                    if (searchErr) throw searchErr;
 
                     if (matches && matches.length === 1) {
                         setStatus('success');
-                        setAiMessage(`Found ${matches[0].name}! Opening now.`);
+                        const matchNote = matches[0].match_type !== 'exact' && matches[0].match_type !== 'contains'
+                            ? ` (closest match)` : '';
+                        setAiMessage(`Found ${matches[0].name}${matchNote}! Opening now.`);
                         speakThenDo(`Found ${matches[0].name}!`, () => {
                             navigate(`/clients/${matches[0].id}`);
                             setOpen(false);
                         });
                     } else if (matches && matches.length > 1) {
-                        setStatus('success');
-                        setAiMessage(`Found ${matches.length} clients matching "${searchTerm}". Showing results.`);
-                        speakThenDo(`Found ${matches.length} matches. Here they are.`, () => {
-                            navigate(`/clients?search=${encodeURIComponent(searchTerm)}`);
-                            setOpen(false);
-                        });
+                        // If top match is high confidence, go directly
+                        if (matches[0].confidence >= 0.8) {
+                            setStatus('success');
+                            setAiMessage(`Found ${matches[0].name}! Opening now.`);
+                            speakThenDo(`Found ${matches[0].name}!`, () => {
+                                navigate(`/clients/${matches[0].id}`);
+                                setOpen(false);
+                            });
+                        } else {
+                            setStatus('success');
+                            const names = matches.slice(0, 3).map((m: any) => m.name).join(', ');
+                            setAiMessage(`Found ${matches.length} possible matches: ${names}`);
+                            speakThenDo(`Found ${matches.length} possible matches. Here they are.`, () => {
+                                navigate(`/clients?search=${encodeURIComponent(searchTerm)}`);
+                                setOpen(false);
+                            });
+                        }
                     } else {
                         setStatus('error');
-                        setAiMessage(`No clients found matching "${searchTerm}".`);
-                        speak(`Sorry mate, couldn't find anyone called ${searchTerm}.`, true);
+                        setAiMessage(`No clients found matching "${searchTerm}". Want me to add them?`);
+                        speak(`Sorry mate, couldn't find anyone called ${searchTerm}. Want me to add them as a new client?`, true);
                     }
                 } catch {
+                    // Fallback to basic search if RPC not available
                     setStatus('success');
                     speakThenDo(responseText, () => {
                         navigate(`/clients?search=${encodeURIComponent(searchTerm)}`);
