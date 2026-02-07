@@ -292,15 +292,44 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             case 'find_client':
                 const searchTerm = data.search_name || data.client_name || data.name || '';
                 if (!searchTerm) {
-                    // No search term - ask the AI for more details
                     speak(responseText, true);
                     break;
                 }
-                setStatus('success');
-                speakThenDo(responseText, () => {
-                    navigate(`/clients?search=${encodeURIComponent(searchTerm)}`);
-                    setOpen(false);
-                });
+                setStatus('processing');
+                try {
+                    const { data: matches } = await supabase
+                        .from('clients')
+                        .select('id, name')
+                        .eq('user_id', user?.id || '')
+                        .ilike('name', `%${searchTerm}%`)
+                        .limit(5);
+
+                    if (matches && matches.length === 1) {
+                        setStatus('success');
+                        setAiMessage(`Found ${matches[0].name}! Opening now.`);
+                        speakThenDo(`Found ${matches[0].name}!`, () => {
+                            navigate(`/clients/${matches[0].id}`);
+                            setOpen(false);
+                        });
+                    } else if (matches && matches.length > 1) {
+                        setStatus('success');
+                        setAiMessage(`Found ${matches.length} clients matching "${searchTerm}". Showing results.`);
+                        speakThenDo(`Found ${matches.length} matches. Here they are.`, () => {
+                            navigate(`/clients?search=${encodeURIComponent(searchTerm)}`);
+                            setOpen(false);
+                        });
+                    } else {
+                        setStatus('error');
+                        setAiMessage(`No clients found matching "${searchTerm}".`);
+                        speak(`Sorry mate, couldn't find anyone called ${searchTerm}.`, true);
+                    }
+                } catch {
+                    setStatus('success');
+                    speakThenDo(responseText, () => {
+                        navigate(`/clients?search=${encodeURIComponent(searchTerm)}`);
+                        setOpen(false);
+                    });
+                }
                 break;
 
             case 'navigate':

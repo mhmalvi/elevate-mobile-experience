@@ -230,8 +230,22 @@ export function MagicMic() {
                     console.log('Voice: Action find_client');
                     const clientSearchTerm = responseData.search_name || responseData.client_name || responseData.name || '';
                     if (clientSearchTerm) {
-                        toast({ title: "Searching...", description: responseText });
-                        navigate(`/clients?search=${encodeURIComponent(clientSearchTerm)}`);
+                        const { data: matches } = await supabase
+                            .from('clients')
+                            .select('id, name')
+                            .eq('user_id', user?.id || '')
+                            .ilike('name', `%${clientSearchTerm}%`)
+                            .limit(5);
+
+                        if (matches && matches.length === 1) {
+                            toast({ title: "Found!", description: `Opening ${matches[0].name}` });
+                            navigate(`/clients/${matches[0].id}`);
+                        } else if (matches && matches.length > 1) {
+                            toast({ title: "Multiple matches", description: `Found ${matches.length} clients` });
+                            navigate(`/clients?search=${encodeURIComponent(clientSearchTerm)}`);
+                        } else {
+                            toast({ title: "Not found", description: `No clients matching "${clientSearchTerm}"`, variant: "destructive" });
+                        }
                     } else {
                         toast({ title: "Search", description: responseText });
                     }
