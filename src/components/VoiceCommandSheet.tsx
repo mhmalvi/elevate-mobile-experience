@@ -290,16 +290,23 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 break;
 
             case 'find_client':
+                const searchTerm = data.search_name || data.client_name || data.name || '';
+                if (!searchTerm) {
+                    // No search term - ask the AI for more details
+                    speak(responseText, true);
+                    break;
+                }
+                setStatus('success');
                 speakThenDo(responseText, () => {
+                    navigate(`/clients?search=${encodeURIComponent(searchTerm)}`);
                     setOpen(false);
-                    navigate(`/clients?search=${encodeURIComponent(data.search_name || '')}`);
                 });
                 break;
 
             case 'navigate':
                 speakThenDo(responseText, () => {
-                    setOpen(false);
                     if (data.destination) navigate(data.destination);
+                    setOpen(false);
                 });
                 break;
 
