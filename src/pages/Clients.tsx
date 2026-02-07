@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -17,6 +17,14 @@ export default function Clients() {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [search, setSearch] = useState(searchParams.get('search') || '');
+
+  // Sync search state when URL params change (e.g. voice command navigation)
+  useEffect(() => {
+    const urlSearch = searchParams.get('search');
+    if (urlSearch !== null && urlSearch !== search) {
+      setSearch(urlSearch);
+    }
+  }, [searchParams]);
 
   // Use offline-first hook
   const { clients, loading, isOnline } = useOfflineClients(user?.id || '');

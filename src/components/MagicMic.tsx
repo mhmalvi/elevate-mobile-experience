@@ -228,8 +228,13 @@ export function MagicMic() {
 
                 case 'find_client':
                     console.log('Voice: Action find_client');
-                    toast({ title: "🔍 Searching...", description: responseText });
-                    navigate(`/clients?search=${encodeURIComponent(responseData.search_name || '')}`);
+                    const clientSearchTerm = responseData.search_name || responseData.client_name || responseData.name || '';
+                    if (clientSearchTerm) {
+                        toast({ title: "Searching...", description: responseText });
+                        navigate(`/clients?search=${encodeURIComponent(clientSearchTerm)}`);
+                    } else {
+                        toast({ title: "Search", description: responseText });
+                    }
                     break;
 
                 case 'navigate':
