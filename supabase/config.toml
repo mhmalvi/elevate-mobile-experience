@@ -4,8 +4,9 @@ project_id = "rucuomtojzifrvplhwja"
 # Granted: USAGE ON SCHEMA public + ALL ON TABLES/SEQUENCES/FUNCTIONS
 #
 # Security Configuration:
-# - Public functions (verify_jwt = false): generate-pdf, send-email, send-notification, create-payment, stripe-webhook, subscription-webhook, revenuecat-webhook
-# - Protected functions (verify_jwt = true): All others require authentication
+# All functions use verify_jwt = false because they handle auth validation
+# internally (via supabase.auth.getUser(token)). Gateway-level JWT verification
+# blocks valid requests when using async storage adapters or explicit auth headers.
 
 [functions.generate-pdf]
 verify_jwt = false
@@ -74,4 +75,22 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.myob-oauth]
+verify_jwt = false
+
+[functions.myob-sync-clients]
+verify_jwt = false
+
+[functions.myob-sync-invoices]
+verify_jwt = false
+
+[functions.accept-quote]
+verify_jwt = false
+
+[functions.get-payment-settings]
+verify_jwt = false
+
+[functions.update-payment-settings]
+verify_jwt = false
+
+[functions.leave-team]
 verify_jwt = false
