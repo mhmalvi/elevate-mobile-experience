@@ -52,6 +52,15 @@ export default function IntegrationsSettings() {
     token_expires_at: null,
   });
 
+  // QuickBooks State
+  const [qbLoading, setQbLoading] = useState(false);
+  const [qbStatus, setQbStatus] = useState<IntegrationStatus>({
+    connected: false,
+    sync_enabled: false,
+    connected_at: null,
+    token_expires_at: null,
+  });
+
   const [syncingClients, setSyncingClients] = useState(false);
   const [syncingInvoices, setSyncingInvoices] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -83,6 +92,7 @@ export default function IntegrationsSettings() {
             // Try to parse state to see if it has provider info
             const decoded = JSON.parse(atob(state));
             if (decoded.provider === 'myob') provider = 'myob';
+            else if (decoded.provider === 'quickbooks') provider = 'quickbooks';
           } catch (e) {
             // If parse fails, assume Xero (legacy)
             console.log('State parse failed, assuming Xero');
@@ -90,11 +100,19 @@ export default function IntegrationsSettings() {
 
           console.log(`[OAuth] Detected provider: ${provider}`);
 
-          const functionName = provider === 'myob' ? 'myob-oauth' : 'xero-oauth';
+          // QuickBooks also passes realmId in the callback URL
+          const qbRealmId = urlParams.get('realmId');
+
+          const functionName = provider === 'myob' ? 'myob-oauth'
+            : provider === 'quickbooks' ? 'quickbooks-oauth'
+            : 'xero-oauth';
 
           // Exchange the code for tokens via Edge Function
+          const callbackBody: any = { action: 'callback', code, state };
+          if (qbRealmId) callbackBody.realmId = qbRealmId;
+
           const { data, error } = await supabase.functions.invoke(functionName, {
-            body: { action: 'callback', code, state },
+            body: callbackBody,
           });
 
           if (error) {
@@ -159,6 +177,13 @@ export default function IntegrationsSettings() {
           connected_at: profileData.myob_connected_at,
           token_expires_at: profileData.myob_expires_at,
         });
+
+        setQbStatus({
+          connected: !!profileData.qb_realm_id,
+          sync_enabled: profileData.qb_sync_enabled || false,
+          connected_at: profileData.qb_connected_at,
+          token_expires_at: profileData.qb_token_expires_at,
+        });
       }
     } catch (error) {
       console.error('Error checking status:', error);
@@ -183,12 +208,12 @@ export default function IntegrationsSettings() {
     }
   };
 
-  const connectService = async (service: 'xero' | 'myob') => {
-    const setLoading = service === 'xero' ? setXeroLoading : setMyobLoading;
+  const connectService = async (service: 'xero' | 'myob' | 'quickbooks') => {
+    const setLoading = service === 'xero' ? setXeroLoading : service === 'myob' ? setMyobLoading : setQbLoading;
     setLoading(true);
 
     try {
-      const functionName = service === 'xero' ? 'xero-oauth' : 'myob-oauth';
+      const functionName = service === 'xero' ? 'xero-oauth' : service === 'myob' ? 'myob-oauth' : 'quickbooks-oauth';
 
       const { data, error } = await supabase.functions.invoke(functionName, {
         body: { action: 'connect' },
@@ -215,14 +240,15 @@ export default function IntegrationsSettings() {
     }
   };
 
-  const disconnectService = async (service: 'xero' | 'myob') => {
-    if (!confirm(`Are you sure you want to disconnect ${service.toUpperCase()}?`)) return;
+  const disconnectService = async (service: 'xero' | 'myob' | 'quickbooks') => {
+    const displayName = service === 'quickbooks' ? 'QuickBooks' : service.toUpperCase();
+    if (!confirm(`Are you sure you want to disconnect ${displayName}?`)) return;
 
-    const setLoading = service === 'xero' ? setXeroLoading : setMyobLoading;
+    const setLoading = service === 'xero' ? setXeroLoading : service === 'myob' ? setMyobLoading : setQbLoading;
     setLoading(true);
 
     try {
-      const functionName = service === 'xero' ? 'xero-oauth' : 'myob-oauth';
+      const functionName = service === 'xero' ? 'xero-oauth' : service === 'myob' ? 'myob-oauth' : 'quickbooks-oauth';
       const { error } = await supabase.functions.invoke(functionName, {
         body: { action: 'disconnect' },
       });
@@ -246,11 +272,12 @@ export default function IntegrationsSettings() {
     }
   };
 
-  const toggleSync = async (service: 'xero' | 'myob', enabled: boolean) => {
+  const toggleSync = async (service: 'xero' | 'myob' | 'quickbooks', enabled: boolean) => {
     try {
       const updates: any = {};
       if (service === 'xero') updates.xero_sync_enabled = enabled;
       if (service === 'myob') updates.myob_sync_enabled = enabled;
+      if (service === 'quickbooks') updates.qb_sync_enabled = enabled;
 
       const { error } = await supabase
         .from('profiles')
@@ -266,14 +293,16 @@ export default function IntegrationsSettings() {
     }
   };
 
-  const syncData = async (service: 'xero' | 'myob', type: 'clients' | 'invoices') => {
+  const syncData = async (service: 'xero' | 'myob' | 'quickbooks', type: 'clients' | 'invoices') => {
     const setLoading = type === 'clients' ? setSyncingClients : setSyncingInvoices;
     setLoading(true);
 
     try {
       const functionName = service === 'xero'
         ? `xero-sync-${type}`
-        : `myob-sync-${type}`;
+        : service === 'myob'
+        ? `myob-sync-${type}`
+        : `quickbooks-sync-${type}`;
 
       const { data, error } = await supabase.functions.invoke(functionName, {
         body: { sync_all: true },
@@ -300,6 +329,7 @@ export default function IntegrationsSettings() {
 
   const formatEntityType = (entityType: string) => {
     return entityType
+      .replace('qb_', 'QuickBooks ')
       .replace('myob_', 'MYOB ')
       .replace('client', 'Client')
       .replace('invoice', 'Invoice');
@@ -432,6 +462,59 @@ export default function IntegrationsSettings() {
               ) : (
                 <Button className="w-full bg-[#6100a5] hover:bg-[#6100a5]/90 text-white" onClick={() => connectService('myob')} disabled={myobLoading}>
                   {myobLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Connect MYOB'}
+                </Button>
+              )}
+            </div>
+          </Card>
+
+          {/* QuickBooks Card */}
+          <Card className="p-6 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-[#2CA01C]/10 flex items-center justify-center text-[#2CA01C]">
+                <span className="text-lg font-black tracking-tight">QB</span>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold">QuickBooks</h3>
+                <p className="text-sm text-muted-foreground">Online Accounting</p>
+              </div>
+              {qbStatus.connected ? (
+                <div className="flex items-center gap-2 text-green-600 bg-green-500/10 px-3 py-1 rounded-full text-xs font-medium">
+                  <CheckCircle2 className="w-3 h-3" /> Connected
+                </div>
+              ) : (
+                <div className="text-muted-foreground bg-muted px-3 py-1 rounded-full text-xs font-medium">
+                  Not Connected
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2">
+              {qbStatus.connected ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <span className="text-sm font-medium">Auto-Sync</span>
+                    <Switch
+                      checked={qbStatus.sync_enabled}
+                      onCheckedChange={(c) => toggleSync('quickbooks', c)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" onClick={() => syncData('quickbooks', 'clients')} disabled={syncingClients}>
+                      {syncingClients ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                      Sync Clients
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => syncData('quickbooks', 'invoices')} disabled={syncingInvoices}>
+                      {syncingInvoices ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                      Sync Invoices
+                    </Button>
+                  </div>
+                  <Button variant="outline" className="w-full" onClick={() => disconnectService('quickbooks')} disabled={qbLoading}>
+                    {qbLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Disconnect'}
+                  </Button>
+                </div>
+              ) : (
+                <Button className="w-full bg-[#2CA01C] hover:bg-[#2CA01C]/90 text-white" onClick={() => connectService('quickbooks')} disabled={qbLoading}>
+                  {qbLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Connect QuickBooks'}
                 </Button>
               )}
             </div>
