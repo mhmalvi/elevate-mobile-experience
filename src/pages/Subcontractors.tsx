@@ -230,7 +230,7 @@ export default function Subcontractors() {
                         </div>
                         <h1 className="text-3xl font-bold text-foreground">Subcontractors</h1>
                         <p className="text-muted-foreground mt-1">
-                            {subcontractors.length} {subcontractors.length === 1 ? 'subbie' : 'subbies'} in your network
+                            {subcontractors.length} {subcontractors.length === 1 ? 'subcontractor' : 'subcontractors'} in your network
                         </p>
 
                         {/* Add Button */}
@@ -353,7 +353,7 @@ export default function Subcontractors() {
                         <SearchInput
                             value={search}
                             onChange={setSearch}
-                            placeholder="Search subbies, trades..."
+                            placeholder="Search subcontractors, trades..."
                         />
                     )}
 
@@ -370,7 +370,7 @@ export default function Subcontractors() {
                             <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
                                 <HardHat className="w-7 h-7 text-primary" />
                             </div>
-                            <p className="font-semibold text-foreground">No subbies yet, mate!</p>
+                            <p className="font-semibold text-foreground">No subcontractors yet!</p>
                             <p className="text-sm text-muted-foreground mt-1">Add subcontractors you work with</p>
                             <Button onClick={openAddDialog} className="mt-4 rounded-xl" size="sm">
                                 <Plus className="w-4 h-4 mr-1.5" />

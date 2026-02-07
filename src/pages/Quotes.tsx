@@ -95,7 +95,7 @@ export default function Quotes() {
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
                 <FileText className="w-7 h-7 text-primary" />
               </div>
-              <p className="font-semibold text-foreground">No quotes yet, mate!</p>
+              <p className="font-semibold text-foreground">No quotes yet!</p>
               <p className="text-sm text-muted-foreground mt-1">Create professional quotes in under 60 seconds</p>
               <Button
                 onClick={() => navigate('/quotes/new')}

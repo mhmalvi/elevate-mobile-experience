@@ -154,7 +154,7 @@ export default function BASReport() {
         try {
             // Generate CSV content
             const csvContent = [
-                ['BAS Report - TradieMate'],
+                ['BAS Report'],
                 [`Period: ${quarter.label}`],
                 [`Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`],
                 [''],

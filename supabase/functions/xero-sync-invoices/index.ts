@@ -246,7 +246,7 @@ serve(async (req) => {
           LineAmountTypes: "Exclusive", // Prices exclude tax
           LineItems: xeroLineItems,
           InvoiceNumber: invoice.invoice_number,
-          Reference: `TradieMate Invoice ${invoice.invoice_number}`,
+          Reference: `Invoice ${invoice.invoice_number}`,
           Status: xeroStatus,
           // CurrencyCode removed to use organization default
         };

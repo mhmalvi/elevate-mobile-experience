@@ -105,7 +105,7 @@ export default function Invoices() {
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
                 <Receipt className="w-7 h-7 text-primary" />
               </div>
-              <p className="font-semibold text-foreground">No invoices yet, mate!</p>
+              <p className="font-semibold text-foreground">No invoices yet!</p>
               <p className="text-sm text-muted-foreground mt-1">Create professional invoices and get paid faster</p>
               <Button
                 onClick={() => navigate('/invoices/new')}

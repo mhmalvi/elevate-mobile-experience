@@ -140,7 +140,7 @@ serve(async (req) => {
         } else {
           const twilioClient = Twilio(twilioAccountSid, twilioAuthToken);
 
-          const businessName = invoice.profiles?.business_name || "TradieMate";
+          const businessName = invoice.profiles?.business_name || "Your Business";
           const businessPhone = invoice.profiles?.phone || "";
 
           const smsMessage = `Hi ${invoice.clients.name},

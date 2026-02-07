@@ -81,7 +81,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 Oops! Something went wrong
               </h1>
               <p className="text-muted-foreground">
-                Don't worry mate, we've logged the error and will fix it soon.
+                Don't worry, we've logged the error and will fix it soon.
               </p>
             </div>
 

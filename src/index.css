@@ -5,14 +5,14 @@
 @tailwind utilities;
 
 /* ============================================
-   TradieMate Design System v3.0 - "Industrial Premium"
+   Design System v3.0 - "Industrial Premium"
    Deep Navy + Metallic Gold + Turquoise
-   Target: Aussie Tradies (Strong, Reliable, Premium)
+   Target: Tradespeople (Strong, Reliable, Premium)
    ============================================ */
 
 @layer base {
   :root {
-    /* Light Mode - "Aussie Tradie" */
+    /* Light Mode */
     --background: 0 0% 96%;
     /* Neutral #F5F5F5 */
     --foreground: 174 100% 7%;
