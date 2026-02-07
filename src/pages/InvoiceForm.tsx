@@ -272,6 +272,20 @@ export default function InvoiceForm() {
               onChange={(e) => setForm({ ...form, due_date: e.target.value })}
               className="h-12 rounded-xl"
             />
+            <div className="flex gap-2">
+              {[7, 14, 30].map(days => (
+                <Button
+                  key={days}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 rounded-xl text-xs"
+                  onClick={() => setForm({ ...form, due_date: format(addDays(new Date(), days), 'yyyy-MM-dd') })}
+                >
+                  NET {days}
+                </Button>
+              ))}
+            </div>
           </div>
 
           {/* Line Items */}

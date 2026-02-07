@@ -213,6 +213,19 @@ export default function ClientDetail() {
             )}
           </div>
 
+          {/* Notes */}
+          {client.notes && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                <div className="w-1.5 h-6 bg-primary rounded-full" />
+                <h3 className="font-bold text-lg text-foreground">Notes</h3>
+              </div>
+              <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{client.notes}</p>
+              </div>
+            </div>
+          )}
+
           {/* Revenue Dashboard */}
           {(totalRevenue > 0 || outstandingAmount > 0) && (
             <div className="space-y-3">

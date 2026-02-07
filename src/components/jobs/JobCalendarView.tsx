@@ -16,6 +16,7 @@ interface Job {
   start_time: string | null;
   end_time: string | null;
   site_address: string | null;
+  assigned_to?: string | null;
   clients?: { name: string } | null;
 }
 
@@ -23,6 +24,7 @@ interface JobCalendarViewProps {
   jobs: Job[];
   selectedDate: Date | undefined;
   onSelectDate: (date: Date | undefined) => void;
+  filterMemberId?: string;
 }
 
 // Status color mapping
@@ -35,13 +37,19 @@ const statusColors: Record<JobStatus, { bg: string; border: string; text: string
   quoted: { bg: 'bg-muted', border: 'border-border', text: 'text-muted-foreground' },
 };
 
-export function JobCalendarView({ jobs, selectedDate, onSelectDate }: JobCalendarViewProps) {
+export function JobCalendarView({ jobs, selectedDate, onSelectDate, filterMemberId }: JobCalendarViewProps) {
   const navigate = useNavigate();
+
+  // Filter jobs by member if filter is set
+  const filteredJobs = useMemo(() => {
+    if (!filterMemberId) return jobs;
+    return jobs.filter(job => job.assigned_to === filterMemberId);
+  }, [jobs, filterMemberId]);
 
   // Group jobs by date
   const jobsByDate = useMemo(() => {
     const map = new Map<string, Job[]>();
-    jobs.forEach(job => {
+    filteredJobs.forEach(job => {
       if (job.scheduled_date) {
         const dateKey = format(new Date(job.scheduled_date), 'yyyy-MM-dd');
         if (!map.has(dateKey)) {
@@ -51,31 +59,31 @@ export function JobCalendarView({ jobs, selectedDate, onSelectDate }: JobCalenda
       }
     });
     return map;
-  }, [jobs]);
+  }, [filteredJobs]);
 
   // Get dates that have jobs scheduled
   const scheduledDates = useMemo(() => {
-    return jobs
+    return filteredJobs
       .filter(job => job.scheduled_date)
       .map(job => new Date(job.scheduled_date!));
-  }, [jobs]);
+  }, [filteredJobs]);
 
   // Get jobs for selected date
   const jobsForSelectedDate = useMemo(() => {
     if (!selectedDate) return [];
-    return jobs.filter(job => 
+    return filteredJobs.filter(job =>
       job.scheduled_date && isSameDay(new Date(job.scheduled_date), selectedDate)
     );
-  }, [jobs, selectedDate]);
+  }, [filteredJobs, selectedDate]);
 
   // Get upcoming jobs (next 3 jobs from today)
   const upcomingJobs = useMemo(() => {
     const today = startOfDay(new Date());
-    return jobs
+    return filteredJobs
       .filter(job => job.scheduled_date && isAfter(new Date(job.scheduled_date), today))
       .sort((a, b) => new Date(a.scheduled_date!).getTime() - new Date(b.scheduled_date!).getTime())
       .slice(0, 3);
-  }, [jobs]);
+  }, [filteredJobs]);
 
   // Get job count and dominant status for a date
   const getDateInfo = (date: Date) => {

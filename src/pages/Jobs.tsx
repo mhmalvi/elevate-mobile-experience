@@ -7,7 +7,9 @@ import { SearchInput } from '@/components/ui/search-input';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { Button } from '@/components/ui/button';
 import { JobCalendarView } from '@/components/jobs/JobCalendarView';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 import { useOfflineJobs } from '@/lib/offline/offlineHooks';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +22,8 @@ import {
   WifiOff,
   ChevronRight,
   Plus,
-  Sparkles
+  Sparkles,
+  Users
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -29,22 +32,30 @@ type ViewMode = 'list' | 'calendar';
 export default function Jobs() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { teamMembers } = useTeam();
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [filterMember, setFilterMember] = useState<string>('');
 
   // Use offline-first hook
   const { jobs, loading, isOnline } = useOfflineJobs(user?.id || '');
 
   const filteredJobs = useMemo(() => {
-    if (!search.trim()) return jobs;
-    const term = search.toLowerCase();
-    return jobs.filter(job =>
-      job.title?.toLowerCase().includes(term) ||
-      job.clients?.name?.toLowerCase().includes(term) ||
-      job.site_address?.toLowerCase().includes(term)
-    );
-  }, [jobs, search]);
+    let result = jobs;
+    if (filterMember) {
+      result = result.filter((job: any) => job.assigned_to === filterMember);
+    }
+    if (search.trim()) {
+      const term = search.toLowerCase();
+      result = result.filter(job =>
+        job.title?.toLowerCase().includes(term) ||
+        job.clients?.name?.toLowerCase().includes(term) ||
+        job.site_address?.toLowerCase().includes(term)
+      );
+    }
+    return result;
+  }, [jobs, search, filterMember]);
 
   return (
     <MobileLayout>
@@ -114,6 +125,26 @@ export default function Jobs() {
             </button>
           </div>
 
+          {/* Member Filter */}
+          {teamMembers.length > 1 && (
+            <Select value={filterMember || 'all'} onValueChange={(v) => setFilterMember(v === 'all' ? '' : v)}>
+              <SelectTrigger className="h-10 rounded-xl bg-card/80 border-border/50">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" />
+                  <SelectValue placeholder="All team members" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All team members</SelectItem>
+                {teamMembers.map((m) => (
+                  <SelectItem key={m.user_id} value={m.user_id}>
+                    {m.profiles?.business_name || m.profiles?.email || 'Team member'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           {viewMode === 'list' && jobs.length > 0 && (
             <SearchInput
               value={search}
@@ -129,6 +160,7 @@ export default function Jobs() {
               jobs={jobs as any}
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
+              filterMemberId={filterMember || undefined}
             />
           ) : filteredJobs.length === 0 && search ? (
             <EmptyState

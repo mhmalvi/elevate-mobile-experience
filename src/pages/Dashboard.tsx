@@ -37,7 +37,7 @@ import {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { team, allTeams, switchTeam, loading: teamLoading } = useTeam();
+  const { team, allTeams, switchTeam, loading: teamLoading, teamMembers } = useTeam();
   const { profile } = useProfile();
   const { toast } = useToast();
   const [stats, setStats] = useState({
@@ -49,6 +49,13 @@ export default function Dashboard() {
   const [overdueStats, setOverdueStats] = useState({ count: 0, total: 0 });
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [sendingReminders, setSendingReminders] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<string>('');
+  const [memberStats, setMemberStats] = useState<{
+    assignedJobs: number;
+    completedJobs: number;
+    revenue: number;
+    completionRate: number;
+  } | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!user || !team) return;
@@ -170,6 +177,51 @@ export default function Dashboard() {
     } finally {
       setSendingReminders(false);
     }
+  };
+
+  useEffect(() => {
+    if (selectedMember && team) {
+      fetchMemberStats(selectedMember);
+    } else {
+      setMemberStats(null);
+    }
+  }, [selectedMember, team]);
+
+  const fetchMemberStats = async (memberId: string) => {
+    if (!team) return;
+
+    const [jobsRes, completedRes, invoicesRes] = await Promise.all([
+      supabase
+        .from('jobs')
+        .select('*', { count: 'exact', head: true })
+        .eq('team_id', team.id)
+        .eq('assigned_to', memberId),
+      supabase
+        .from('jobs')
+        .select('*', { count: 'exact', head: true })
+        .eq('team_id', team.id)
+        .eq('assigned_to', memberId)
+        .in('status', ['completed', 'invoiced']),
+      supabase
+        .from('invoices')
+        .select('total')
+        .eq('team_id', team.id)
+        .eq('status', 'paid')
+        .in('job_id', (
+          await supabase
+            .from('jobs')
+            .select('id')
+            .eq('team_id', team.id)
+            .eq('assigned_to', memberId)
+        ).data?.map(j => j.id) || []),
+    ]);
+
+    const assignedJobs = jobsRes.count || 0;
+    const completedJobs = completedRes.count || 0;
+    const revenue = invoicesRes.data?.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0) || 0;
+    const completionRate = assignedJobs > 0 ? Math.round((completedJobs / assignedJobs) * 100) : 0;
+
+    setMemberStats({ assignedJobs, completedJobs, revenue, completionRate });
   };
 
   const greeting = () => {
@@ -358,6 +410,52 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* Team Performance */}
+          {teamMembers.length > 1 && (
+            <div className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
+              <div className="flex items-center gap-2 mb-3">
+                <Users className="w-4 h-4 text-primary" />
+                <h2 className="font-semibold text-foreground">Team Performance</h2>
+              </div>
+              <div className="space-y-3">
+                <Select value={selectedMember || 'none'} onValueChange={(v) => setSelectedMember(v === 'none' ? '' : v)}>
+                  <SelectTrigger className="h-10 rounded-xl bg-card/80 border-border/50">
+                    <SelectValue placeholder="Select team member" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select team member</SelectItem>
+                    {teamMembers.map((m) => (
+                      <SelectItem key={m.user_id} value={m.user_id}>
+                        {m.profiles?.business_name || m.profiles?.email || 'Team member'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {memberStats && (
+                  <div className="grid grid-cols-2 gap-3 animate-fade-in">
+                    <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Assigned</p>
+                      <p className="text-2xl font-black text-foreground">{memberStats.assignedJobs}</p>
+                    </div>
+                    <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Completed</p>
+                      <p className="text-2xl font-black text-success">{memberStats.completedJobs}</p>
+                    </div>
+                    <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Revenue</p>
+                      <p className="text-2xl font-black text-primary">${memberStats.revenue.toLocaleString()}</p>
+                    </div>
+                    <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Completion</p>
+                      <p className="text-2xl font-black text-foreground">{memberStats.completionRate}%</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Recent Activity */}
           <div className="animate-fade-in" style={{ animationDelay: '0.3s' }}>

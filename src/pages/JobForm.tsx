@@ -11,8 +11,9 @@ import { useUsageLimits } from '@/hooks/useUsageLimits';
 import { UsageLimitBanner, UsageLimitBlocker } from '@/components/UsageLimitBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, User, ArrowLeft, Briefcase } from 'lucide-react';
+import { Loader2, User, ArrowLeft, Briefcase, Users } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
+import { useTeam } from '@/hooks/useTeam';
 
 type Client = Tables<'clients'>;
 
@@ -31,6 +32,7 @@ export default function JobForm() {
   const { canCreate, used, limit, tier, isUnlimited, incrementUsage } = useUsageLimits('jobs');
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState<Client[]>([]);
+  const { teamMembers } = useTeam();
   const [form, setForm] = useState({
     client_id: '',
     title: '',
@@ -39,6 +41,7 @@ export default function JobForm() {
     scheduled_date: '',
     status: 'approved',
     notes: '',
+    assigned_to: '',
   });
 
   useEffect(() => {
@@ -73,6 +76,7 @@ export default function JobForm() {
       scheduled_date: form.scheduled_date || null,
       status: form.status as any,
       notes: form.notes,
+      assigned_to: form.assigned_to || null,
     });
 
     if (error) {
@@ -154,6 +158,28 @@ export default function JobForm() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Assign To */}
+          {teamMembers.length > 1 && (
+            <div className="space-y-2">
+              <Label>Assign To</Label>
+              <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
+                <SelectTrigger className="h-12 rounded-xl">
+                  <SelectValue placeholder="Assign to team member (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamMembers.map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4" />
+                        {m.profiles?.business_name || m.profiles?.email || 'Team member'}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Job Details */}
           <div className="space-y-2">

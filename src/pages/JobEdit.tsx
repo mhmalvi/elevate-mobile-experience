@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, User, ArrowLeft, Briefcase, Save } from 'lucide-react';
+import { Loader2, User, ArrowLeft, Briefcase, Save, Users } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
+import { useTeam } from '@/hooks/useTeam';
 
 type Client = Tables<'clients'>;
 
@@ -28,6 +29,7 @@ export default function JobEdit() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { teamMembers } = useTeam();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
@@ -41,6 +43,7 @@ export default function JobEdit() {
     notes: '',
     actual_hours: 0,
     material_costs: 0,
+    assigned_to: '',
   });
 
   useEffect(() => {
@@ -82,6 +85,7 @@ export default function JobEdit() {
       notes: data.notes || '',
       actual_hours: data.actual_hours || 0,
       material_costs: data.material_costs || 0,
+      assigned_to: data.assigned_to || '',
     });
     setFetching(false);
   };
@@ -103,6 +107,7 @@ export default function JobEdit() {
         notes: form.notes,
         actual_hours: form.actual_hours,
         material_costs: form.material_costs,
+        assigned_to: form.assigned_to || null,
       })
       .eq('id', id);
 
@@ -183,6 +188,28 @@ export default function JobEdit() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Assign To */}
+          {teamMembers.length > 1 && (
+            <div className="space-y-2">
+              <Label>Assign To</Label>
+              <Select value={form.assigned_to} onValueChange={(v) => setForm({ ...form, assigned_to: v })}>
+                <SelectTrigger className="h-12 rounded-xl">
+                  <SelectValue placeholder="Assign to team member (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamMembers.map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4" />
+                        {m.profiles?.business_name || m.profiles?.email || 'Team member'}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Job Details */}
           <div className="space-y-2">
