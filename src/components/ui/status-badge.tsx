@@ -3,7 +3,8 @@ import { cn } from '@/lib/utils';
 type StatusType =
   | 'draft' | 'sent' | 'viewed' | 'accepted' | 'declined' | 'expired'
   | 'quoted' | 'approved' | 'scheduled' | 'in_progress' | 'completed' | 'invoiced'
-  | 'paid' | 'partially_paid' | 'overdue' | 'cancelled' | 'active';
+  | 'paid' | 'partially_paid' | 'overdue' | 'cancelled' | 'active'
+  | 'submitted' | 'rejected';
 
 interface StatusBadgeProps {
   status: StatusType;
@@ -100,6 +101,18 @@ const statusConfig: Record<StatusType, { label: string; className: string; dotCo
     label: 'Active',
     className: 'bg-success/15 text-success border-success/30',
     dotColor: 'bg-success'
+  },
+
+  // Timesheet statuses
+  submitted: {
+    label: 'Submitted',
+    className: 'bg-blue-500/15 text-blue-500 border-blue-500/30',
+    dotColor: 'bg-blue-500'
+  },
+  rejected: {
+    label: 'Rejected',
+    className: 'bg-destructive/15 text-destructive border-destructive/30',
+    dotColor: 'bg-destructive'
   },
 };
 

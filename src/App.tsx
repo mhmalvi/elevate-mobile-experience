@@ -50,6 +50,8 @@ const PaymentSettings = lazy(() => import("./pages/settings/PaymentSettings"));
 const SubscriptionSettings = lazy(() => import("./pages/settings/SubscriptionSettings"));
 const IntegrationsSettings = lazy(() => import("./pages/settings/IntegrationsSettings"));
 const Subcontractors = lazy(() => import("./pages/Subcontractors"));
+const Timesheets = lazy(() => import("./pages/Timesheets"));
+const TimesheetDetail = lazy(() => import("./pages/TimesheetDetail"));
 const VoiceWizard = lazy(() => import("./pages/VoiceWizard"));
 const BASReport = lazy(() => import("./pages/BASReport"));
 const PublicQuote = lazy(() => import("./pages/PublicQuote"));
@@ -153,6 +155,8 @@ function AppRoutes() {
           <Route path="/settings/integrations" element={<ProtectedRoute><IntegrationsSettings /></ProtectedRoute>} />
           <Route path="/settings/subcontractors" element={<ProtectedRoute><Subcontractors /></ProtectedRoute>} />
           <Route path="/settings/bas-report" element={<ProtectedRoute><BASReport /></ProtectedRoute>} />
+          <Route path="/timesheets" element={<ProtectedRoute><Timesheets /></ProtectedRoute>} />
+          <Route path="/timesheets/:id" element={<ProtectedRoute><TimesheetDetail /></ProtectedRoute>} />
           <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
         </Routes>
       </AnimatePresence>
