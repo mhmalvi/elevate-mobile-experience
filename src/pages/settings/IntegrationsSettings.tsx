@@ -266,6 +266,45 @@ export default function IntegrationsSettings() {
     }
   };
 
+  const syncData = async (service: 'xero' | 'myob', type: 'clients' | 'invoices') => {
+    const setLoading = type === 'clients' ? setSyncingClients : setSyncingInvoices;
+    setLoading(true);
+
+    try {
+      const functionName = service === 'xero'
+        ? `xero-sync-${type}`
+        : `myob-sync-${type}`;
+
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body: { sync_all: true },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Sync Complete',
+        description: `${data?.synced || 0} ${type} synced to ${service.toUpperCase()}${data?.failed ? `, ${data.failed} failed` : ''}`,
+      });
+
+      await loadSyncHistory();
+    } catch (error: any) {
+      toast({
+        title: 'Sync Failed',
+        description: error.message || `Failed to sync ${type}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatEntityType = (entityType: string) => {
+    return entityType
+      .replace('myob_', 'MYOB ')
+      .replace('client', 'Client')
+      .replace('invoice', 'Invoice');
+  };
+
   return (
     <MobileLayout>
       <div className="min-h-screen scrollbar-hide pb-20">
@@ -323,13 +362,23 @@ export default function IntegrationsSettings() {
                       onCheckedChange={(c) => toggleSync('xero', c)}
                     />
                   </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" onClick={() => syncData('xero', 'clients')} disabled={syncingClients}>
+                      {syncingClients ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                      Sync Clients
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => syncData('xero', 'invoices')} disabled={syncingInvoices}>
+                      {syncingInvoices ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                      Sync Invoices
+                    </Button>
+                  </div>
                   <Button variant="outline" className="w-full" onClick={() => disconnectService('xero')} disabled={xeroLoading}>
                     {xeroLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Disconnect'}
                   </Button>
                 </div>
               ) : (
                 <Button className="w-full bg-[#00b7e2] hover:bg-[#00b7e2]/90 text-white" onClick={() => connectService('xero')} disabled={xeroLoading}>
-                  {xeroLoading ? <Loader2 className="w-4 h-4 animate-spin MR-2" /> : 'Connect Xero'}
+                  {xeroLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Connect Xero'}
                 </Button>
               )}
             </div>
@@ -366,6 +415,16 @@ export default function IntegrationsSettings() {
                       onCheckedChange={(c) => toggleSync('myob', c)}
                     />
                   </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" onClick={() => syncData('myob', 'clients')} disabled={syncingClients}>
+                      {syncingClients ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                      Sync Clients
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => syncData('myob', 'invoices')} disabled={syncingInvoices}>
+                      {syncingInvoices ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+                      Sync Invoices
+                    </Button>
+                  </div>
                   <Button variant="outline" className="w-full" onClick={() => disconnectService('myob')} disabled={myobLoading}>
                     {myobLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Disconnect'}
                   </Button>
@@ -388,7 +447,7 @@ export default function IntegrationsSettings() {
                     <div className="flex items-center gap-3">
                       {log.sync_status === 'success' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <AlertCircle className="w-4 h-4 text-red-500" />}
                       <div>
-                        <p className="font-medium capitalize">{log.entity_type} Sync</p>
+                        <p className="font-medium">{formatEntityType(log.entity_type)} Sync</p>
                         <p className="text-xs text-muted-foreground">{format(new Date(log.created_at), 'MMM d, h:mm a')}</p>
                       </div>
                     </div>

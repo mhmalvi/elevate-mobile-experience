@@ -179,8 +179,8 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         setStatus('idle');
     }, []);
 
-    const sendMessage = useCallback(async () => {
-        const messageText = (fullTranscript + transcript).trim();
+    const sendMessage = useCallback(async (directText?: string) => {
+        const messageText = directText || (fullTranscript + transcript).trim();
 
         if (!messageText) {
             setAiMessage("I didn't hear anything. Please try again.");
@@ -191,12 +191,28 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         setStatus('processing');
         setAiMessage('Processing...');
 
+        // Clear transcript immediately when sending
+        setTranscript('');
+        setFullTranscript('');
+
         try {
+            // Get session for explicit auth header (prevents 401 with async storage adapters)
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) {
+                setStatus('error');
+                setAiMessage('Please log in to use voice commands.');
+                speak("You need to be logged in to use voice commands.", false);
+                return;
+            }
+
             const { data, error } = await supabase.functions.invoke('process-voice-command', {
                 body: {
                     query: messageText,
                     conversationHistory: conversationHistory,
                     accumulatedData: accumulatedData
+                },
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`
                 }
             });
 
@@ -216,10 +232,6 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 setAccumulatedData(prev => ({ ...prev, ...responseData }));
             }
 
-            // Clear transcript for next input
-            setTranscript('');
-            setFullTranscript('');
-
             // Display and speak response
             setAiMessage(response);
 
@@ -232,7 +244,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             setAiMessage("Something went wrong. Let's try again.");
             speak("Sorry, I had trouble with that. Could you try again?", true);
         }
-    }, [fullTranscript, transcript, conversationHistory, accumulatedData]);
+    }, [fullTranscript, transcript, conversationHistory, accumulatedData, stopRecording]);
 
     const handleAction = async (action: string, data: any, responseText: string) => {
         switch (action) {
@@ -450,7 +462,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 .insert({
                     user_id: user.id,
                     client_id: clientId, // Link to client!
-                    title: data.title || data.client_name ? `Job for ${data.client_name}` : 'New Job',
+                    title: data.title || (data.client_name ? `Job for ${data.client_name}` : 'New Job'),
                     description: data.description || '',
                     status: 'scheduled',
                     scheduled_date: data.scheduled_date || new Date().toISOString(),
@@ -587,25 +599,17 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                             </p>
                             <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
                                 {[
-                                    "Create a new quote",
-                                    "Add a client",
-                                    "Search for John",
-                                    "New Invoice ($500)"
+                                    { label: "Create a new quote", command: "Create a new quote" },
+                                    { label: "Add a client", command: "Add a new client" },
+                                    { label: "Search for a client", command: "Find client" },
+                                    { label: "New Invoice", command: "Create a new invoice" },
                                 ].map((hint) => (
                                     <button
-                                        key={hint}
-                                        onClick={() => {
-                                            const command = hint.replace(" ($500)", "").replace("Search for", "Find");
-                                            setTranscript(command);
-                                            setTimeout(() => {
-                                                // Simulate user sending it
-                                                // We'd need to expose startWithText or just direct handle
-                                                // For now just filling input is okay, but user has to tap mic.
-                                            }, 100);
-                                        }}
+                                        key={hint.label}
+                                        onClick={() => sendMessage(hint.command)}
                                         className="px-4 py-3 text-sm font-medium bg-card/50 hover:bg-primary/5 border border-border/50 hover:border-primary/30 rounded-xl transition-all hover:scale-105 hover:shadow-sm text-center"
                                     >
-                                        {hint}
+                                        {hint.label}
                                     </button>
                                 ))}
                             </div>
