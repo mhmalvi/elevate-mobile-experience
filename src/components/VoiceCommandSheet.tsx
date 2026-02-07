@@ -65,11 +65,6 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     const hasSpeechRef = useRef<boolean>(false);
     const sendMessageRef = useRef<(() => void) | null>(null);
 
-    // Keep sendMessageRef current for silence auto-send
-    useEffect(() => {
-        sendMessageRef.current = () => sendMessage();
-    }, [sendMessage]);
-
     // Load voices
     useEffect(() => {
         const loadVoices = () => setSelectedVoice(getAussieVoice());
@@ -308,6 +303,11 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             speak("Sorry, I had trouble with that. Could you try again?", true);
         }
     }, [fullTranscript, transcript, conversationHistory, accumulatedData, stopRecording]);
+
+    // Keep sendMessageRef current for silence auto-send
+    useEffect(() => {
+        sendMessageRef.current = () => sendMessage();
+    }, [sendMessage]);
 
     const handleAction = async (action: string, data: any, responseText: string) => {
         const speakThenDo = (text: string, fn: () => void) => {
