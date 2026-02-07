@@ -152,22 +152,25 @@ export function MagicMic() {
                 throw new Error("Please log in first");
             }
 
-            // Get the current session to ensure we have a valid token
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.access_token) {
+            // Read session directly from sessionStorage to avoid cross-origin frame issues
+            const storageKey = `sb-${import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]}-auth-token`;
+            const raw = sessionStorage.getItem(storageKey);
+            const accessToken = raw ? JSON.parse(raw)?.access_token : null;
+
+            if (!accessToken) {
                 console.warn('Voice: No valid session token');
                 throw new Error("Session expired - please log in again");
             }
 
             console.log('Voice: Invoking Edge Function with auth token...');
-            // Use direct fetch to avoid Supabase client cross-origin frame issues
+            // Direct fetch to avoid Supabase client cross-origin frame issues
             const res = await fetch(
                 `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-voice-command`,
                 {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`,
+                        'Authorization': `Bearer ${accessToken}`,
                         'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
                     },
                     body: JSON.stringify({
