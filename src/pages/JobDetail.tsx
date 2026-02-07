@@ -24,8 +24,9 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { User, MapPin, Calendar, Receipt, Camera, Loader2, Image, Play, CheckCircle, TrendingUp, TrendingDown, Trash2, ArrowLeft, Briefcase, Edit } from 'lucide-react';
+import { User, MapPin, Calendar, Receipt, Camera, Loader2, Image, Play, CheckCircle, TrendingUp, TrendingDown, Trash2, ArrowLeft, Briefcase, Edit, Users } from 'lucide-react';
 import { format } from 'date-fns';
+import { useTeam } from '@/hooks/useTeam';
 
 const JOB_STATUSES = ['quoted', 'approved', 'scheduled', 'in_progress', 'completed', 'invoiced'] as const;
 
@@ -41,6 +42,7 @@ export default function JobDetail() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [voiceNotes, setVoiceNotes] = useState<{ url: string; duration: number; name: string }[]>([]);
+  const { teamMembers } = useTeam();
 
   useEffect(() => {
     if (user && id) {
@@ -346,6 +348,15 @@ export default function JobDetail() {
                 <span className="text-sm">{job.clients.name}</span>
               </div>
             )}
+            {job.assigned_to && (() => {
+              const member = teamMembers.find(m => m.user_id === job.assigned_to);
+              return member ? (
+                <div className="flex items-center gap-2 mt-1 text-muted-foreground">
+                  <Users className="w-4 h-4" />
+                  <span className="text-sm">{member.profiles?.business_name || member.profiles?.email || 'Team member'}</span>
+                </div>
+              ) : null;
+            })()}
             <div className="mt-3">
               <StatusBadge status={job.status} />
             </div>
