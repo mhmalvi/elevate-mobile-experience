@@ -78,10 +78,12 @@ export default function IntegrationsSettings() {
 
         try {
           // Determine provider from state
+          // State format: base64(base64(JSON) + "." + signature)
           let provider = 'xero';
           try {
-            // Try to parse state to see if it has provider info
-            const decoded = JSON.parse(atob(state));
+            const outer = atob(state);
+            const stateB64 = outer.split('.')[0];
+            const decoded = JSON.parse(atob(stateB64));
             if (decoded.provider === 'quickbooks') provider = 'quickbooks';
           } catch (e) {
             // If parse fails, assume Xero (legacy)
