@@ -20,15 +20,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const rcInitialized = useRef(false);
 
-  // Initialize RevenueCat once on mount
-  useEffect(() => {
-    if (!rcInitialized.current) {
-      rcInitialized.current = true;
-      initializePurchases().catch((err) =>
-        console.warn('[RevenueCat] Init skipped (expected on web):', err.message)
-      );
+  // Initialize RevenueCat with a user ID (required by Web SDK)
+  const initRC = async (userId: string) => {
+    if (rcInitialized.current) {
+      // Already initialized - just sync the user ID
+      await setRevenueCatUserId(userId).catch(() => {});
+      return;
     }
-  }, []);
+    try {
+      await initializePurchases(userId);
+      rcInitialized.current = true;
+    } catch (err: any) {
+      console.warn('[RevenueCat] Init skipped:', err.message);
+    }
+  };
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -38,9 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
         setLoading(false);
 
-        // Sync RevenueCat user identity on auth changes
+        // Initialize/sync RevenueCat on auth changes
         if (event === 'SIGNED_IN' && session?.user) {
-          setRevenueCatUserId(session.user.id).catch(() => {});
+          initRC(session.user.id);
         } else if (event === 'SIGNED_OUT') {
           logOutRevenueCat().catch(() => {});
         }
@@ -53,9 +58,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       setLoading(false);
 
-      // Set RevenueCat user ID for existing session
+      // Initialize RevenueCat for existing session
       if (session?.user) {
-        setRevenueCatUserId(session.user.id).catch(() => {});
+        initRC(session.user.id);
       }
     });
 

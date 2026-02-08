@@ -44,7 +44,25 @@ serve(async (req) => {
     if (!priceId) throw new Error('Price ID is required');
     logStep('Request body parsed', { priceId, tierId });
 
-    const stripe = new Stripe(stripeKey, { apiVersion: '2025-08-27.basil' });
+    const stripe = new Stripe(stripeKey, { apiVersion: '2025-04-30.basil' });
+
+    // Validate the price exists in Stripe before proceeding
+    try {
+      const price = await stripe.prices.retrieve(priceId);
+      logStep('Price validated', { priceId, active: price.active, product: price.product });
+      if (!price.active) {
+        return new Response(JSON.stringify({ error: 'This price is no longer active. Please contact support.' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        });
+      }
+    } catch (priceError: any) {
+      logStep('Invalid price ID', { priceId, error: priceError.message });
+      return new Response(JSON.stringify({ error: `Invalid price configuration: ${priceId}. Please contact support.` }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      });
+    }
 
     // Check if customer already exists
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
@@ -76,6 +94,8 @@ serve(async (req) => {
 
     const origin = req.headers.get('origin') || 'https://tradiemate.app';
 
+    logStep('Creating checkout session', { priceId, customerId, origin });
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : user.email,
@@ -106,9 +126,10 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
-  } catch (error) {
+  } catch (error: any) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep('ERROR', { message: errorMessage });
+    const stripeCode = error?.code || error?.type || 'unknown';
+    logStep('ERROR', { message: errorMessage, code: stripeCode, stack: error?.stack?.substring(0, 300) });
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
