@@ -8,11 +8,14 @@ const logStep = (step: string, details?: Record<string, unknown>) => {
   console.log(`[REVENUECAT-WEBHOOK] ${step}${detailsStr}`);
 };
 
-// Map RevenueCat product IDs to subscription tiers
+// Map RevenueCat product IDs to subscription tiers (monthly + annual)
 const PRODUCT_TO_TIER: Record<string, string> = {
   'solo_monthly': 'solo',
+  'solo_annual': 'solo',
   'crew_monthly': 'crew',
+  'crew_annual': 'crew',
   'pro_monthly': 'pro',
+  'pro_annual': 'pro',
 };
 
 interface RevenueCatEvent {

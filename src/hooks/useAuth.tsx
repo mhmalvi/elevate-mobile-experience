@@ -1,6 +1,7 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { initializePurchases, setRevenueCatUserId, logOutRevenueCat } from '@/lib/purchases';
 
 interface AuthContextType {
   user: User | null;
@@ -17,6 +18,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const rcInitialized = useRef(false);
+
+  // Initialize RevenueCat once on mount
+  useEffect(() => {
+    if (!rcInitialized.current) {
+      rcInitialized.current = true;
+      initializePurchases().catch((err) =>
+        console.warn('[RevenueCat] Init skipped (expected on web):', err.message)
+      );
+    }
+  }, []);
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -25,6 +37,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+
+        // Sync RevenueCat user identity on auth changes
+        if (event === 'SIGNED_IN' && session?.user) {
+          setRevenueCatUserId(session.user.id).catch(() => {});
+        } else if (event === 'SIGNED_OUT') {
+          logOutRevenueCat().catch(() => {});
+        }
       }
     );
 
@@ -33,6 +52,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Set RevenueCat user ID for existing session
+      if (session?.user) {
+        setRevenueCatUserId(session.user.id).catch(() => {});
+      }
     });
 
     return () => subscription.unsubscribe();

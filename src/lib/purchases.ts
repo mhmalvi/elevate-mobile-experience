@@ -15,14 +15,17 @@ type CustomerInfo = NativeCustomerInfo | WebCustomerInfo;
 export const REVENUECAT_PRODUCTS = {
   solo: {
     identifier: 'solo_monthly',
+    annualIdentifier: 'solo_annual',
     tier: 'solo',
   },
   crew: {
     identifier: 'crew_monthly',
+    annualIdentifier: 'crew_annual',
     tier: 'crew',
   },
   pro: {
     identifier: 'pro_monthly',
+    annualIdentifier: 'pro_annual',
     tier: 'pro',
   },
 } as const;
