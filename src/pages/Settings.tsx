@@ -27,7 +27,7 @@ export default function Settings() {
     { icon: HardHat, label: 'Subcontractors', description: 'Manage your subbies network', path: '/settings/subcontractors' },
     { icon: Clock, label: 'Timesheets', description: 'Staff hours & weekly timesheets', path: '/timesheets' },
     { icon: CreditCard, label: 'Payment Details', description: 'Bank account for invoices', path: '/settings/payments' },
-    { icon: Link2, label: 'Integrations', description: 'Connect Xero, MYOB & more', path: '/settings/integrations' },
+    { icon: Link2, label: 'Integrations', description: 'Connect Xero, QuickBooks & more', path: '/settings/integrations' },
     { icon: FileText, label: 'BAS Report', description: 'Quarterly GST summary', path: '/settings/bas-report' },
   ];
 
