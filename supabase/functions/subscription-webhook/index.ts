@@ -3,12 +3,17 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 
-// Map Stripe price IDs to tier names
-const PRICE_TO_TIER: Record<string, string> = {
-  'price_solo_monthly': 'solo',
-  'price_crew_monthly': 'crew',
-  'price_pro_monthly': 'pro',
-};
+// Map Stripe price IDs to tier names - loaded from environment
+function getPriceTierMap(): Record<string, string> {
+  const map: Record<string, string> = {};
+  const soloPrice = Deno.env.get('STRIPE_PRICE_ID_SOLO');
+  const crewPrice = Deno.env.get('STRIPE_PRICE_ID_CREW');
+  const proPrice = Deno.env.get('STRIPE_PRICE_ID_PRO');
+  if (soloPrice) map[soloPrice] = 'solo';
+  if (crewPrice) map[crewPrice] = 'crew';
+  if (proPrice) map[proPrice] = 'pro';
+  return map;
+}
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -81,6 +86,7 @@ serve(async (req) => {
 
         const userId = users[0].user_id;
         const priceId = subscription.items.data[0]?.price.id;
+        const PRICE_TO_TIER = getPriceTierMap();
         const tier = PRICE_TO_TIER[priceId] || subscription.metadata?.tier_id || 'solo';
         const isActive = subscription.status === 'active';
         const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();

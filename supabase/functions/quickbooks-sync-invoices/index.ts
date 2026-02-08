@@ -3,7 +3,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/encryption.ts";
 import { getCorsHeaders, createCorsResponse } from "../_shared/cors.ts";
 
-const QB_API_BASE = "https://quickbooks.api.intuit.com/v3/company";
+function getQBApiBase(): string {
+  const env = Deno.env.get("QUICKBOOKS_ENVIRONMENT") || "production";
+  if (env === "sandbox" || env === "development") {
+    return "https://sandbox-quickbooks.api.intuit.com/v3/company";
+  }
+  return "https://quickbooks.api.intuit.com/v3/company";
+}
 
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
@@ -104,6 +110,9 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const qbApiBase = getQBApiBase();
+    console.log(`QB Invoice Sync: env=${Deno.env.get("QUICKBOOKS_ENVIRONMENT") || "production"}, apiBase=${qbApiBase}, realmId=${realmId}`);
 
     // Determine which invoices to sync
     let invoicesToSync: any[];
@@ -233,7 +242,7 @@ serve(async (req) => {
         if (invoice.qb_invoice_id) {
           // Update existing invoice - fetch SyncToken first
           const readResponse = await fetch(
-            `${QB_API_BASE}/${realmId}/invoice/${invoice.qb_invoice_id}?minorversion=65`,
+            `${getQBApiBase()}/${realmId}/invoice/${invoice.qb_invoice_id}?minorversion=65`,
             { headers: qbHeaders }
           );
 
@@ -244,7 +253,7 @@ serve(async (req) => {
           }
 
           qbResponse = await fetch(
-            `${QB_API_BASE}/${realmId}/invoice?minorversion=65`,
+            `${getQBApiBase()}/${realmId}/invoice?minorversion=65`,
             {
               method: "POST",
               headers: qbHeaders,
@@ -253,7 +262,7 @@ serve(async (req) => {
           );
         } else {
           qbResponse = await fetch(
-            `${QB_API_BASE}/${realmId}/invoice?minorversion=65`,
+            `${getQBApiBase()}/${realmId}/invoice?minorversion=65`,
             {
               method: "POST",
               headers: qbHeaders,

@@ -111,7 +111,14 @@ export default function SubscriptionSettings() {
       const provider = getPaymentProvider(platform);
 
       if (provider === 'stripe') {
-        const priceId = billingPeriod === 'annual' ? tier.annualStripePriceId : tier.stripePriceId;
+        // Use annual price if available, otherwise fall back to monthly
+        let priceId = billingPeriod === 'annual' ? tier.annualStripePriceId : tier.stripePriceId;
+        let usingFallback = false;
+        if (!priceId && billingPeriod === 'annual' && tier.stripePriceId) {
+          // Annual price not configured - fall back to monthly
+          priceId = tier.stripePriceId;
+          usingFallback = true;
+        }
         if (!priceId) {
           toast.error('Stripe is not configured for this plan');
           return;
@@ -123,20 +130,27 @@ export default function SubscriptionSettings() {
 
         if (error) throw error;
         if (data?.url) {
-          window.open(data.url, '_blank');
+          if (usingFallback) {
+            toast.info('Annual billing coming soon. Redirecting to monthly checkout.');
+          }
+          // Use location.href instead of window.open to avoid popup blockers on mobile
+          window.location.href = data.url;
+        } else {
+          toast.error('Failed to create checkout session. Please try again.');
         }
       } else {
-        const productId = billingPeriod === 'annual'
-          ? (tier.annualGooglePlayProductId || tier.annualAppleProductId)
-          : (tier.googlePlayProductId || tier.appleProductId);
-
+        // Mobile: use RevenueCat for in-app purchases
         const productConfig = REVENUECAT_PRODUCTS[tierId as keyof typeof REVENUECAT_PRODUCTS];
         if (!productConfig) {
           toast.error('This plan is not available for in-app purchase');
           return;
         }
 
-        const result = await purchasePackage(productId || productConfig.identifier);
+        const productId = billingPeriod === 'annual'
+          ? productConfig.annualIdentifier
+          : productConfig.identifier;
+
+        const result = await purchasePackage(productId);
 
         if (result.success) {
           toast.success('Subscription activated! Welcome aboard.');
@@ -187,11 +201,18 @@ export default function SubscriptionSettings() {
       const { data, error } = await supabase.functions.invoke('customer-portal');
       if (error) throw error;
       if (data?.url) {
-        window.open(data.url, '_blank');
+        window.location.href = data.url;
+      } else {
+        toast.error('Failed to open subscription management. Please try again.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error opening portal:', error);
-      toast.error('Failed to open subscription management. Please try again.');
+      let errorMsg = 'Failed to open subscription management. Please try again.';
+      try {
+        const parsed = JSON.parse(error.message);
+        errorMsg = parsed.error || errorMsg;
+      } catch { /* use default */ }
+      toast.error(errorMsg);
     }
   };
 

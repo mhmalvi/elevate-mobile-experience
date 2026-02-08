@@ -280,35 +280,71 @@ export default function IntegrationsSettings() {
 
     try {
       const functionName = service === 'xero' ? `xero-sync-${type}` : `quickbooks-sync-${type}`;
+      const displayName = service === 'quickbooks' ? 'QuickBooks' : service.toUpperCase();
 
       const { data, error } = await supabase.functions.invoke(functionName, {
         body: { sync_all: true },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error(`[${displayName}] Sync ${type} error:`, error);
+        throw error;
+      }
 
-      toast({
-        title: 'Sync Complete',
-        description: `${data?.synced || 0} ${type} synced to ${service.toUpperCase()}${data?.failed ? `, ${data.failed} failed` : ''}`,
-      });
+      console.log(`[${displayName}] Sync ${type} result:`, data);
+
+      if (data?.failed > 0 && data?.synced === 0) {
+        // All records failed
+        const firstError = data.errors?.[0]?.error?.substring(0, 100) || 'Unknown error';
+        toast({
+          title: 'Sync Failed',
+          description: `All ${data.failed} ${type} failed to sync. ${firstError}`,
+          variant: 'destructive',
+        });
+      } else if (data?.failed > 0) {
+        // Partial failure
+        toast({
+          title: 'Sync Partially Complete',
+          description: `${data.synced} ${type} synced, ${data.failed} failed`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Sync Complete',
+          description: `${data?.synced || 0} ${type} synced to ${displayName}`,
+        });
+      }
 
       await loadSyncHistory();
     } catch (error: any) {
+      console.error(`Sync ${type} exception:`, error);
+      // supabase.functions.invoke wraps errors - try to parse the actual message
+      let errorMsg = `Failed to sync ${type}`;
+      try {
+        const parsed = JSON.parse(error.message);
+        errorMsg = parsed.error || errorMsg;
+      } catch {
+        errorMsg = error.message || errorMsg;
+      }
       toast({
         title: 'Sync Failed',
-        description: error.message || `Failed to sync ${type}`,
+        description: errorMsg,
         variant: 'destructive',
       });
+      await loadSyncHistory();
     } finally {
       setLoading(false);
     }
   };
 
   const formatEntityType = (entityType: string) => {
-    return entityType
-      .replace('qb_', 'QuickBooks ')
-      .replace('client', 'Client')
-      .replace('invoice', 'Invoice');
+    const map: Record<string, string> = {
+      'qb_client': 'QuickBooks Client',
+      'qb_invoice': 'QuickBooks Invoice',
+      'client': 'Xero Client',
+      'invoice': 'Xero Invoice',
+    };
+    return map[entityType] || entityType.replace('qb_', 'QuickBooks ').replace('client', 'Client').replace('invoice', 'Invoice');
   };
 
   return (
@@ -449,17 +485,22 @@ export default function IntegrationsSettings() {
               <h3 className="text-sm font-semibold mb-3">Sync History</h3>
               <div className="space-y-2">
                 {syncHistory.map((log) => (
-                  <div key={log.id} className="flex items-center justify-between p-3 bg-card border rounded-xl text-sm">
-                    <div className="flex items-center gap-3">
-                      {log.sync_status === 'success' ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <AlertCircle className="w-4 h-4 text-red-500" />}
-                      <div>
-                        <p className="font-medium">{formatEntityType(log.entity_type)} Sync</p>
-                        <p className="text-xs text-muted-foreground">{format(new Date(log.created_at), 'MMM d, h:mm a')}</p>
+                  <div key={log.id} className="p-3 bg-card border rounded-xl text-sm space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {log.sync_status === 'success' ? <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />}
+                        <div>
+                          <p className="font-medium">{formatEntityType(log.entity_type)} Sync</p>
+                          <p className="text-xs text-muted-foreground">{format(new Date(log.created_at), 'MMM d, h:mm a')}</p>
+                        </div>
                       </div>
+                      <span className={`text-xs px-2 py-1 rounded-full capitalize shrink-0 ${log.sync_status === 'success' ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'}`}>
+                        {log.sync_status}
+                      </span>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full capitalize ${log.sync_status === 'success' ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'}`}>
-                      {log.sync_status}
-                    </span>
+                    {log.error_message && (
+                      <p className="text-xs text-red-400 pl-7 break-all line-clamp-2">{log.error_message}</p>
+                    )}
                   </div>
                 ))}
               </div>
