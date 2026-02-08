@@ -59,7 +59,7 @@ export const SUBSCRIPTION_TIERS: TierConfig[] = [
       'Remove branding from documents',
       'Job costing & profitability',
       'Payment tracking',
-      'Accounting integration (Xero/MYOB)',
+      'Accounting integration (Xero/QuickBooks)',
       '50 SMS reminders/month',
       '1 user',
       'Priority email support',
