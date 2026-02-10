@@ -88,9 +88,21 @@ export default function SubscriptionSettings() {
     }
   }, [searchParams]);
 
+  const getAuthHeaders = async (): Promise<Record<string, string> | null> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      toast.error('Session expired. Please sign in again.');
+      navigate('/auth');
+      return null;
+    }
+    return { Authorization: `Bearer ${session.access_token}` };
+  };
+
   const checkSubscriptionStatus = async () => {
     try {
-      await supabase.functions.invoke('check-subscription');
+      const headers = await getAuthHeaders();
+      if (!headers) return;
+      await supabase.functions.invoke('check-subscription', { headers });
       refetchProfile?.();
     } catch (error) {
       console.error('Error checking subscription:', error);
@@ -124,8 +136,12 @@ export default function SubscriptionSettings() {
           return;
         }
 
+        const headers = await getAuthHeaders();
+        if (!headers) return;
+
         const { data, error } = await supabase.functions.invoke('create-subscription-checkout', {
-          body: { priceId, tierId: tier.id }
+          body: { priceId, tierId: tier.id },
+          headers,
         });
 
         if (error) throw error;
@@ -198,7 +214,10 @@ export default function SubscriptionSettings() {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke('customer-portal');
+      const headers = await getAuthHeaders();
+      if (!headers) return;
+
+      const { data, error } = await supabase.functions.invoke('customer-portal', { headers });
       if (error) throw error;
       if (data?.url) {
         window.location.href = data.url;
