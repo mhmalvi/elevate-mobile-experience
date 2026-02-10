@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => ({
           'vendor-query': ['@tanstack/react-query'],
           'vendor-supabase': ['@supabase/supabase-js'],
           'vendor-pdf': ['jspdf', 'html2canvas'],
-          'vendor-revenuecat': ['@revenuecat/purchases-capacitor', '@revenuecat/purchases-js'],
+          'vendor-revenuecat': ['@revenuecat/purchases-capacitor'],
         },
       },
     },
