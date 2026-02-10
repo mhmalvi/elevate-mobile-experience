@@ -3,15 +3,21 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 
-// Map Stripe price IDs to tier names - loaded from environment
+// Map Stripe price IDs to tier names - loaded from environment (monthly + annual)
 function getPriceTierMap(): Record<string, string> {
   const map: Record<string, string> = {};
   const soloPrice = Deno.env.get('STRIPE_PRICE_ID_SOLO');
   const crewPrice = Deno.env.get('STRIPE_PRICE_ID_CREW');
   const proPrice = Deno.env.get('STRIPE_PRICE_ID_PRO');
+  const soloAnnual = Deno.env.get('STRIPE_PRICE_ID_SOLO_ANNUAL');
+  const crewAnnual = Deno.env.get('STRIPE_PRICE_ID_CREW_ANNUAL');
+  const proAnnual = Deno.env.get('STRIPE_PRICE_ID_PRO_ANNUAL');
   if (soloPrice) map[soloPrice] = 'solo';
   if (crewPrice) map[crewPrice] = 'crew';
   if (proPrice) map[proPrice] = 'pro';
+  if (soloAnnual) map[soloAnnual] = 'solo';
+  if (crewAnnual) map[crewAnnual] = 'crew';
+  if (proAnnual) map[proAnnual] = 'pro';
   return map;
 }
 
