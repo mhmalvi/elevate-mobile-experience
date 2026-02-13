@@ -42,7 +42,6 @@ export default defineConfig(({ mode }) => ({
           'vendor-forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
           'vendor-query': ['@tanstack/react-query'],
           'vendor-supabase': ['@supabase/supabase-js'],
-          'vendor-pdf': ['jspdf', 'html2canvas'],
           'vendor-revenuecat': ['@revenuecat/purchases-capacitor'],
         },
       },
