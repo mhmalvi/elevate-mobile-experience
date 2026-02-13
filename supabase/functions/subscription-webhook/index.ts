@@ -39,7 +39,7 @@ serve(async (req) => {
 
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
     const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
-    
+
     if (!stripeKey) throw new Error('STRIPE_SECRET_KEY is not set');
     if (!webhookSecret) throw new Error('STRIPE_WEBHOOK_SECRET is not set');
 
@@ -64,7 +64,7 @@ serve(async (req) => {
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
-        
+
         // Get customer email
         const customer = await stripe.customers.retrieve(customerId);
         if (customer.deleted) {
@@ -176,7 +176,7 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep('ERROR', { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Webhook processing failed" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
     });

@@ -257,7 +257,7 @@ serve(async (req) => {
     console.error('Fatal error in generate-recurring-invoices:', error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: "Recurring invoice generation failed" }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

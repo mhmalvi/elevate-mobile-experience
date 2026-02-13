@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import Twilio from "https://esm.sh/twilio@5.3.4";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface SendInvoiceRequest {
   invoice_id: string;
@@ -43,6 +44,15 @@ serve(async (req) => {
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Rate limiting: 20 sends per minute per user
+    const rateLimit = await checkRateLimit(supabase, user.id, 'send-invoice', 20, 60);
+    if (rateLimit.limited) {
+      return new Response(JSON.stringify({ error: 'Too many requests. Please wait before sending more.' }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateLimit.retryAfterSeconds || 60) },
+      });
     }
 
     const { invoice_id, send_sms = true, send_email = false, custom_message }: SendInvoiceRequest = await req.json();
@@ -240,7 +250,7 @@ ${businessPhone ? `Questions? Call ${businessPhone}` : ""}`;
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("Error sending invoice:", error);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: "Failed to send invoice" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

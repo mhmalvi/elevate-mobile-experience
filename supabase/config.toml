@@ -1,105 +1,121 @@
 project_id = "rucuomtojzifrvplhwja"
 
-# FIXED: Root cause was service_role missing permissions on public schema
-# Granted: USAGE ON SCHEMA public + ALL ON TABLES/SEQUENCES/FUNCTIONS
-#
 # Security Configuration:
-# All functions use verify_jwt = false because they handle auth validation
-# internally (via supabase.auth.getUser(token)). Gateway-level JWT verification
-# blocks valid requests when using async storage adapters or explicit auth headers.
+# - verify_jwt = true: Gateway validates JWT before the function runs.
+#   Used for all authenticated endpoints.
+# - verify_jwt = false: No gateway JWT validation. Used ONLY for:
+#   1. Webhooks (verify their own signatures)
+#   2. Public endpoints (accept-quote, accept-team-invitation)
+#   3. Cron/scheduled functions (generate-recurring-invoices, payment-reminder)
+#   4. Functions that need to handle both authed and unauthed requests
+
+# ============================================================================
+# AUTHENTICATED ENDPOINTS (verify_jwt = true)
+# All of these check auth.getUser() internally as a secondary safeguard.
+# ============================================================================
 
 [functions.generate-pdf]
-verify_jwt = false
-
-[functions.send-notification]
-verify_jwt = false
-
-[functions.payment-reminder]
-verify_jwt = false
+verify_jwt = true
 
 [functions.send-email]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-payment]
-verify_jwt = false
-
-[functions.stripe-webhook]
-verify_jwt = false
+verify_jwt = true
 
 [functions.create-subscription-checkout]
-verify_jwt = false
+verify_jwt = true
 
 [functions.check-subscription]
-verify_jwt = false
+verify_jwt = true
 
 [functions.customer-portal]
-verify_jwt = false
+verify_jwt = true
 
-[functions.subscription-webhook]
+[functions.create-stripe-connect]
+verify_jwt = true
+
+[functions.check-stripe-account]
+verify_jwt = true
+
+[functions.get-payment-settings]
+verify_jwt = true
+
+[functions.update-payment-settings]
+verify_jwt = true
+
+[functions.send-team-invitation]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.send-invoice]
+verify_jwt = true
+
+[functions.xero-oauth]
+verify_jwt = true
+
+[functions.xero-sync-clients]
+verify_jwt = true
+
+[functions.xero-sync-invoices]
+verify_jwt = true
+
+[functions.process-voice-command]
+verify_jwt = true
+
+[functions.myob-oauth]
+verify_jwt = true
+
+[functions.myob-sync-clients]
+verify_jwt = true
+
+[functions.myob-sync-invoices]
+verify_jwt = true
+
+[functions.quickbooks-oauth]
+verify_jwt = true
+
+[functions.quickbooks-sync-clients]
+verify_jwt = true
+
+[functions.quickbooks-sync-invoices]
+verify_jwt = true
+
+[functions.leave-team]
+verify_jwt = true
+
+# ============================================================================
+# PUBLIC / WEBHOOK ENDPOINTS (verify_jwt = false)
+# These must handle their own authentication/authorization.
+# ============================================================================
+
+# Webhooks — verify their own signatures (Stripe-Signature / X-RevenueCat-Signature)
+[functions.stripe-webhook]
 verify_jwt = false
 
 [functions.revenuecat-webhook]
 verify_jwt = false
 
-[functions.generate-recurring-invoices]
+[functions.subscription-webhook]
 verify_jwt = false
 
-[functions.send-team-invitation]
-verify_jwt = false
-
-[functions.accept-team-invitation]
-verify_jwt = false
-
-[functions.check-stripe-account]
-verify_jwt = false
-
-[functions.create-stripe-connect]
-verify_jwt = false
-
-[functions.delete-account]
-verify_jwt = false
-
-[functions.send-invoice]
-verify_jwt = false
-
-[functions.xero-oauth]
-verify_jwt = false
-
-[functions.xero-sync-clients]
-verify_jwt = false
-
-[functions.xero-sync-invoices]
-verify_jwt = false
-
-[functions.process-voice-command]
-verify_jwt = false
-
-[functions.myob-oauth]
-verify_jwt = false
-
-[functions.myob-sync-clients]
-verify_jwt = false
-
-[functions.myob-sync-invoices]
-verify_jwt = false
-
+# Public endpoints — accessed by unauthenticated users (e.g., clients accepting quotes)
 [functions.accept-quote]
 verify_jwt = false
 
-[functions.get-payment-settings]
+# Team invitation acceptance — uses token-based auth, not JWT
+[functions.accept-team-invitation]
 verify_jwt = false
 
-[functions.update-payment-settings]
+# Server-to-server / cron — triggered by Supabase cron or internal calls
+[functions.generate-recurring-invoices]
 verify_jwt = false
 
-[functions.quickbooks-oauth]
+[functions.payment-reminder]
 verify_jwt = false
 
-[functions.quickbooks-sync-clients]
-verify_jwt = false
-
-[functions.quickbooks-sync-invoices]
-verify_jwt = false
-
-[functions.leave-team]
+# Notification service — called by other edge functions, not directly by clients
+[functions.send-notification]
 verify_jwt = false
