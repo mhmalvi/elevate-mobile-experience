@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface NotificationRequest {
   type: 'quote' | 'invoice';
@@ -140,6 +141,25 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // SECURITY: Verify user
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return createErrorResponse(req, 'Missing Authorization header', 401);
+    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+    if (authError || !user) {
+      return createErrorResponse(req, 'Invalid token', 401);
+    }
+
+    // SECURITY: Rate Limiting (10 req/min)
+    const rateLimit = await checkRateLimit(supabase, user.id, 'send-notification', 10, 60);
+    if (rateLimit.limited) {
+      return new Response(JSON.stringify({ error: 'Too many requests. Please try again later.' }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateLimit.retryAfterSeconds) },
+      });
+    }
+
     const { type, id, method, recipient }: NotificationRequest = await req.json();
 
     console.log(`Sending ${method} notification for ${type} ${id} to ${recipient.email || recipient.phone}`);
@@ -166,6 +186,11 @@ serve(async (req) => {
 
     if (!document) {
       throw new Error(`${type} not found`);
+    }
+
+    // SECURITY: Verify ownership
+    if (document.user_id !== user.id) {
+      return createErrorResponse(req, 'Unauthorized access to document', 403);
     }
 
     // Get business profile and subscription tier
@@ -371,7 +396,7 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error sending notification:', errorMessage);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: "Notification delivery failed" }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

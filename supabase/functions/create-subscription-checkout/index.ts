@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -38,7 +39,16 @@ serve(async (req) => {
     if (userError) throw new Error(`Authentication error: ${userError.message}`);
     const user = userData.user;
     if (!user?.email) throw new Error('User not authenticated or email not available');
-    logStep('User authenticated', { userId: user.id, email: user.email });
+    logStep('User authenticated', { visitorId: user.id, email: user.email });
+
+    // Rate limiting: 10 checkout sessions per minute per user
+    const rateLimit = await checkRateLimit(supabaseClient, user.id, 'create-subscription-checkout', 10, 60);
+    if (rateLimit.limited) {
+      return new Response(JSON.stringify({ error: 'Too many requests. Please wait before trying again.' }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateLimit.retryAfterSeconds || 60) },
+      });
+    }
 
     const { priceId, tierId } = await req.json();
     if (!priceId) throw new Error('Price ID is required');
@@ -130,7 +140,7 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const stripeCode = error?.code || error?.type || 'unknown';
     logStep('ERROR', { message: errorMessage, code: stripeCode, stack: error?.stack?.substring(0, 300) });
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Checkout session creation failed" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });

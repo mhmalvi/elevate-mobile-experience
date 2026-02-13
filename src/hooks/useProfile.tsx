@@ -2,46 +2,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { Tables } from '@/integrations/supabase/types';
+import { cacheSubscription, getCachedSubscription } from '@/lib/subscriptionCache';
 
 type Profile = Tables<'profiles'>;
-
-const SUBSCRIPTION_CACHE_KEY = 'tradiemate_subscription_cache';
-
-interface SubscriptionCache {
-  subscription_tier: string;
-  subscription_expires_at: string | null;
-  subscription_provider: string | null;
-  cached_at: number;
-}
-
-function cacheSubscription(profile: Profile) {
-  try {
-    const cache: SubscriptionCache = {
-      subscription_tier: profile.subscription_tier || 'free',
-      subscription_expires_at: profile.subscription_expires_at,
-      subscription_provider: profile.subscription_provider,
-      cached_at: Date.now(),
-    };
-    localStorage.setItem(SUBSCRIPTION_CACHE_KEY, JSON.stringify(cache));
-  } catch { /* localStorage may be unavailable */ }
-}
-
-function getCachedSubscription(): SubscriptionCache | null {
-  try {
-    const raw = localStorage.getItem(SUBSCRIPTION_CACHE_KEY);
-    if (!raw) return null;
-    const cache: SubscriptionCache = JSON.parse(raw);
-    // Expire cache after 7 days
-    if (Date.now() - cache.cached_at > 7 * 24 * 60 * 60 * 1000) return null;
-    // If subscription has an expiry date and it's passed, treat as free
-    if (cache.subscription_expires_at && new Date(cache.subscription_expires_at) < new Date()) {
-      return { ...cache, subscription_tier: 'free', subscription_provider: null };
-    }
-    return cache;
-  } catch {
-    return null;
-  }
-}
 
 export function useProfile() {
   const { user } = useAuth();
@@ -68,16 +31,22 @@ export function useProfile() {
 
     if (!error && data) {
       setProfile(data);
-      cacheSubscription(data);
+      // Cache subscription data for offline use (uses Capacitor Preferences with localStorage fallback)
+      cacheSubscription(
+        user.id,
+        data.subscription_tier || 'free',
+        data.subscription_provider || null,
+        data.subscription_expires_at || null
+      );
     } else if (error) {
       // Offline or network error — use cached subscription data
-      const cached = getCachedSubscription();
+      const cached = await getCachedSubscription(user.id);
       if (cached && profile) {
         setProfile({
           ...profile,
-          subscription_tier: cached.subscription_tier,
-          subscription_expires_at: cached.subscription_expires_at,
-          subscription_provider: cached.subscription_provider,
+          subscription_tier: cached.tier,
+          subscription_expires_at: cached.expiresAt,
+          subscription_provider: cached.provider,
         });
       }
     }
@@ -100,3 +69,4 @@ export function useProfile() {
 
   return { profile, loading, updateProfile, refetch: fetchProfile };
 }
+

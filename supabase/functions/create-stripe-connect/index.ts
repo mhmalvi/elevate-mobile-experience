@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 serve(async (req) => {
   // SECURITY: Get secure CORS headers
@@ -53,6 +54,15 @@ serve(async (req) => {
       );
     }
 
+    // Rate limiting: 5 requests per minute per user
+    const rateLimit = await checkRateLimit(supabase, user.id, 'create-stripe-connect', 5, 60);
+    if (rateLimit.limited) {
+      return new Response(JSON.stringify({ error: 'Too many requests. Please wait before trying again.' }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateLimit.retryAfterSeconds || 60) },
+      });
+    }
+
     console.log(`Creating Stripe Connect account for user: ${user.id}`);
 
     // Get user profile
@@ -74,8 +84,8 @@ serve(async (req) => {
 
     // Check if URL is a valid public URL (not localhost/local IP)
     const isPublicUrl = appUrl.startsWith("https://") &&
-                       !appUrl.includes("localhost") &&
-                       !appUrl.match(/https?:\/\/(127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/);
+      !appUrl.includes("localhost") &&
+      !appUrl.match(/https?:\/\/(127\.|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/);
 
     // Check if already has Stripe account
     if (profile?.stripe_account_id) {
@@ -189,21 +199,16 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    // SECURITY: Log full details server-side only
     console.error("Error creating Stripe Connect account:", errorMessage);
-    console.error("Full error details:", JSON.stringify(error, null, 2));
-
-    // Check if it's a Stripe error with more details
     if (error && typeof error === 'object') {
       console.error("Error type:", (error as any).type);
       console.error("Error code:", (error as any).code);
-      console.error("Error raw:", (error as any).raw);
     }
 
+    // SECURITY: Return generic message to client — never expose raw error details
     return new Response(
-      JSON.stringify({
-        error: errorMessage,
-        details: error && typeof error === 'object' ? (error as any).raw : undefined
-      }),
+      JSON.stringify({ error: "Failed to set up payment account. Please try again or contact support." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

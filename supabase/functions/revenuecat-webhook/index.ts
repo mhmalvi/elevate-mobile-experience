@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import * as crypto from "https://deno.land/std@0.190.0/crypto/mod.ts";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { processWebhookWithIdempotency } from "../_shared/webhook-idempotency.ts";
+import type { WebhookEvent } from "../_shared/webhook-idempotency.ts";
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -18,10 +20,18 @@ const PRODUCT_TO_TIER: Record<string, string> = {
   'pro_annual': 'pro',
 };
 
+// Map RevenueCat store identifiers to subscription providers
+const STORE_TO_PROVIDER: Record<string, string> = {
+  'PLAY_STORE': 'google_play',
+  'APP_STORE': 'apple_iap',
+  'STRIPE': 'stripe',
+};
+
 interface RevenueCatEvent {
   api_version: string;
   event: {
     type: string;
+    id: string;
     app_user_id: string;
     product_id: string;
     entitlement_id?: string;
@@ -107,131 +117,150 @@ serve(async (req) => {
     const body: RevenueCatEvent = JSON.parse(rawBody);
     const event = body.event;
 
-    logStep('Event received', { 
-      type: event.type, 
+    logStep('Event received', {
+      type: event.type,
       userId: event.app_user_id,
       productId: event.product_id,
-      store: event.store 
+      store: event.store
     });
 
-    // Handle different event types
-    switch (event.type) {
-      case 'INITIAL_PURCHASE':
-      case 'RENEWAL':
-      case 'PRODUCT_CHANGE':
-      case 'UNCANCELLATION': {
-        // User has an active subscription
-        const tier = PRODUCT_TO_TIER[event.product_id] || 'solo';
-        const provider = event.store === 'PLAY_STORE' ? 'google_play' : 'apple_iap';
-        const expiresAt = event.expiration_at_ms 
-          ? new Date(event.expiration_at_ms).toISOString() 
-          : null;
+    // Build idempotency event key
+    const webhookEvent: WebhookEvent = {
+      event_id: event.id || `revenuecat_${event.type}_${event.app_user_id}_${event.product_id}_${Date.now()}`,
+      event_type: event.type,
+      source: 'revenuecat',
+      raw_event: body as unknown as Record<string, unknown>,
+    };
 
-        logStep('Updating to active subscription', { tier, provider, expiresAt });
+    // Process with idempotency to prevent duplicate handling
+    const result = await processWebhookWithIdempotency(
+      supabaseClient,
+      webhookEvent,
+      async () => {
+        // Handle different event types
+        switch (event.type) {
+          case 'INITIAL_PURCHASE':
+          case 'RENEWAL':
+          case 'PRODUCT_CHANGE':
+          case 'UNCANCELLATION': {
+            // User has an active subscription
+            const tier = PRODUCT_TO_TIER[event.product_id] || 'solo';
+            const provider = STORE_TO_PROVIDER[event.store] || 'unknown';
+            const expiresAt = event.expiration_at_ms
+              ? new Date(event.expiration_at_ms).toISOString()
+              : null;
 
-        // The app_user_id should be the Supabase user ID
-        const { error } = await supabaseClient
-          .from('profiles')
-          .update({
-            subscription_tier: tier,
-            subscription_provider: provider,
-            subscription_id: event.original_app_user_id,
-            subscription_expires_at: expiresAt,
-          })
-          .eq('user_id', event.app_user_id);
+            logStep('Updating to active subscription', { tier, provider, expiresAt });
 
-        if (error) {
-          logStep('Failed to update profile', { error: error.message });
-          // Try to find by original_app_user_id as fallback
-          await supabaseClient
-            .from('profiles')
-            .update({
-              subscription_tier: tier,
-              subscription_provider: provider,
-              subscription_id: event.original_app_user_id,
-              subscription_expires_at: expiresAt,
-            })
-            .eq('user_id', event.original_app_user_id);
+            // The app_user_id should be the Supabase user ID
+            const { error } = await supabaseClient
+              .from('profiles')
+              .update({
+                subscription_tier: tier,
+                subscription_provider: provider,
+                subscription_id: event.original_app_user_id,
+                subscription_expires_at: expiresAt,
+              })
+              .eq('user_id', event.app_user_id);
+
+            if (error) {
+              logStep('Failed to update profile, trying original_app_user_id', { error: error.message });
+              // Try to find by original_app_user_id as fallback
+              await supabaseClient
+                .from('profiles')
+                .update({
+                  subscription_tier: tier,
+                  subscription_provider: provider,
+                  subscription_id: event.original_app_user_id,
+                  subscription_expires_at: expiresAt,
+                })
+                .eq('user_id', event.original_app_user_id);
+            }
+
+            logStep('Profile updated with active subscription');
+            break;
+          }
+
+          case 'CANCELLATION':
+          case 'EXPIRATION': {
+            logStep('Subscription ended, downgrading to free', { userId: event.app_user_id });
+
+            const { error } = await supabaseClient
+              .from('profiles')
+              .update({
+                subscription_tier: 'free',
+                subscription_provider: null,
+                subscription_id: null,
+                subscription_expires_at: null,
+              })
+              .eq('user_id', event.app_user_id);
+
+            if (error) {
+              await supabaseClient
+                .from('profiles')
+                .update({
+                  subscription_tier: 'free',
+                  subscription_provider: null,
+                  subscription_id: null,
+                  subscription_expires_at: null,
+                })
+                .eq('user_id', event.original_app_user_id);
+            }
+
+            logStep('Profile downgraded to free tier');
+            break;
+          }
+
+          case 'BILLING_ISSUE': {
+            // Grace period: keep current tier for 7 days instead of immediate downgrade
+            const gracePeriodEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+            logStep('Billing issue — granting 7-day grace period', {
+              userId: event.app_user_id,
+              graceUntil: gracePeriodEnd,
+            });
+
+            const { error } = await supabaseClient
+              .from('profiles')
+              .update({ subscription_expires_at: gracePeriodEnd })
+              .eq('user_id', event.app_user_id);
+
+            if (error) {
+              await supabaseClient
+                .from('profiles')
+                .update({ subscription_expires_at: gracePeriodEnd })
+                .eq('user_id', event.original_app_user_id);
+            }
+
+            logStep('Grace period set for billing issue');
+            break;
+          }
+
+          case 'SUBSCRIBER_ALIAS':
+            // User identity changed - log but no action needed
+            logStep('Subscriber alias event', {
+              newId: event.app_user_id,
+              originalId: event.original_app_user_id
+            });
+            break;
+
+          default:
+            logStep('Unhandled event type', { type: event.type });
         }
-
-        logStep('Profile updated with active subscription');
-        break;
       }
+    );
 
-      case 'CANCELLATION':
-      case 'EXPIRATION': {
-        logStep('Subscription ended, downgrading to free', { userId: event.app_user_id });
-
-        const { error } = await supabaseClient
-          .from('profiles')
-          .update({
-            subscription_tier: 'free',
-            subscription_provider: null,
-            subscription_id: null,
-            subscription_expires_at: null,
-          })
-          .eq('user_id', event.app_user_id);
-
-        if (error) {
-          await supabaseClient
-            .from('profiles')
-            .update({
-              subscription_tier: 'free',
-              subscription_provider: null,
-              subscription_id: null,
-              subscription_expires_at: null,
-            })
-            .eq('user_id', event.original_app_user_id);
-        }
-
-        logStep('Profile downgraded to free tier');
-        break;
-      }
-
-      case 'BILLING_ISSUE': {
-        // Grace period: keep current tier for 7 days instead of immediate downgrade
-        const gracePeriodEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-        logStep('Billing issue — granting 7-day grace period', {
-          userId: event.app_user_id,
-          graceUntil: gracePeriodEnd,
-        });
-
-        const { error } = await supabaseClient
-          .from('profiles')
-          .update({ subscription_expires_at: gracePeriodEnd })
-          .eq('user_id', event.app_user_id);
-
-        if (error) {
-          await supabaseClient
-            .from('profiles')
-            .update({ subscription_expires_at: gracePeriodEnd })
-            .eq('user_id', event.original_app_user_id);
-        }
-
-        logStep('Grace period set for billing issue');
-        break;
-      }
-
-      case 'SUBSCRIBER_ALIAS':
-        // User identity changed - log but no action needed
-        logStep('Subscriber alias event', { 
-          newId: event.app_user_id, 
-          originalId: event.original_app_user_id 
-        });
-        break;
-
-      default:
-        logStep('Unhandled event type', { type: event.type });
+    if (result.isDuplicate) {
+      logStep('Duplicate webhook event skipped', { eventId: webhookEvent.event_id });
     }
 
-    return new Response(JSON.stringify({ received: true }), {
+    return new Response(JSON.stringify({ received: true, duplicate: result.isDuplicate }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep('ERROR', { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Webhook processing failed" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });

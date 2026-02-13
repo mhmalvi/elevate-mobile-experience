@@ -62,9 +62,9 @@ serve(async (req) => {
 
     // Check if any encrypted bank details exist
     const hasEncryptedDetails = profile.bank_name_encrypted ||
-                                 profile.bank_bsb_encrypted ||
-                                 profile.bank_account_number_encrypted ||
-                                 profile.bank_account_name_encrypted;
+      profile.bank_bsb_encrypted ||
+      profile.bank_account_number_encrypted ||
+      profile.bank_account_name_encrypted;
 
     if (hasEncryptedDetails) {
       try {
@@ -101,7 +101,7 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep('ERROR', { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Failed to retrieve payment settings" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });

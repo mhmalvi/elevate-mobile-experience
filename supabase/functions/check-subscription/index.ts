@@ -73,10 +73,10 @@ serve(async (req) => {
 
     // Find customer by email
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    
+
     if (customers.data.length === 0) {
       logStep('No Stripe customer found, user is on free tier');
-      
+
       // Update profile to free tier
       await supabaseClient
         .from('profiles')
@@ -168,7 +168,7 @@ serve(async (req) => {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logStep('ERROR', { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: "Subscription check failed" }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });

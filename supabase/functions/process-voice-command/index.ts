@@ -4,6 +4,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -319,6 +320,19 @@ serve(async (req) => {
         }
 
         console.log(`Voice command from user: ${user.id}`);
+
+        // Rate limiting: 30 voice commands per minute per user (external AI API cost)
+        const rateLimit = await checkRateLimit(supabase, user.id, 'process-voice-command', 30, 60);
+        if (rateLimit.limited) {
+            return new Response(JSON.stringify({
+                speak: "Whoa, slow down! I need a moment to catch up. Try again in a minute.",
+                action: "ask_details",
+                data: {}
+            }), {
+                status: 429,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateLimit.retryAfterSeconds || 60) },
+            });
+        }
 
         const body = await req.json();
         const { query, conversationHistory, accumulatedData } = body;

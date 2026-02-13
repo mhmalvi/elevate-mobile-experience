@@ -13,8 +13,6 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, Loader2, Download, X, Printer } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import DOMPurify from 'dompurify';
 
 interface PDFPreviewModalProps {
@@ -133,88 +131,41 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
   };
 
   const handleDownloadPDF = async () => {
-    if (!sanitizedHtml) return;
     setDownloading(true);
-
     try {
-      // Create a temporary container for rendering
-      const container = document.createElement('div');
-      container.style.position = 'absolute';
-      container.style.left = '-9999px';
-      container.style.top = '0';
-      container.style.width = '210mm'; // A4 width
-      container.style.maxWidth = '210mm';
-      container.style.padding = '0';
-      container.style.margin = '0';
-      container.style.backgroundColor = '#ffffff';
-      container.style.boxSizing = 'border-box';
-      // SECURITY: Use sanitized HTML to prevent XSS
-      container.innerHTML = sanitizedHtml;
-      document.body.appendChild(container);
+      console.log('Downloading PDFFromServer for:', { type, id });
 
-      // Wait for content to fully render (including images and fonts)
-      // Increased timeout to allow Google Fonts and images to fully load
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Load any images in the container
-      const images = container.getElementsByTagName('img');
-      const imagePromises = Array.from(images).map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise((resolve) => {
-          img.onload = () => resolve(null);
-          img.onerror = () => resolve(null);
-        });
-      });
-      await Promise.all(imagePromises);
-
-      // Capture with html2canvas
-      const canvas = await html2canvas(container, {
-        scale: 3, // Higher quality
-        useCORS: true,
-        allowTaint: false,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: container.scrollWidth,
-        windowHeight: container.scrollHeight,
-        onclone: (clonedDoc) => {
-          const clonedContainer = clonedDoc.querySelector('div');
-          if (clonedContainer) {
-            clonedContainer.style.display = 'block';
-            clonedContainer.style.position = 'relative';
-          }
-        }
+      const { data, error } = await supabase.functions.invoke('generate-pdf', {
+        body: { type, id, format: 'pdf' },
       });
 
-      document.body.removeChild(container);
+      if (error) throw error;
 
-      // Create PDF with better sizing
-      const imgWidth = 210; // A4 width in mm
-      const pageHeight = 297; // A4 height in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      const pdf = new jsPDF('p', 'mm', 'a4');
-
-      if (imgHeight <= pageHeight) {
-        // Single page
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgWidth, imgHeight);
+      // Handle Blob response
+      if (data instanceof Blob) {
+        const url = window.URL.createObjectURL(data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${documentNumber}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        toast({ title: 'PDF downloaded', description: `${documentNumber}.pdf saved successfully` });
       } else {
-        // Multiple pages
-        let heightLeft = imgHeight;
-        let position = 0;
-
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-
-        while (heightLeft > 0) {
-          position = heightLeft - imgHeight;
-          pdf.addPage();
-          pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
-        }
+        // Fallback if supabase returns it differently (e.g. ArrayBuffer)
+        const blob = new Blob([data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${documentNumber}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        toast({ title: 'PDF downloaded', description: `${documentNumber}.pdf saved successfully` });
       }
 
-      pdf.save(`${documentNumber}.pdf`);
-      toast({ title: 'PDF downloaded', description: `${documentNumber}.pdf saved successfully` });
     } catch (error) {
       console.error('PDF download error:', error);
       toast({
@@ -251,7 +202,7 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
             </DrawerClose>
           </div>
         </DrawerHeader>
-        
+
         <div className="flex-1 overflow-auto p-4 bg-muted/30 min-h-[50vh] max-h-[60vh]">
           {loading ? (
             <div className="flex items-center justify-center h-full">

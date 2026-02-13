@@ -142,7 +142,7 @@ serve(async (req) => {
         const paymentAmount = (session.amount_total || 0) / 100;
         const newAmountPaid = (invoice.amount_paid || 0) + paymentAmount;
         const total = invoice.total || 0;
-        
+
         // Determine new status
         const newStatus = newAmountPaid >= total ? "paid" : "partially_paid";
 
@@ -343,6 +343,39 @@ serve(async (req) => {
       }
     }
 
+    // Handle Stripe Connect account.updated — sync onboarding status
+    if (event.type === "account.updated") {
+      const account = event.data.object as Stripe.Account;
+      const accountId = account.id;
+
+      console.log(`Account updated: ${accountId}, charges_enabled=${account.charges_enabled}, details_submitted=${account.details_submitted}`);
+
+      // Find the profile with this Stripe account ID and update status
+      const { data: matchedProfile, error: profileFetchError } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('stripe_account_id', accountId)
+        .single();
+
+      if (profileFetchError || !matchedProfile) {
+        console.warn(`No profile found for Stripe account ${accountId}`);
+      } else {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            stripe_onboarding_complete: account.details_submitted || false,
+            stripe_charges_enabled: account.charges_enabled || false,
+          })
+          .eq('user_id', matchedProfile.user_id);
+
+        if (updateError) {
+          console.error('Error updating Stripe account status:', updateError);
+        } else {
+          console.log(`Profile updated for account ${accountId}: onboarding_complete=${account.details_submitted}, charges_enabled=${account.charges_enabled}`);
+        }
+      }
+    }
+
     // SECURITY: Mark webhook as successfully processed
     await markWebhookProcessed(
       supabase,
@@ -361,7 +394,8 @@ serve(async (req) => {
     });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    console.error("Webhook error:", error);
+    // SECURITY: Log full details server-side only
+    console.error("Webhook error:", errorMessage);
 
     // SECURITY: Mark webhook as processed with error
     // Note: We only have event info if signature verification succeeded
@@ -383,7 +417,8 @@ serve(async (req) => {
       console.error('Failed to mark webhook as errored:', markError);
     }
 
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    // SECURITY: Return generic error to Stripe — never expose internals
+    return new Response(JSON.stringify({ error: "Webhook processing failed" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
