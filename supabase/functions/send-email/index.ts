@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface EmailRequest {
   type: "quote" | "invoice" | "team_invitation";
@@ -112,6 +113,15 @@ serve(async (req) => {
     }
 
     console.log(`Email request from user: ${user.id}`);
+
+    // Rate limit: max 20 emails per minute per user
+    const rl = await checkRateLimit(supabase, user.id, "send-email", 20, 60);
+    if (rl.limited) {
+      return new Response(
+        JSON.stringify({ error: "Too many emails. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } }
+      );
+    }
 
     const { type, id, recipient_email, recipient_name, subject, message }: EmailRequest = await req.json();
 

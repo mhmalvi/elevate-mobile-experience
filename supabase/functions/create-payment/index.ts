@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.21.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface PaymentRequest {
   invoice_id: string;
@@ -36,6 +37,21 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Rate limit: max 10 payment sessions per minute per user
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader) {
+      const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+      if (user) {
+        const rl = await checkRateLimit(supabase, user.id, "create-payment", 10, 60);
+        if (rl.limited) {
+          return new Response(
+            JSON.stringify({ error: "Too many requests. Please try again later." }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } }
+          );
+        }
+      }
+    }
 
     const { invoice_id, success_url, cancel_url }: PaymentRequest = await req.json();
 

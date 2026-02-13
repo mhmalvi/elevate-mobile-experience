@@ -159,9 +159,7 @@ serve(async (req) => {
       }
 
       case 'CANCELLATION':
-      case 'EXPIRATION':
-      case 'BILLING_ISSUE': {
-        // Subscription ended or has issues - downgrade to free
+      case 'EXPIRATION': {
         logStep('Subscription ended, downgrading to free', { userId: event.app_user_id });
 
         const { error } = await supabaseClient
@@ -175,7 +173,6 @@ serve(async (req) => {
           .eq('user_id', event.app_user_id);
 
         if (error) {
-          // Try fallback
           await supabaseClient
             .from('profiles')
             .update({
@@ -188,6 +185,30 @@ serve(async (req) => {
         }
 
         logStep('Profile downgraded to free tier');
+        break;
+      }
+
+      case 'BILLING_ISSUE': {
+        // Grace period: keep current tier for 7 days instead of immediate downgrade
+        const gracePeriodEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        logStep('Billing issue — granting 7-day grace period', {
+          userId: event.app_user_id,
+          graceUntil: gracePeriodEnd,
+        });
+
+        const { error } = await supabaseClient
+          .from('profiles')
+          .update({ subscription_expires_at: gracePeriodEnd })
+          .eq('user_id', event.app_user_id);
+
+        if (error) {
+          await supabaseClient
+            .from('profiles')
+            .update({ subscription_expires_at: gracePeriodEnd })
+            .eq('user_id', event.original_app_user_id);
+        }
+
+        logStep('Grace period set for billing issue');
         break;
       }
 

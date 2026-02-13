@@ -42,3 +42,12 @@ playwright-report/
 # E2E Test Screenshots
 e2e-screenshots/
 e2e/screenshots/
+
+# Temp/debug files
+*.png
+nul
+.agent/
+
+# Security: keystores
+*.keystore
+*.jks
