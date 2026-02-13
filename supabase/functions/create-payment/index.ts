@@ -81,7 +81,7 @@ serve(async (req) => {
 
     // Calculate balance due
     const balance = (invoice.total || 0) - (invoice.amount_paid || 0);
-    
+
     if (balance <= 0) {
       return new Response(
         JSON.stringify({ error: "Invoice is already paid" }),
@@ -147,17 +147,16 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    // SECURITY: Log full details server-side only
     console.error("Error creating payment session:", errorMessage);
-    console.error("Full error object:", JSON.stringify(error, null, 2));
-
-    // Check if it's a Stripe error with more details
     if (error && typeof error === 'object' && 'type' in error) {
       console.error("Stripe error type:", (error as any).type);
       console.error("Stripe error code:", (error as any).code);
     }
 
+    // SECURITY: Return generic message to client — never expose raw error details
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: "Failed to create payment session. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

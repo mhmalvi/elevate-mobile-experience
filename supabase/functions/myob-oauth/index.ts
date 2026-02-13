@@ -260,8 +260,9 @@ serve(async (req) => {
         throw new Error(`Unknown action: ${action}`);
 
     } catch (error) {
-        console.error("MYOB OAuth Error:", error);
-        return new Response(JSON.stringify({ error: error.message }), {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        console.error("MYOB OAuth Error:", errorMessage);
+        return new Response(JSON.stringify({ error: "OAuth operation failed" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

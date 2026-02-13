@@ -1,21 +1,76 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ==============================================================================
+# TradieMate ProGuard / R8 Rules
+# ==============================================================================
+# These rules ensure Capacitor, WebView bridges, and critical dependencies
+# work correctly when minifyEnabled = true.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# --- Capacitor Core ---
+# Keep the Capacitor bridge and plugin classes
+-keep class com.getcapacitor.** { *; }
+-keep class com.capacitorjs.plugins.** { *; }
+-dontwarn com.getcapacitor.**
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Keep the MainActivity and any Activity subclasses
+-keep class com.tradiemate.app.MainActivity { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# --- WebView JavaScript Interface ---
+# Required for Capacitor's JS-to-native bridge
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# --- AndroidX ---
+-keep class androidx.** { *; }
+-dontwarn androidx.**
+
+# --- Cordova Plugins (if any) ---
+-keep class org.apache.cordova.** { *; }
+-dontwarn org.apache.cordova.**
+
+# --- Google Play Services ---
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.android.gms.**
+
+# --- Firebase ---
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+
+# --- RevenueCat ---
+-keep class com.revenuecat.** { *; }
+-dontwarn com.revenuecat.**
+
+# --- Stripe ---
+-keep class com.stripe.** { *; }
+-dontwarn com.stripe.**
+
+# --- Keep enums (used by various plugins) ---
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+# --- Keep Parcelables ---
+-keepclassmembers class * implements android.os.Parcelable {
+    public static final ** CREATOR;
+}
+
+# --- Keep serializable classes ---
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+    private static final java.io.ObjectStreamField[] serialPersistentFields;
+    !static !transient <fields>;
+    private void writeObject(java.io.ObjectOutputStream);
+    private void readObject(java.io.ObjectInputStream);
+    java.lang.Object writeReplace();
+    java.lang.Object readResolve();
+}
+
+# --- Remove debug logging in release ---
+-assumenosideeffects class android.util.Log {
+    public static int d(...);
+    public static int v(...);
+}
+
+# --- Preserve line numbers for crash reporting ---
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

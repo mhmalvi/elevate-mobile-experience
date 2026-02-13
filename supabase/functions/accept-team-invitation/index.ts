@@ -202,9 +202,9 @@ serve(async (req) => {
     });
 
   } catch (error: unknown) {
-    console.error('Fatal error in accept-team-invitation:', error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    console.error('Fatal error in accept-team-invitation:', errorMessage);
+    return new Response(JSON.stringify({ error: "Failed to process team invitation" }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

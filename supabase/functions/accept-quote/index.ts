@@ -1,17 +1,16 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+import { getCorsHeaders, createCorsResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 serve(async (req) => {
+    // SECURITY: Get secure CORS headers
+    const corsHeaders = getCorsHeaders(req);
+
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
+        return createCorsResponse(req);
     }
 
     try {
@@ -21,9 +20,34 @@ serve(async (req) => {
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         );
 
+        // Rate limiting for public endpoint (5 requests per minute per IP)
+        const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+        const rateLimit = await checkRateLimit(supabase, clientIp, 'accept-quote', 5, 60);
+        if (rateLimit.limited) {
+            return new Response(JSON.stringify({ error: 'Too many requests' }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateLimit.retryAfterSeconds || 60) },
+                status: 429,
+            });
+        }
+
         const { quote_id, signature_data, status, action } = await req.json();
 
-        if (!quote_id) throw new Error('Quote ID is required');
+        // Input validation
+        if (!quote_id || typeof quote_id !== 'string') {
+            return new Response(JSON.stringify({ error: 'Valid Quote ID is required' }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 400,
+            });
+        }
+
+        // Validate UUID format to prevent injection
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(quote_id)) {
+            return new Response(JSON.stringify({ error: 'Invalid Quote ID format' }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: 400,
+            });
+        }
 
         console.log(`Processing quote action: ${action || 'accept'} for ${quote_id}`);
 
@@ -77,9 +101,10 @@ serve(async (req) => {
             status: 200
         });
 
-    } catch (error) {
-        console.error('Accept Quote Error:', error);
-        return new Response(JSON.stringify({ error: error.message }), {
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('Accept Quote Error:', errorMessage);
+        return new Response(JSON.stringify({ error: 'Failed to process quote action' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400
         });

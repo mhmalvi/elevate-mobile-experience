@@ -85,7 +85,7 @@ serve(async (req) => {
 
     for (const invoice of invoices) {
       const client = invoice.clients;
-      
+
       if (!client?.phone) {
         console.log(`Skipping invoice ${invoice.invoice_number}: No client phone number`);
         results.push({ invoice_id: invoice.id, success: false, error: "No client phone number" });
@@ -94,13 +94,13 @@ serve(async (req) => {
 
       const balance = (invoice.total || 0) - (invoice.amount_paid || 0);
       const businessName = invoice.profiles?.business_name || "Your service provider";
-      
+
       const message = `Hi ${client.name}, this is a friendly reminder that Invoice ${invoice.invoice_number} for $${balance.toFixed(2)} is now overdue. Please arrange payment at your earliest convenience. Thank you! - ${businessName}`;
 
       try {
         // Send SMS via Twilio
         const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
-        
+
         const formData = new URLSearchParams();
         formData.append("To", client.phone);
         formData.append("From", twilioPhoneNumber);
@@ -152,7 +152,7 @@ serve(async (req) => {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error("Error in payment-reminder function:", errorMessage);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: "Payment reminder processing failed" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
