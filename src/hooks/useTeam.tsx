@@ -58,7 +58,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
 
   // Persistent team selection
   const [currentTeamId, setCurrentTeamId] = useState<string | null>(() => {
-    return localStorage.getItem('tradie_mate_active_team_id');
+    return sessionStorage.getItem('tradie_mate_active_team_id');
   });
 
   const fetchTeamData = async () => {
@@ -77,8 +77,6 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         .select('*, teams!inner(*)')
         .eq('user_id', user.id)
         .order('joined_at', { ascending: false });
-
-      console.log('useTeam fetched memberships:', memberships?.length, memberships);
 
       if (membershipError) {
         console.error('Error fetching team memberships:', membershipError);
@@ -112,7 +110,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         // Update current ID to match the fallback
         if (activeMembership) {
           setCurrentTeamId(activeMembership.team_id);
-          localStorage.setItem('tradie_mate_active_team_id', activeMembership.team_id);
+          sessionStorage.setItem('tradie_mate_active_team_id', activeMembership.team_id);
         }
       }
 
@@ -148,7 +146,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
 
   const switchTeam = (teamId: string) => {
     setCurrentTeamId(teamId);
-    localStorage.setItem('tradie_mate_active_team_id', teamId);
+    sessionStorage.setItem('tradie_mate_active_team_id', teamId);
     // The useEffect will trigger fetchTeamData
   };
 

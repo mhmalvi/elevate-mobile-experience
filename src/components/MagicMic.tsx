@@ -37,7 +37,6 @@ export function MagicMic() {
     }, []);
 
     const startListening = useCallback(() => {
-        console.log('Voice: Starting listening...');
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (!SpeechRecognition) {
@@ -62,7 +61,6 @@ export function MagicMic() {
             recognition.maxAlternatives = 1;
 
             recognition.onstart = () => {
-                console.log('Voice: Recognition started');
                 setStatus('listening');
                 toast({ title: "🎙️ Listening...", description: "Speak your quote details" });
             };
@@ -80,7 +78,6 @@ export function MagicMic() {
                     }
                 }
 
-                console.log('Voice: Result', { interim, final });
                 setTranscript(interim);
                 if (final) {
                     setFullTranscript(prev => prev + final);
@@ -102,7 +99,6 @@ export function MagicMic() {
             };
 
             recognition.onend = () => {
-                console.log('Voice: Recognition ended');
                 // Recognition ended but we might still want to process
                 if (status === 'listening') {
                     // Don't auto-reset, let user click stop
@@ -118,7 +114,6 @@ export function MagicMic() {
     }, [toast, status]);
 
     const stopListening = useCallback(() => {
-        console.log('Voice: Stopping listening');
         if (recognitionRef.current) {
             try { recognitionRef.current.stop(); } catch (e) { }
         }
@@ -127,7 +122,6 @@ export function MagicMic() {
 
     const processVoiceCommand = useCallback(async () => {
         const messageText = (fullTranscript + transcript).trim();
-        console.log('Voice: Processing command:', messageText);
 
         if (!messageText) {
             toast({
@@ -162,7 +156,6 @@ export function MagicMic() {
                 throw new Error("Session expired - please log in again");
             }
 
-            console.log('Voice: Invoking Edge Function with auth token...');
             // Direct fetch to avoid Supabase client cross-origin frame issues
             const res = await fetch(
                 `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-voice-command`,
@@ -188,7 +181,6 @@ export function MagicMic() {
             }
 
             const data = await res.json();
-            console.log('Voice: Response received', data);
             const { speak: responseText, action, data: responseData } = data;
 
             // Speak the response using text-to-speech for premium feel
@@ -203,31 +195,26 @@ export function MagicMic() {
             // Handle different actions from the AI
             switch (action) {
                 case 'create_quote':
-                    console.log('Voice: Action create_quote');
                     toast({ title: "✨ Creating Quote...", description: responseText });
                     await createQuoteFromVoice(responseData);
                     break;
 
                 case 'create_invoice':
-                    console.log('Voice: Action create_invoice');
                     toast({ title: "💰 Creating Invoice...", description: responseText });
                     await createInvoiceFromVoice(responseData);
                     break;
 
                 case 'create_client':
-                    console.log('Voice: Action create_client');
                     toast({ title: "👤 Adding Client...", description: responseText });
                     await createClientFromVoice(responseData);
                     break;
 
                 case 'schedule_job':
-                    console.log('Voice: Action schedule_job');
                     toast({ title: "📅 Scheduling Job...", description: responseText });
                     await createJobFromVoice(responseData);
                     break;
 
                 case 'find_client':
-                    console.log('Voice: Action find_client');
                     const clientSearchTerm = responseData.search_name || responseData.client_name || responseData.name || '';
                     if (clientSearchTerm) {
                         try {
@@ -262,7 +249,6 @@ export function MagicMic() {
                     break;
 
                 case 'navigate':
-                    console.log('Voice: Action navigate');
                     if (responseData.destination) {
                         toast({ title: "🚀 Navigating...", description: responseText });
                         navigate(responseData.destination);
@@ -270,7 +256,6 @@ export function MagicMic() {
                     break;
 
                 case 'add_job_note':
-                    console.log('Voice: Action add_job_note');
                     toast({
                         title: "📝 Note Added!",
                         description: responseData.note?.substring(0, 50) + (responseData.note?.length > 50 ? '...' : '')
@@ -285,7 +270,6 @@ export function MagicMic() {
                     break;
 
                 case 'send_document':
-                    console.log('Voice: Action send_document');
                     toast({ title: "📤 Preparing to send...", description: responseText });
                     // Navigate to the appropriate document for sending
                     if (responseData.document_type === 'quote' && responseData.document_id) {
@@ -296,7 +280,6 @@ export function MagicMic() {
                     break;
 
                 case 'ask_details':
-                    console.log('Voice: Action ask_details - continuing conversation');
                     toast({
                         title: "Voice Assistant:",
                         description: responseText
@@ -305,7 +288,6 @@ export function MagicMic() {
 
                 case 'general_reply':
                 default:
-                    console.log('Voice: Action general_reply/default');
                     // Show conversational response
                     toast({
                         title: "Voice Assistant:",

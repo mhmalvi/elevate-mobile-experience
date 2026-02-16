@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -35,6 +36,15 @@ serve(async (req) => {
                 status: 401,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
+        }
+
+        // Rate limiting
+        const rateLimit = await checkRateLimit(supabaseAdmin, user.id, 'leave-team', 5, 60);
+        if (rateLimit.limited) {
+            return new Response(
+                JSON.stringify({ error: "Too many requests. Please try again later." }),
+                { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
         }
 
         const { team_id } = await req.json();

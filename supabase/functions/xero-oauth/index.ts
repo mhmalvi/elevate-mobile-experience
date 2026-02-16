@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/encryption.ts";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 import { signState, verifyState } from "../_shared/oauth-security.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface XeroTokenResponse {
   access_token: string;
@@ -84,6 +85,15 @@ serve(async (req) => {
         );
       }
 
+      // Rate limiting
+      const rateLimit = await checkRateLimit(supabase, user.id, 'xero-oauth', 10, 60);
+      if (rateLimit.limited) {
+        return new Response(
+          JSON.stringify({ error: "Too many requests. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // SECURITY: Generate signed state parameter to prevent CSRF attacks
       const stateParam = await signState({ userId: user.id });
 
@@ -125,6 +135,15 @@ serve(async (req) => {
       }
 
       const userId = stateVerification.data!.userId;
+
+      // Rate limiting
+      const rateLimitCallback = await checkRateLimit(supabase, userId, 'xero-oauth', 10, 60);
+      if (rateLimitCallback.limited) {
+        return new Response(
+          JSON.stringify({ error: "Too many requests. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       // Exchange authorization code for tokens
       const basicAuth = btoa(`${xeroClientId}:${xeroClientSecret}`);
@@ -246,6 +265,15 @@ serve(async (req) => {
         );
       }
 
+      // Rate limiting
+      const rateLimitRefresh = await checkRateLimit(supabase, user.id, 'xero-oauth', 10, 60);
+      if (rateLimitRefresh.limited) {
+        return new Response(
+          JSON.stringify({ error: "Too many requests. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // Get current refresh token
       const { data: profile } = await supabase
         .from("profiles")
@@ -329,6 +357,15 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ error: "Unauthorized" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Rate limiting
+      const rateLimitDisconnect = await checkRateLimit(supabase, user.id, 'xero-oauth', 10, 60);
+      if (rateLimitDisconnect.limited) {
+        return new Response(
+          JSON.stringify({ error: "Too many requests. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 

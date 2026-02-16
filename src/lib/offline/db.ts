@@ -134,7 +134,7 @@ class TradieMateDB extends Dexie {
       metadata: 'key, updated_at',
     }).upgrade(async (tx) => {
       try {
-        console.log('[DB] Upgrading to v2: Clearing sync queue to fix corruption');
+        console.debug('[DB] Upgrading to v2: Clearing sync queue to fix corruption');
         await tx.table('syncQueue').clear();
       } catch (error) {
         console.error('[DB] Error during upgrade:', error);
@@ -152,13 +152,13 @@ class TradieMateDB extends Dexie {
       metadata: 'key, updated_at',
     }).upgrade(async (tx) => {
       try {
-        console.log('[DB] Upgrading to v3: Clearing corrupted sync queue');
+        console.debug('[DB] Upgrading to v3: Clearing corrupted sync queue');
         const syncQueueTable = tx.table('syncQueue');
         if (syncQueueTable) {
           const count = await syncQueueTable.count();
-          console.log(`[DB] Found ${count} items in sync queue, clearing...`);
+          console.debug(`[DB] Found ${count} items in sync queue, clearing...`);
           await syncQueueTable.clear();
-          console.log('[DB] Sync queue cleared successfully');
+          console.debug('[DB] Sync queue cleared successfully');
         }
       } catch (error) {
         console.error('[DB] Error during v3 upgrade (non-fatal):', error);
@@ -176,23 +176,23 @@ class TradieMateDB extends Dexie {
       metadata: 'key, updated_at',
     }).upgrade(async (tx) => {
       try {
-        console.log('[DB] Upgrading to v4: Complete sync queue cleanup');
+        console.debug('[DB] Upgrading to v4: Complete sync queue cleanup');
         const syncQueueTable = tx.table('syncQueue');
         if (syncQueueTable) {
           try {
             await syncQueueTable.clear();
-            console.log('[DB] Sync queue cleared in v4 upgrade');
+            console.debug('[DB] Sync queue cleared in v4 upgrade');
           } catch (clearError) {
             console.error('[DB] Error clearing sync queue in v4:', clearError);
             try {
               const allItems = await syncQueueTable.toArray();
-              console.log(`[DB] Attempting to delete ${allItems.length} items individually`);
+              console.debug(`[DB] Attempting to delete ${allItems.length} items individually`);
               for (const item of allItems) {
                 if (item.id) {
                   await syncQueueTable.delete(item.id);
                 }
               }
-              console.log('[DB] Individual deletion complete');
+              console.debug('[DB] Individual deletion complete');
             } catch (deleteError) {
               console.error('[DB] Individual deletion also failed:', deleteError);
             }
@@ -214,10 +214,10 @@ class TradieMateDB extends Dexie {
       metadata: 'key, updated_at',
     }).upgrade(async (tx) => {
       try {
-        console.log('[DB] Upgrading to v5: Removing boolean index from syncQueue');
+        console.debug('[DB] Upgrading to v5: Removing boolean index from syncQueue');
         // Clear and rebuild sync queue with new schema (no synced index)
         await tx.table('syncQueue').clear();
-        console.log('[DB] v5 upgrade complete - sync queue rebuilt without boolean index');
+        console.debug('[DB] v5 upgrade complete - sync queue rebuilt without boolean index');
       } catch (error) {
         console.error('[DB] Error during v5 upgrade (non-fatal):', error);
       }

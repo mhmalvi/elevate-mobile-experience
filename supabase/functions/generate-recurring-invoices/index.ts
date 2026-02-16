@@ -21,8 +21,19 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    // SECURITY: Verify caller is authorized (cron job or service role)
+    const authHeader = req.headers.get("Authorization");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    if (!authHeader || authHeader !== `Bearer ${supabaseServiceKey}`) {
+      console.error("Unauthorized access attempt to generate-recurring-invoices");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     console.log('Starting recurring invoice generation...');

@@ -1,27 +1,37 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 
 const PAGE_SIZE = 20;
 
 export function useJobs(page: number = 1) {
   const { user } = useAuth();
+  const { team } = useTeam();
 
   return useQuery({
-    queryKey: ['jobs', user?.id, page],
+    queryKey: ['jobs', user?.id, team?.id, page],
     queryFn: async () => {
       if (!user) throw new Error('User not authenticated');
 
       const from = (page - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      const { data, count, error } = await supabase
+      let query = supabase
         .from('jobs')
         .select('*, clients(name)', { count: 'exact' })
-        .eq('user_id', user.id)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
         .range(from, to);
+
+      // Filter by team or user - RLS handles team member access
+      if (team?.id) {
+        query = query.eq('team_id', team.id);
+      } else {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { data, count, error } = await query;
 
       if (error) throw error;
 

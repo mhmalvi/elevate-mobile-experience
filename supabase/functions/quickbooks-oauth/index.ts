@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/encryption.ts";
 import { getCorsHeaders, createCorsResponse } from "../_shared/cors.ts";
 import { signState, verifyState } from "../_shared/oauth-security.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface QBTokenResponse {
   access_token: string;
@@ -76,6 +77,15 @@ serve(async (req) => {
         );
       }
 
+      // Rate limiting
+      const rateLimit = await checkRateLimit(supabase, user.id, 'quickbooks-oauth', 10, 60);
+      if (rateLimit.limited) {
+        return new Response(
+          JSON.stringify({ error: "Too many requests. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const stateParam = await signState({ userId: user.id, provider: "quickbooks" });
 
       const qbAuthUrl =
@@ -109,6 +119,15 @@ serve(async (req) => {
       }
 
       const userId = stateVerification.data!.userId;
+
+      // Rate limiting
+      const rateLimitCallback = await checkRateLimit(supabase, userId, 'quickbooks-oauth', 10, 60);
+      if (rateLimitCallback.limited) {
+        return new Response(
+          JSON.stringify({ error: "Too many requests. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       // Exchange authorization code for tokens
       const basicAuth = btoa(`${qbClientId}:${qbClientSecret}`);
@@ -209,6 +228,15 @@ serve(async (req) => {
         );
       }
 
+      // Rate limiting
+      const rateLimitRefresh = await checkRateLimit(supabase, user.id, 'quickbooks-oauth', 10, 60);
+      if (rateLimitRefresh.limited) {
+        return new Response(
+          JSON.stringify({ error: "Too many requests. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("qb_refresh_token")
@@ -290,6 +318,15 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ error: "Unauthorized" }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Rate limiting
+      const rateLimitDisconnect = await checkRateLimit(supabase, user.id, 'quickbooks-oauth', 10, 60);
+      if (rateLimitDisconnect.limited) {
+        return new Response(
+          JSON.stringify({ error: "Too many requests. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
