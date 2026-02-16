@@ -47,6 +47,10 @@ e2e/screenshots/
 *.png
 nul
 .agent/
+tmpclaude-*
+
+# Claude Code settings (may contain secrets in permissions)
+.claude/
 
 # Security: keystores
 *.keystore

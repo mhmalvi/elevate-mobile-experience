@@ -523,7 +523,6 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             .limit(1);
 
         if (existingClients && existingClients.length > 0) {
-            console.log('Found existing client:', existingClients[0].name);
             return existingClients[0].id;
         }
 
@@ -544,7 +543,6 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
             console.error('Create client error:', error.message, error.details, error.hint);
         }
         if (newClient) {
-            console.log('Created new client:', newClient.name);
             toast({ title: "New client added!", description: clientName });
             return newClient.id;
         }

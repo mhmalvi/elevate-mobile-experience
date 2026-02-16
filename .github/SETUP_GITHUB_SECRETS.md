@@ -21,9 +21,9 @@ The GitHub Actions workflow needs access to your Supabase service role key to tr
 
 5. **Configure the Secret**
    - **Name:** `SUPABASE_SERVICE_ROLE_KEY`
-   - **Value:** Copy from your `.env` file:
+   - **Value:** Copy the `SUPABASE_SERVICE_ROLE_KEY` value from your `.env` file
      ```
-     eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1Y3VvbXRvanppZnJ2cGxod2phIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjgzMTY4MiwiZXhwIjoyMDgyNDA3NjgyfQ.2iXYdN7dlrddZokkSy31OlJ2e4syQyYokSZ13p3l2UI
+     <paste your SUPABASE_SERVICE_ROLE_KEY here>
      ```
    - Click **Add secret**
 

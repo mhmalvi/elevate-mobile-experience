@@ -32,15 +32,8 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
   const loadPreview = async () => {
     setLoading(true);
     try {
-      console.log('Loading PDF preview for:', { type, id });
       const response = await supabase.functions.invoke('generate-pdf', {
         body: { type, id }
-      });
-
-      console.log('PDF response:', {
-        error: response.error,
-        hasData: !!response.data,
-        dataKeys: response.data ? Object.keys(response.data) : []
       });
 
       if (response.error) {
@@ -49,7 +42,6 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
       }
 
       if (!response.data || !response.data.html) {
-        console.error('PDF response missing HTML:', response.data);
         throw new Error('PDF generation failed - no HTML returned');
       }
 
@@ -133,8 +125,6 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
   const handleDownloadPDF = async () => {
     setDownloading(true);
     try {
-      console.log('Downloading PDFFromServer for:', { type, id });
-
       const { data, error } = await supabase.functions.invoke('generate-pdf', {
         body: { type, id, format: 'pdf' },
       });

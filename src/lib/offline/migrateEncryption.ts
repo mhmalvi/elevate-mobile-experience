@@ -36,15 +36,15 @@ export async function migrateToEncryptedStorage(): Promise<void> {
     // Check if migration already completed
     const isComplete = await isEncryptionMigrationComplete();
     if (isComplete) {
-      console.log('[Migration] Encryption migration already completed');
+      console.debug('[Migration] Encryption migration already completed');
       return;
     }
 
-    console.log('[Migration] Starting encryption migration...');
+    console.debug('[Migration] Starting encryption migration...');
 
     // Migrate clients
     const clients = await db.clients.toArray();
-    console.log(`[Migration] Migrating ${clients.length} clients...`);
+    console.debug(`[Migration] Migrating ${clients.length} clients...`);
     for (const client of clients) {
       // Check if already encrypted (encrypted data will be base64 and won't contain spaces typically)
       const isAlreadyEncrypted = client.name && /^[A-Za-z0-9+/=]+$/.test(client.name);
@@ -56,7 +56,7 @@ export async function migrateToEncryptedStorage(): Promise<void> {
 
     // Migrate invoices
     const invoices = await db.invoices.toArray();
-    console.log(`[Migration] Migrating ${invoices.length} invoices...`);
+    console.debug(`[Migration] Migrating ${invoices.length} invoices...`);
     for (const invoice of invoices) {
       // Check if amounts are numbers (unencrypted) or strings (encrypted)
       const isAlreadyEncrypted = typeof invoice.total === 'string';
@@ -68,7 +68,7 @@ export async function migrateToEncryptedStorage(): Promise<void> {
 
     // Migrate quotes
     const quotes = await db.quotes.toArray();
-    console.log(`[Migration] Migrating ${quotes.length} quotes...`);
+    console.debug(`[Migration] Migrating ${quotes.length} quotes...`);
     for (const quote of quotes) {
       // Check if amounts are numbers (unencrypted) or strings (encrypted)
       const isAlreadyEncrypted = typeof quote.total === 'string';
@@ -80,7 +80,7 @@ export async function migrateToEncryptedStorage(): Promise<void> {
 
     // Mark migration as complete
     await db.setMeta(MIGRATION_KEY, true);
-    console.log('[Migration] Encryption migration completed successfully');
+    console.debug('[Migration] Encryption migration completed successfully');
   } catch (error) {
     console.error('[Migration] Encryption migration failed:', error);
     // Don't mark as complete if migration failed
@@ -94,5 +94,5 @@ export async function migrateToEncryptedStorage(): Promise<void> {
  */
 export async function resetMigrationStatus(): Promise<void> {
   await db.setMeta(MIGRATION_KEY, false);
-  console.log('[Migration] Migration status reset');
+  console.debug('[Migration] Migration status reset');
 }

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface AcceptInvitationRequest {
   token: string;
@@ -30,6 +31,16 @@ serve(async (req) => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Rate limiting (using token as key since get-details is unauthenticated)
+    const rateLimitKey = token;
+    const rateLimit = await checkRateLimit(supabase, rateLimitKey, 'accept-team-invitation', 10, 60);
+    if (rateLimit.limited) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // -- ACTION: GET DETAILS (Public, relies on token security) --

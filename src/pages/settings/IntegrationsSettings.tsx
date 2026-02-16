@@ -175,7 +175,7 @@ export default function IntegrationsSettings() {
   const loadSyncHistory = async () => {
     try {
       const { data } = await supabase
-        .from('xero_sync_log') // We might want to rename this table to generic 'sync_log' later
+        .from('integration_sync_log') // We might want to rename this table to generic 'sync_log' later
         .select('*')
         .order('created_at', { ascending: false })
         .limit(10);

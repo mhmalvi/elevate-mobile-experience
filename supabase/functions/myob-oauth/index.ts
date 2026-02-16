@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createCorsResponse, getCorsHeaders } from "../_shared/cors.ts";
 import { encryptToken, decryptToken } from "../_shared/encryption.ts";
 import { signState, verifyState } from "../_shared/oauth-security.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 const MYOB_CLIENT_ID = Deno.env.get("MYOB_CLIENT_ID")!;
 const MYOB_CLIENT_SECRET = Deno.env.get("MYOB_CLIENT_SECRET")!;
@@ -58,6 +59,15 @@ serve(async (req) => {
             const { data: { user }, error } = await supabase.auth.getUser(token);
             if (error || !user) throw new Error("Invalid user token");
 
+            // Rate limiting
+            const rateLimit = await checkRateLimit(supabase, user.id, 'myob-oauth', 10, 60);
+            if (rateLimit.limited) {
+                return new Response(
+                    JSON.stringify({ error: "Too many requests. Please try again later." }),
+                    { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+            }
+
             // Use HMAC-signed state for CSRF protection
             const state = await signState({ userId: user.id, provider: 'myob' });
 
@@ -87,6 +97,15 @@ serve(async (req) => {
 
             const userId = verification.data!.userId;
             if (!userId) throw new Error("Missing userId in state");
+
+            // Rate limiting
+            const rateLimitCallback = await checkRateLimit(supabase, userId, 'myob-oauth', 10, 60);
+            if (rateLimitCallback.limited) {
+                return new Response(
+                    JSON.stringify({ error: "Too many requests. Please try again later." }),
+                    { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+            }
 
             // Exchange code for tokens
             const tokenResponse = await fetch("https://secure.myob.com/oauth2/v1/authorize", {
@@ -174,6 +193,15 @@ serve(async (req) => {
             const { data: { user }, error } = await supabase.auth.getUser(token);
             if (error || !user) throw new Error("Invalid user token");
 
+            // Rate limiting
+            const rateLimitRefresh = await checkRateLimit(supabase, user.id, 'myob-oauth', 10, 60);
+            if (rateLimitRefresh.limited) {
+                return new Response(
+                    JSON.stringify({ error: "Too many requests. Please try again later." }),
+                    { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+            }
+
             // Get current refresh token
             const { data: profile } = await supabase
                 .from("profiles")
@@ -240,6 +268,15 @@ serve(async (req) => {
             const token = authHeader.replace("Bearer ", "");
             const { data: { user }, error } = await supabase.auth.getUser(token);
             if (error || !user) throw new Error("Invalid user token");
+
+            // Rate limiting
+            const rateLimitDisconnect = await checkRateLimit(supabase, user.id, 'myob-oauth', 10, 60);
+            if (rateLimitDisconnect.limited) {
+                return new Response(
+                    JSON.stringify({ error: "Too many requests. Please try again later." }),
+                    { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+            }
 
             // Clear tokens from DB
             await supabase.from("profiles").update({

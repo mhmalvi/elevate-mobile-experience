@@ -1,0 +1,19 @@
+{
+  "name": "TradieMate - Job Management for Trades",
+  "short_name": "TradieMate",
+  "description": "Manage quotes, jobs, and invoices on the go. Built for tradespeople.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0f1419",
+  "theme_color": "#0f1419",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "categories": ["business", "productivity"]
+}
