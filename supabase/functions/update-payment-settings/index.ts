@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 import { encryptBankDetails, BankAccountDetails } from "../_shared/encryption.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface UpdatePaymentSettingsRequest {
   bank_name?: string;
@@ -50,6 +51,15 @@ serve(async (req) => {
     }
 
     logStep('User authenticated', { userId: user.id });
+
+    // Rate limiting
+    const rateLimit = await checkRateLimit(supabaseClient, user.id, 'update-payment-settings', 10, 60);
+    if (rateLimit.limited) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Parse request body
     const body: UpdatePaymentSettingsRequest = await req.json();

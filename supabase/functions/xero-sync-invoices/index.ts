@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/encryption.ts";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface XeroLineItem {
   Description: string;
@@ -67,6 +68,15 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Rate limiting
+    const rateLimit = await checkRateLimit(supabase, user.id, 'xero-sync-invoices', 10, 60);
+    if (rateLimit.limited) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -306,7 +316,7 @@ serve(async (req) => {
             })
             .eq("id", invoice.id);
 
-          await supabase.from("xero_sync_log").insert({
+          await supabase.from("integration_sync_log").insert({
             user_id: user.id,
             entity_type: "invoice",
             entity_id: invoice.id,
@@ -339,7 +349,7 @@ serve(async (req) => {
           .eq("id", invoice.id);
 
         // Log success
-        await supabase.from("xero_sync_log").insert({
+        await supabase.from("integration_sync_log").insert({
           user_id: user.id,
           entity_type: "invoice",
           entity_id: invoice.id,
@@ -362,7 +372,7 @@ serve(async (req) => {
           })
           .eq("id", invoice.id);
 
-        await supabase.from("xero_sync_log").insert({
+        await supabase.from("integration_sync_log").insert({
           user_id: user.id,
           entity_type: "invoice",
           entity_id: invoice.id,

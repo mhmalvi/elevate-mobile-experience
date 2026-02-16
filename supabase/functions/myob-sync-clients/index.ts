@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/encryption.ts";
 import { getCorsHeaders, createCorsResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 const MYOB_CLIENT_ID = Deno.env.get("MYOB_CLIENT_ID")!;
 
@@ -34,6 +35,15 @@ serve(async (req) => {
             return new Response(
                 JSON.stringify({ error: "Unauthorized" }),
                 { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
+        // Rate limiting
+        const rateLimit = await checkRateLimit(supabase, user.id, 'myob-sync-clients', 10, 60);
+        if (rateLimit.limited) {
+            return new Response(
+                JSON.stringify({ error: "Too many requests. Please try again later." }),
+                { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }
 
@@ -218,7 +228,7 @@ serve(async (req) => {
                         myob_sync_error: `MYOB API error: ${errorText.substring(0, 200)}`,
                     }).eq("id", client.id);
 
-                    await supabase.from("xero_sync_log").insert({
+                    await supabase.from("integration_sync_log").insert({
                         user_id: user.id,
                         entity_type: "myob_client",
                         entity_id: client.id,
@@ -264,7 +274,7 @@ serve(async (req) => {
                 }).eq("id", client.id);
 
                 // Log success
-                await supabase.from("xero_sync_log").insert({
+                await supabase.from("integration_sync_log").insert({
                     user_id: user.id,
                     entity_type: "myob_client",
                     entity_id: client.id,
@@ -283,7 +293,7 @@ serve(async (req) => {
                     myob_sync_error: errorMessage.substring(0, 200),
                 }).eq("id", client.id);
 
-                await supabase.from("xero_sync_log").insert({
+                await supabase.from("integration_sync_log").insert({
                     user_id: user.id,
                     entity_type: "myob_client",
                     entity_id: client.id,

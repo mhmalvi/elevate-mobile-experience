@@ -88,7 +88,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AuthRedirect() {
   const [searchParams] = useSearchParams();
   const redirectParam = searchParams.get('redirect');
-  const redirectTo = redirectParam ? decodeURIComponent(redirectParam) : '/dashboard';
+  let redirectTo = '/dashboard';
+  if (redirectParam) {
+    const decoded = decodeURIComponent(redirectParam);
+    // Prevent open redirect: only allow relative paths starting with /
+    if (decoded.startsWith('/') && !decoded.startsWith('//')) {
+      redirectTo = decoded;
+    }
+  }
   return <Navigate to={redirectTo} replace />;
 }
 
@@ -167,7 +174,7 @@ function AppRoutes() {
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
-      <ReactQueryDevtools initialIsOpen={false} />
+      {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
         <TooltipProvider>
           <Toaster />

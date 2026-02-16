@@ -48,16 +48,13 @@ const LOCAL_NETWORK_PATTERNS = [
 export function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get('origin') || '';
 
-  // Allow all Vercel deployments (preview and production)
-  // Also allow all local development
-  // And allow specific production domains
+  // Check against whitelisted origins, dev origins, and local network patterns
+  const isWhitelisted = ALLOWED_ORIGINS.includes(origin);
+  const isDev = DEV_ORIGINS.includes(origin);
+  const isCapacitor = origin === 'capacitor://localhost' || origin === 'ionic://localhost';
+  const isLocalNetwork = LOCAL_NETWORK_PATTERNS.some(pattern => pattern.test(origin));
 
-  const isVercel = origin.includes('.vercel.app');
-  const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1');
-  const isProduction = ALLOWED_ORIGINS.includes(origin);
-
-  // If it matches any of our broad patterns, allow it
-  const isAllowed = isVercel || isLocal || isProduction;
+  const isAllowed = isWhitelisted || isDev || isCapacitor || isLocalNetwork;
 
   // Log for debugging CORS issues
   if (!isAllowed && origin) {
