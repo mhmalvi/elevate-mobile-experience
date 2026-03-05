@@ -1279,7 +1279,6 @@ export class SyncManager {
             .from(tableName)
             .select('*', { count: 'exact' })
             .in(parentFkField, parentIdBatch)
-            .is('deleted_at', null)
             .order('created_at', { ascending: false })
             .range(offset, offset + pageSize - 1);
 
