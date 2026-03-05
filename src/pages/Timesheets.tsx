@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { Button } from '@/components/ui/button';
@@ -14,14 +14,13 @@ import {
 } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
 import { useTeam } from '@/hooks/useTeam';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { useTimesheets } from '@/hooks/queries/useTimesheets';
 import { cn } from '@/lib/utils';
+import { TimesheetListItem } from '@/components/list-items';
 import {
   Clock,
   Plus,
   ArrowLeft,
-  Calendar,
   User,
   ChevronRight,
   CheckCircle2,
@@ -29,26 +28,9 @@ import {
   FileEdit,
   XCircle,
 } from 'lucide-react';
-import { format, startOfWeek, addDays, parseISO, isThisWeek } from 'date-fns';
+import { format, addDays, parseISO, isThisWeek } from 'date-fns';
 
-interface Timesheet {
-  id: string;
-  user_id: string;
-  team_id: string | null;
-  member_id: string;
-  week_starting: string;
-  status: string;
-  total_hours: number;
-  notes: string | null;
-  approved_by: string | null;
-  approved_at: string | null;
-  submitted_at: string | null;
-  created_at: string;
-  member_email?: string;
-  member_name?: string;
-}
-
-const statusConfig: Record<string, { icon: any; color: string }> = {
+const statusConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string }> = {
   draft: { icon: FileEdit, color: 'text-muted-foreground' },
   submitted: { icon: Send, color: 'text-blue-500' },
   approved: { icon: CheckCircle2, color: 'text-green-500' },
@@ -58,55 +40,22 @@ const statusConfig: Record<string, { icon: any; color: string }> = {
 export default function Timesheets() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { team, teamMembers, canManageTeam } = useTeam();
-  const { toast } = useToast();
-  const [timesheets, setTimesheets] = useState<Timesheet[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { teamMembers, canManageTeam } = useTeam();
+  const { data: rawTimesheets = [], isLoading: loading } = useTimesheets();
   const [filterMember, setFilterMember] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
-  useEffect(() => {
-    if (user) fetchTimesheets();
-  }, [user]);
-
-  const fetchTimesheets = async () => {
-    const { data, error } = await (supabase as any)
-      .from('timesheets')
-      .select('*')
-      .or(`user_id.eq.${user?.id},member_id.eq.${user?.id}`)
-      .order('week_starting', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching timesheets:', error);
-      toast({ title: 'Error loading timesheets', description: error.message, variant: 'destructive' });
-    } else {
-      // Enrich with member info from teamMembers
-      const enriched = (data || []).map((ts: Timesheet) => {
-        const member = teamMembers.find(m => m.user_id === ts.member_id);
-        return {
-          ...ts,
-          member_email: member?.profiles?.email || '',
-          member_name: member?.profiles?.business_name || member?.profiles?.email || 'You',
-        };
-      });
-      setTimesheets(enriched);
-    }
-    setLoading(false);
-  };
-
-  // Re-enrich when teamMembers load
-  useEffect(() => {
-    if (teamMembers.length > 0 && timesheets.length > 0) {
-      setTimesheets(prev => prev.map(ts => {
-        const member = teamMembers.find(m => m.user_id === ts.member_id);
-        return {
-          ...ts,
-          member_email: member?.profiles?.email || '',
-          member_name: member?.profiles?.business_name || member?.profiles?.email || 'You',
-        };
-      }));
-    }
-  }, [teamMembers]);
+  // Enrich timesheets with member info from teamMembers
+  const timesheets = useMemo(() => {
+    return rawTimesheets.map(ts => {
+      const member = teamMembers.find(m => m.user_id === ts.member_id);
+      return {
+        ...ts,
+        member_email: member?.profiles?.email || '',
+        member_name: member?.profiles?.business_name || member?.profiles?.email || 'You',
+      };
+    });
+  }, [rawTimesheets, teamMembers]);
 
   const filtered = useMemo(() => {
     return timesheets.filter(ts => {
@@ -116,36 +65,8 @@ export default function Timesheets() {
     });
   }, [timesheets, filterMember, filterStatus]);
 
-  const handleCreateTimesheet = async () => {
-    if (!user) return;
-    // Calculate current week's Monday
-    const monday = startOfWeek(new Date(), { weekStartsOn: 1 });
-    const weekStr = format(monday, 'yyyy-MM-dd');
-
-    // Check if one already exists for this week
-    const existing = timesheets.find(
-      ts => ts.member_id === user.id && ts.week_starting === weekStr
-    );
-    if (existing) {
-      navigate(`/timesheets/${existing.id}`);
-      return;
-    }
-
-    // Create new timesheet
-    const { data, error } = await (supabase as any).from('timesheets').insert({
-      user_id: user.id,
-      team_id: team?.id || null,
-      member_id: user.id,
-      week_starting: weekStr,
-      status: 'draft',
-      total_hours: 0,
-    }).select().single();
-
-    if (error) {
-      toast({ title: 'Error creating timesheet', description: error.message, variant: 'destructive' });
-    } else {
-      navigate(`/timesheets/${data.id}`);
-    }
+  const handleCreateTimesheet = () => {
+    navigate('/timesheets/new');
   };
 
   const formatWeekRange = (weekStarting: string) => {
@@ -248,65 +169,15 @@ export default function Timesheets() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filtered.map((ts, index) => {
-                const StatusIcon = statusConfig[ts.status]?.icon || FileEdit;
-                const statusColor = statusConfig[ts.status]?.color || 'text-muted-foreground';
-                const isCurrent = isThisWeek(parseISO(ts.week_starting), { weekStartsOn: 1 });
-
-                return (
-                  <button
-                    key={ts.id}
-                    onClick={() => navigate(`/timesheets/${ts.id}`)}
-                    className={cn(
-                      "w-full p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 text-left",
-                      "hover:bg-card hover:border-primary/20 hover:shadow-lg",
-                      "transition-all duration-300 animate-fade-in",
-                      isCurrent && "ring-1 ring-primary/30"
-                    )}
-                    style={{ animationDelay: `${index * 0.05}s` }}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-start gap-3 min-w-0 flex-1">
-                        <div className={cn(
-                          "w-11 h-11 rounded-xl flex items-center justify-center shrink-0",
-                          ts.status === 'approved' ? 'bg-green-500/10' :
-                          ts.status === 'submitted' ? 'bg-blue-500/10' :
-                          ts.status === 'rejected' ? 'bg-destructive/10' :
-                          'bg-primary/10'
-                        )}>
-                          <StatusIcon className={cn("w-5 h-5", statusColor)} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-foreground text-sm">
-                              {formatWeekRange(ts.week_starting)}
-                            </h3>
-                            {isCurrent && (
-                              <span className="text-[10px] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-md">
-                                THIS WEEK
-                              </span>
-                            )}
-                          </div>
-                          {canManageTeam && ts.member_id !== user?.id && (
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                              <User className="w-3 h-3" />
-                              <span className="truncate">{ts.member_name}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-3 mt-1.5">
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                              <Clock className="w-3 h-3" />
-                              <span className="font-medium">{Number(ts.total_hours).toFixed(1)}h</span>
-                            </div>
-                            <StatusBadge status={ts.status} />
-                          </div>
-                        </div>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                    </div>
-                  </button>
-                );
-              })}
+              {filtered.map((ts, index) => (
+                <TimesheetListItem
+                  key={ts.id}
+                  timesheet={ts}
+                  index={index}
+                  currentUserId={user?.id}
+                  canManageTeam={canManageTeam}
+                />
+              ))}
             </div>
           )}
         </div>

@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
@@ -9,7 +7,6 @@ import { Timer } from '@/components/ui/timer';
 import { VoiceRecorder } from '@/components/ui/voice-recorder';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn, safeNumber } from '@/lib/utils';
-import { compressImages } from '@/lib/utils/imageCompression';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,260 +18,36 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
 import { User, MapPin, Calendar, Receipt, Camera, Loader2, Image, Play, CheckCircle, TrendingUp, TrendingDown, Trash2, ArrowLeft, Briefcase, Edit, Users } from 'lucide-react';
 import { format } from 'date-fns';
-import { useTeam } from '@/hooks/useTeam';
+import { useJobDetail } from '@/hooks/useJobDetail';
 
 const JOB_STATUSES = ['quoted', 'approved', 'scheduled', 'in_progress', 'completed', 'invoiced'] as const;
 
 export default function JobDetail() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [job, setJob] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [materialCost, setMaterialCost] = useState('');
-  const [savingMaterials, setSavingMaterials] = useState(false);
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [voiceNotes, setVoiceNotes] = useState<{ url: string; duration: number; name: string }[]>([]);
-  const { teamMembers } = useTeam();
-
-  useEffect(() => {
-    if (user && id) {
-      fetchJob();
-      fetchPhotos();
-      fetchVoiceNotes();
-    }
-  }, [user, id]);
-
-  const fetchJob = async () => {
-    const { data } = await supabase
-      .from('jobs')
-      .select('*, clients(name, email, phone), quotes(quote_number, total, subtotal)')
-      .eq('id', id)
-      .single();
-    setJob(data);
-    setMaterialCost(data?.material_costs?.toString() || '');
-    setLoading(false);
-  };
-
-  const fetchPhotos = async () => {
-    const { data } = await supabase.storage
-      .from('job-photos')
-      .list(`${id}`, { limit: 20 });
-
-    if (data && data.length > 0) {
-      const urls = data.map(file => {
-        const { data: urlData } = supabase.storage
-          .from('job-photos')
-          .getPublicUrl(`${id}/${file.name}`);
-        return urlData.publicUrl;
-      });
-      setPhotos(urls);
-    }
-  };
-
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || !id) return;
-
-    setUploading(true);
-
-    try {
-      // Compress images before upload to save mobile data
-      const compressedFiles = await compressImages(Array.from(files));
-
-      for (const file of compressedFiles) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
-        const filePath = `${id}/${fileName}`;
-
-        const { error } = await supabase.storage
-          .from('job-photos')
-          .upload(filePath, file);
-
-        if (error) {
-          toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
-        }
-      }
-
-      await fetchPhotos();
-      toast({ title: 'Photos uploaded! 📸' });
-    } catch (error) {
-      toast({ title: 'Compression failed', description: 'Could not process images', variant: 'destructive' });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const fetchVoiceNotes = async () => {
-    const { data } = await supabase.storage
-      .from('job-voice-notes')
-      .list(`${id}`, { limit: 20 });
-
-    if (data && data.length > 0) {
-      const notes = data.map(file => {
-        const { data: urlData } = supabase.storage
-          .from('job-voice-notes')
-          .getPublicUrl(`${id}/${file.name}`);
-        // Extract duration from filename if stored (format: timestamp-duration.webm)
-        const durationMatch = file.name.match(/-(\d+)\.webm$/);
-        return {
-          url: urlData.publicUrl,
-          duration: durationMatch ? parseInt(durationMatch[1]) : 0,
-          name: file.name,
-        };
-      });
-      setVoiceNotes(notes);
-    }
-  };
-
-  const handleSaveVoiceNote = async (audioBlob: Blob, duration: number) => {
-    if (!id) return;
-
-    const fileName = `${Date.now()}-${duration}.webm`;
-    const filePath = `${id}/${fileName}`;
-
-    const { error } = await supabase.storage
-      .from('job-voice-notes')
-      .upload(filePath, audioBlob, { contentType: 'audio/webm' });
-
-    if (error) {
-      toast({ title: 'Upload failed', description: error.message, variant: 'destructive' });
-      throw error;
-    }
-
-    await fetchVoiceNotes();
-    toast({ title: 'Voice note saved! 🎙️' });
-  };
-
-  const handleDeleteVoiceNote = async (name: string) => {
-    if (!id) return;
-
-    const { error } = await supabase.storage
-      .from('job-voice-notes')
-      .remove([`${id}/${name}`]);
-
-    if (!error) {
-      setVoiceNotes(voiceNotes.filter(n => n.name !== name));
-      toast({ title: 'Voice note removed' });
-    }
-  };
-
-  const handleDeletePhoto = async (photoUrl: string) => {
-    const fileName = photoUrl.split('/').pop();
-    if (!fileName || !id) return;
-
-    const { error } = await supabase.storage
-      .from('job-photos')
-      .remove([`${id}/${fileName}`]);
-
-    if (!error) {
-      setPhotos(photos.filter(p => p !== photoUrl));
-      toast({ title: 'Photo removed' });
-    }
-  };
-
-  const updateStatus = async (status: string) => {
-    const updates: any = { status };
-    if (status === 'completed') updates.completed_at = new Date().toISOString();
-
-    const { error } = await supabase.from('jobs').update(updates).eq('id', id);
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Status updated' });
-      fetchJob();
-    }
-  };
-
-  const handleTimeUpdate = async (seconds: number) => {
-    const hours = seconds / 3600;
-    await supabase.from('jobs').update({ actual_hours: hours }).eq('id', id);
-  };
-
-  const saveMaterialCost = async () => {
-    setSavingMaterials(true);
-    const cost = parseFloat(materialCost) || 0;
-    const { error } = await supabase.from('jobs').update({ material_costs: cost }).eq('id', id);
-
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Material costs saved' });
-    }
-    setSavingMaterials(false);
-  };
-
-  const handleDeleteJob = async () => {
-    const { error } = await supabase.from('jobs').delete().eq('id', id);
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Job deleted' });
-      navigate('/jobs');
-    }
-  };
-
-  const createInvoice = async () => {
-    if (!job) return;
-
-    const invoiceNumber = `INV${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-    const total = job.quotes?.total || 0;
-    const subtotal = total / 1.1;
-    const gst = total - subtotal;
-
-    const { data: invoice, error } = await supabase.from('invoices').insert({
-      user_id: user?.id,
-      client_id: job.client_id,
-      job_id: job.id,
-      quote_id: job.quote_id,
-      invoice_number: invoiceNumber,
-      title: job.title,
-      description: job.description,
-      subtotal,
-      gst,
-      total,
-      status: 'draft',
-    }).select().single();
-
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      await updateStatus('invoiced');
-      toast({ title: 'Invoice created! 🎉' });
-      navigate(`/invoices/${invoice.id}`);
-    }
-  };
-
-  const calculateCosting = () => {
-    if (!job?.quotes) return null;
-
-    const quotedTotal = Number(job.quotes.total) || 0;
-    const labourHours = job.actual_hours || 0;
-    const hourlyRate = 85;
-    const labourCost = labourHours * hourlyRate;
-    const materialsCost = Number(job.material_costs) || 0;
-    const actualCost = labourCost + materialsCost;
-    const profit = quotedTotal - actualCost;
-    const profitMargin = quotedTotal > 0 ? (profit / quotedTotal) * 100 : 0;
-
-    return {
-      quotedTotal,
-      labourCost,
-      materialsCost,
-      actualCost,
-      profit,
-      profitMargin,
-    };
-  };
-
-  const costing = calculateCosting();
+  const {
+    id,
+    job,
+    loading,
+    materialCost,
+    setMaterialCost,
+    photos,
+    uploading,
+    voiceNotes,
+    savingMaterials,
+    costing,
+    teamMembers,
+    handlePhotoUpload,
+    handleDeletePhoto,
+    handleSaveVoiceNote,
+    handleDeleteVoiceNote,
+    updateStatus,
+    handleTimeUpdate,
+    saveMaterialCost,
+    handleDeleteJob,
+    createInvoice,
+    navigate,
+  } = useJobDetail();
 
   if (loading || !job) {
     return (
@@ -421,7 +194,7 @@ export default function JobDetail() {
                       rel="noopener noreferrer"
                       className="text-xs text-primary font-bold hover:underline mt-1 inline-block"
                     >
-                      Get Directions →
+                      Get Directions &rarr;
                     </a>
                   </div>
                 </div>
@@ -498,6 +271,8 @@ export default function JobDetail() {
                     <img
                       src={photo}
                       alt={`Job photo ${index + 1}`}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -569,7 +344,7 @@ export default function JobDetail() {
                     <span className="font-bold">${costing.quotedTotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-center text-destructive/80 font-medium">
-                    <span>Labour ({job.actual_hours?.toFixed(1) || 0}h × $85)</span>
+                    <span>Labour ({job.actual_hours?.toFixed(1) || 0}h x $85)</span>
                     <span>-${costing.labourCost.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-center text-destructive/80 font-medium">

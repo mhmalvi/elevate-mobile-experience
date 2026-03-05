@@ -25,7 +25,7 @@ interface XeroInvoice {
   LineItems: XeroLineItem[];
   InvoiceNumber?: string;
   Reference?: string;
-  Status: "DRAFT" | "SUBMITTED" | "AUTHORISED" | "PAID";
+  Status: "DRAFT" | "SUBMITTED" | "AUTHORISED";
   CurrencyCode?: string;
 }
 
@@ -35,6 +35,57 @@ interface XeroInvoicesResponse {
     InvoiceNumber: string;
     Status: string;
   }>;
+}
+
+// Mid-batch token refresh threshold: refresh proactively at 25 minutes
+// to avoid expiry during a long sync (Xero tokens last 30 minutes)
+const TOKEN_REFRESH_THRESHOLD_MS = 25 * 60 * 1000;
+
+/**
+ * Checks whether the Xero access token should be proactively refreshed
+ * based on elapsed time since last refresh, and performs the refresh if needed.
+ * Returns the current (possibly refreshed) access token.
+ */
+async function ensureFreshToken(
+  accessToken: string,
+  tokenObtainedAt: number,
+  supabase: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  authHeader: string,
+  userId: string,
+): Promise<{ accessToken: string; tokenObtainedAt: number }> {
+  const elapsed = Date.now() - tokenObtainedAt;
+  if (elapsed < TOKEN_REFRESH_THRESHOLD_MS) {
+    return { accessToken, tokenObtainedAt };
+  }
+
+  console.log(`Token age ${Math.round(elapsed / 1000)}s exceeds threshold, refreshing proactively...`);
+
+  const refreshResponse = await fetch(
+    `${supabaseUrl}/functions/v1/xero-oauth`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "refresh" }),
+    }
+  );
+
+  if (!refreshResponse.ok) {
+    throw new Error("Failed to refresh Xero token mid-batch. Please reconnect Xero.");
+  }
+
+  const { data: refreshedProfile } = await supabase
+    .from("profiles")
+    .select("xero_access_token")
+    .eq("user_id", userId)
+    .single();
+
+  const newToken = await decryptToken(refreshedProfile.xero_access_token);
+  console.log("Mid-batch token refresh successful.");
+  return { accessToken: newToken, tokenObtainedAt: Date.now() };
 }
 
 serve(async (req) => {
@@ -85,7 +136,7 @@ serve(async (req) => {
     // Get user's Xero credentials
     const { data: profile } = await supabase
       .from("profiles")
-      .select("xero_tenant_id, xero_access_token, xero_refresh_token, xero_token_expires_at, xero_sync_enabled")
+      .select("xero_tenant_id, xero_access_token, xero_refresh_token, xero_token_expires_at, xero_sync_enabled, xero_account_code, xero_tax_type")
       .eq("user_id", user.id)
       .single();
 
@@ -98,18 +149,22 @@ serve(async (req) => {
 
     // Decrypt the access token
     let accessToken = await decryptToken(profile.xero_access_token);
+    // Track when we obtained/refreshed the token for mid-batch refresh logic
+    let tokenObtainedAt = Date.now();
 
-    // Check if token needs refresh
+    // Check if token is already expired and needs immediate refresh
     if (new Date(profile.xero_token_expires_at) < new Date()) {
       console.log("Access token expired, refreshing...");
 
       const refreshResponse = await fetch(
-        `${supabaseUrl}/functions/v1/xero-oauth?action=refresh`,
+        `${supabaseUrl}/functions/v1/xero-oauth`,
         {
-          method: "GET",
+          method: "POST",
           headers: {
             "Authorization": authHeader,
+            "Content-Type": "application/json",
           },
+          body: JSON.stringify({ action: "refresh" }),
         }
       );
 
@@ -127,21 +182,43 @@ serve(async (req) => {
         .single();
 
       accessToken = await decryptToken(refreshedProfile.xero_access_token);
+      tokenObtainedAt = Date.now();
+    } else {
+      // Token not yet expired -- estimate how long ago it was obtained
+      // so mid-batch refresh triggers at the right time.
+      // Xero tokens last 30 minutes, so age = 30min - remaining time.
+      const remainingMs = new Date(profile.xero_token_expires_at).getTime() - Date.now();
+      const estimatedAge = (30 * 60 * 1000) - remainingMs;
+      tokenObtainedAt = Date.now() - Math.max(0, estimatedAge);
     }
 
     // Determine which invoices to sync
     let invoicesToSync: any[];
 
     if (sync_all) {
-      // Sync all invoices (sent or paid only, not drafts)
-      const { data: invoices } = await supabase
-        .from("invoices")
-        .select("*, clients(*)")
-        .eq("user_id", user.id)
-        .in("status", ["sent", "paid", "partially_paid"])
-        .is("deleted_at", null);
+      // Sync all invoices with pagination (Supabase default limit is 1000)
+      const PAGE_SIZE = 500;
+      let allInvoices: typeof invoicesToSync = [];
+      let from = 0;
+      let hasMore = true;
 
-      invoicesToSync = invoices || [];
+      while (hasMore) {
+        const { data: page } = await supabase
+          .from("invoices")
+          .select("*, clients(*)")
+          .eq("user_id", user.id)
+          .in("status", ["sent", "paid", "partially_paid"])
+          .is("deleted_at", null)
+          .range(from, from + PAGE_SIZE - 1);
+
+        const results = page || [];
+        allInvoices = allInvoices.concat(results);
+        hasMore = results.length === PAGE_SIZE;
+        from += PAGE_SIZE;
+      }
+
+      invoicesToSync = allInvoices;
+      console.log(`Fetched ${invoicesToSync.length} invoices to sync (paginated).`);
     } else if (invoice_id) {
       // Sync specific invoice
       const { data: invoice } = await supabase
@@ -175,6 +252,11 @@ serve(async (req) => {
     // Sync each invoice to Xero
     for (const invoice of invoicesToSync) {
       try {
+        // Proactively refresh token if approaching expiry (25 min threshold)
+        ({ accessToken, tokenObtainedAt } = await ensureFreshToken(
+          accessToken, tokenObtainedAt, supabase, supabaseUrl, authHeader, user.id
+        ));
+
         // Ensure client has Xero contact ID
         if (!invoice.clients?.xero_contact_id) {
           // Try to sync client first
@@ -211,7 +293,6 @@ serve(async (req) => {
         }
 
         // Parse line items (stored as JSONB)
-        // Parse line items (stored as JSONB)
         let lineItems = invoice.line_items || [];
 
         // If no line items, create a default one using the invoice total
@@ -220,26 +301,32 @@ serve(async (req) => {
           lineItems = [{
             description: "Services",
             quantity: 1,
-            unit_price: invoice.total_amount || 0
+            unit_price: invoice.total || 0
           }];
         }
+
+        // Default Australian GST settings - configurable per user in future
+        // TODO: Add xero_account_code and xero_tax_type columns to profiles table for per-user configuration
+        const accountCode = profile?.xero_account_code || "200"; // 200 = Sales (Xero AU default)
+        const taxType = profile?.xero_tax_type || "OUTPUT"; // OUTPUT = GST on Income (AU default)
 
         // Build Xero line items
         const xeroLineItems: XeroLineItem[] = lineItems.map((item: any) => ({
           Description: item.description || "Service",
           Quantity: item.quantity || 1,
           UnitAmount: item.unit_price || 0,
-          AccountCode: "200", // Sales - adjust based on your Xero account
-          TaxType: "OUTPUT", // GST on sales (Australia)
+          AccountCode: accountCode,
+          TaxType: taxType,
         }));
 
         // Determine invoice status
-        let xeroStatus: "DRAFT" | "SUBMITTED" | "AUTHORISED" | "PAID" = "AUTHORISED";
+        // NOTE: Xero API does not support creating invoices with Status: "PAID" directly.
+        // Paid invoices must be created as AUTHORISED, then a payment allocation added
+        // via the Xero Payments endpoint. For now, we create paid invoices as AUTHORISED.
+        let xeroStatus: "DRAFT" | "SUBMITTED" | "AUTHORISED" = "AUTHORISED";
         if (invoice.status === "draft") {
           xeroStatus = "DRAFT";
-        } else if (invoice.status === "paid") {
-          xeroStatus = "PAID";
-        } else if (invoice.status === "sent" || invoice.status === "partially_paid") {
+        } else if (invoice.status === "paid" || invoice.status === "sent" || invoice.status === "partially_paid") {
           xeroStatus = "AUTHORISED";
         }
 
@@ -266,27 +353,20 @@ serve(async (req) => {
         let xeroResponse;
 
         if (xeroInvoiceId) {
-          // Update existing invoice (only if not paid)
-          if (xeroStatus !== "PAID") {
-            xeroResponse = await fetch(
-              `https://api.xero.com/api.xro/2.0/Invoices/${xeroInvoiceId}`,
-              {
-                method: "POST",
-                headers: {
-                  "Authorization": `Bearer ${accessToken}`,
-                  "Xero-Tenant-Id": profile.xero_tenant_id,
-                  "Content-Type": "application/json",
-                  "Accept": "application/json",
-                },
-                body: JSON.stringify({ Invoices: [xeroInvoice] }),
-              }
-            );
-          } else {
-            // Can't update paid invoices, skip
-            console.log(`Invoice ${invoice.invoice_number} already paid in Xero, skipping update`);
-            results.success++;
-            continue;
-          }
+          // Update existing invoice in Xero
+          xeroResponse = await fetch(
+            `https://api.xero.com/api.xro/2.0/Invoices/${xeroInvoiceId}`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${accessToken}`,
+                "Xero-Tenant-Id": profile.xero_tenant_id,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+              },
+              body: JSON.stringify({ Invoices: [xeroInvoice] }),
+            }
+          );
         } else {
           // Create new invoice
           xeroResponse = await fetch(

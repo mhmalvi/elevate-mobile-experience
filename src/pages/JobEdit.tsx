@@ -29,7 +29,7 @@ export default function JobEdit() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { teamMembers } = useTeam();
+  const { team, teamMembers } = useTeam();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [clients, setClients] = useState<Client[]>([]);
@@ -54,11 +54,13 @@ export default function JobEdit() {
   }, [user, id]);
 
   const fetchClients = async () => {
-    const { data } = await supabase
+    let query = supabase
       .from('clients')
       .select('*')
       .eq('user_id', user?.id)
-      .order('name');
+      .is('deleted_at', null);
+    if (team?.id) query = query.eq('team_id', team.id);
+    const { data } = await query.order('name');
     setClients(data || []);
   };
 
@@ -103,7 +105,7 @@ export default function JobEdit() {
         description: form.description,
         site_address: form.site_address,
         scheduled_date: form.scheduled_date || null,
-        status: form.status as any,
+        status: form.status,
         notes: form.notes,
         actual_hours: form.actual_hours,
         material_costs: form.material_costs,

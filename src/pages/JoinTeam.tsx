@@ -55,12 +55,6 @@ export default function JoinTeam() {
   };
 
   const handleAccept = async () => {
-    // DEBUG: Immediate feedback to verify button click is working
-    console.log('=== handleAccept CALLED ===');
-    console.log('authLoading:', authLoading);
-    console.log('user:', user?.email || 'null');
-    console.log('token:', token);
-
     // Wait for auth to be ready
     if (authLoading) {
       toast({
@@ -71,7 +65,6 @@ export default function JoinTeam() {
     }
 
     if (!user) {
-      console.log('No user - redirecting to auth');
       toast({
         title: 'Please sign in',
         description: 'You need to be signed in to accept this invitation',
@@ -83,12 +76,8 @@ export default function JoinTeam() {
     }
 
     setAccepting(true);
-    console.log('Starting accept process...');
 
     try {
-      console.log('Accepting invitation with token:', token);
-      console.log('User is:', user.email);
-
       const { data, error } = await supabase.functions.invoke('accept-team-invitation', {
         body: {
           action: 'accept',  // Explicitly specify accept action
@@ -96,17 +85,13 @@ export default function JoinTeam() {
         },
       });
 
-      console.log('Accept response:', { data, error });
-
       // Check for invoke-level error
       if (error) {
-        console.error('Invoke error:', error);
         throw new Error(error.message || 'Failed to accept invitation');
       }
 
       // Check for error in response body
       if (data?.error) {
-        console.error('Response error:', data.error);
         throw new Error(data.error);
       }
 
@@ -177,7 +162,7 @@ export default function JoinTeam() {
     );
   }
 
-  const teamName = invitation?.team_name || (invitation?.teams as any)?.name || 'the team';
+  const teamName = invitation?.team_name || (invitation?.teams as { name?: string } | null)?.name || 'the team';
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">

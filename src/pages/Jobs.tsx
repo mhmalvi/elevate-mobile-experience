@@ -13,6 +13,7 @@ import { useTeam } from '@/hooks/useTeam';
 import { useOfflineJobs } from '@/lib/offline/offlineHooks';
 import { cn } from '@/lib/utils';
 
+import { JobListItem } from '@/components/list-items';
 import {
   Briefcase,
   Calendar,
@@ -44,7 +45,7 @@ export default function Jobs() {
   const filteredJobs = useMemo(() => {
     let result = jobs;
     if (filterMember) {
-      result = result.filter((job: any) => job.assigned_to === filterMember);
+      result = result.filter((job) => job.assigned_to === filterMember);
     }
     if (search.trim()) {
       const term = search.toLowerCase();
@@ -79,6 +80,7 @@ export default function Jobs() {
             <div className="absolute top-8 right-4 flex items-center gap-3">
               <button
                 onClick={() => navigate('/jobs/new')}
+                aria-label="Create new job"
                 className="p-2.5 rounded-full bg-primary shadow-premium hover:bg-primary/90 transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 <Plus className="w-6 h-6 text-primary-foreground" />
@@ -157,7 +159,7 @@ export default function Jobs() {
             <ListSkeleton count={5} />
           ) : viewMode === 'calendar' ? (
             <JobCalendarView
-              jobs={jobs as any}
+              jobs={jobs as React.ComponentProps<typeof JobCalendarView>['jobs']}
               selectedDate={selectedDate}
               onSelectDate={setSelectedDate}
               filterMemberId={filterMember || undefined}
@@ -187,49 +189,7 @@ export default function Jobs() {
           ) : (
             <div className="space-y-3">
               {filteredJobs.map((job, index) => (
-                <button
-                  key={job.id}
-                  onClick={() => navigate(`/jobs/${job.id}`)}
-                  className={cn(
-                    "w-full p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50",
-                    "hover:bg-card hover:border-primary/20 hover:shadow-lg",
-                    "transition-all duration-300 group animate-fade-in text-left"
-                  )}
-                  style={{ animationDelay: `${index * 0.05}s` }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
-                        <Briefcase className="w-5 h-5 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold truncate text-foreground">{job.title}</h3>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {job.clients?.name || 'No client assigned'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <StatusBadge status={job.status as any} />
-                      <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground pl-13">
-                    {job.scheduled_date && (
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5" />
-                        {format(new Date(job.scheduled_date), 'EEE, d MMM')}
-                      </div>
-                    )}
-                    {job.site_address && (
-                      <div className="flex items-center gap-1.5 truncate">
-                        <MapPin className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{job.site_address}</span>
-                      </div>
-                    )}
-                  </div>
-                </button>
+                <JobListItem key={job.id} job={job} index={index} />
               ))}
             </div>
           )}

@@ -52,10 +52,10 @@ export default function ProfileSettings() {
       return;
     }
 
-    if (passwords.new.length < 6) {
+    if (passwords.new.length < 8) {
       toast({
         title: 'Password too short',
-        description: 'Password must be at least 6 characters.',
+        description: 'Password must be at least 8 characters.',
         variant: 'destructive'
       });
       return;
@@ -124,7 +124,7 @@ export default function ProfileSettings() {
         title: 'Account deleted',
         description: 'Your account and all associated data have been permanently deleted.',
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Delete account error:', error);
       toast({
         title: 'Error',

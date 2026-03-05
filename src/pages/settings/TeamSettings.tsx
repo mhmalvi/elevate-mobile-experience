@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { z } from 'zod';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +29,10 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
+const inviteSchema = z.object({
+  email: z.string().email('Please enter a valid email address'),
+});
+
 export default function TeamSettings() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -40,13 +45,7 @@ export default function TeamSettings() {
   const [leaving, setLeaving] = useState(false);
 
   const handleLeaveTeam = async () => {
-    console.log("handleLeaveTeam initiated");
-    console.log("User:", user?.id);
-    console.log("UserRole:", userRole);
-    console.log("Team:", team?.id);
-
     if (!user || userRole === 'owner') {
-      console.log("Blocking leave team due to:", { hasUser: !!user, isOwner: userRole === 'owner' });
       return;
     }
 
@@ -56,16 +55,11 @@ export default function TeamSettings() {
         throw new Error('No team context found');
       }
 
-      console.log('Attempting to leave team:', team.id, team.name);
-
       const { data, error } = await supabase.functions.invoke('leave-team', {
         body: { team_id: team.id }
       });
 
-      console.log('Leave team response:', { data, error });
-
       if (error) {
-        console.error('Edge function error:', error);
         throw new Error(error.message || 'Failed to call leave-team function');
       }
 
@@ -80,7 +74,6 @@ export default function TeamSettings() {
       });
 
       // Refetch global team data to update context
-      console.log('Refetching team data...');
       await refetch();
 
       // Navigate to dashboard
@@ -105,6 +98,13 @@ export default function TeamSettings() {
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const result = inviteSchema.safeParse({ email: inviteEmail });
+    if (!result.success) {
+      const firstError = result.error.errors[0];
+      toast({ title: 'Validation error', description: firstError.message, variant: 'destructive' });
+      return;
+    }
 
     if (!inviteEmail) {
       toast({ title: 'Email required', variant: 'destructive' });
@@ -428,7 +428,6 @@ export default function TeamSettings() {
                       <AlertDialogAction
                         onClick={(e) => {
                           e.preventDefault();
-                          console.log("Leave Team button clicked");
                           handleLeaveTeam();
                         }}
                         className="bg-destructive hover:bg-destructive/90"
@@ -477,7 +476,7 @@ export default function TeamSettings() {
 
                 <div className="space-y-2">
                   <Label htmlFor="role" className="text-sm font-medium">Role</Label>
-                  <Select value={inviteRole} onValueChange={(v: any) => setInviteRole(v)}>
+                  <Select value={inviteRole} onValueChange={(v: string) => setInviteRole(v)}>
                     <SelectTrigger className="rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
