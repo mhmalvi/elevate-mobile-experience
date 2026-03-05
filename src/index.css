@@ -287,6 +287,10 @@
     padding-bottom: max(env(safe-area-inset-bottom, 16px), 16px);
   }
 
+  .nav-safe-area {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   .safe-top {
     padding-top: env(safe-area-inset-top, 0px);
   }
@@ -685,4 +689,19 @@
       hsl(var(--muted)) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
+}
+/* ============================================
+   Accessibility: Reduced Motion
+   WCAG 2.1 AA — 2.3.3 Animation from Interactions
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
