@@ -1,17 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Button } from '@/components/ui/button';
 import { SendNotificationButton } from '@/components/SendNotificationButton';
 import { PDFPreviewModal } from '@/components/PDFPreviewModal';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { copyToClipboard } from '@/lib/utils/clipboard';
 import { cn, safeNumber } from '@/lib/utils';
 import { Phone, Mail, DollarSign, Download, Share2, Loader2, Bell, RefreshCw, User, Clock, ArrowLeft, Edit, Receipt } from 'lucide-react';
-import { Tables } from '@/integrations/supabase/types';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,204 +19,30 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Input } from '@/components/ui/input';
-
-type Invoice = Tables<'invoices'>;
-type Client = Tables<'clients'>;
-
-interface LineItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unit_price: number;
-  total: number;
-  item_type: string;
-}
+import { useToast } from '@/hooks/use-toast';
+import { useInvoiceDetail } from '@/hooks/useInvoiceDetail';
 
 export default function InvoiceDetail() {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { toast } = useToast();
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [client, setClient] = useState<Client | null>(null);
-  const [lineItems, setLineItems] = useState<LineItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [downloadingPDF, setDownloadingPDF] = useState(false);
-  const [sendingReminder, setSendingReminder] = useState(false);
-
-  useEffect(() => {
-    if (id) {
-      fetchInvoice();
-    }
-  }, [id]);
-
-  // Check for payment status in URL and poll for webhook updates
-  useEffect(() => {
-    const paymentStatus = searchParams.get('payment');
-
-    if (paymentStatus === 'cancelled') {
-      toast({
-        title: 'Payment Cancelled',
-        description: 'Your payment was cancelled. You can try again anytime.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    if (paymentStatus === 'success') {
-      toast({
-        title: 'Payment Successful!',
-        description: 'Thank you for your payment. Updating invoice status...'
-      });
-
-      let pollAttempts = 0;
-      const maxPolls = 10;
-      const pollInterval = 2000;
-      let pollTimeoutId: NodeJS.Timeout;
-
-      const pollForUpdate = async () => {
-        pollAttempts++;
-
-        try {
-          const { data: invoiceData, error } = await supabase
-            .from('invoices')
-            .select('status, amount_paid, total')
-            .eq('id', id)
-            .single();
-
-          if (error) {
-            console.error('[InvoiceDetail] Error polling invoice:', error);
-          }
-
-          if (invoiceData) {
-            const isPaid = invoiceData.status === 'paid';
-            const isPartiallyPaid = invoiceData.status === 'partially_paid';
-
-            if (isPaid || isPartiallyPaid) {
-              fetchInvoice();
-              toast({
-                title: 'Invoice Updated',
-                description: isPaid ? 'Payment confirmed! Invoice is now marked as paid.' : 'Partial payment received.',
-                duration: 5000
-              });
-              return;
-            }
-          }
-
-          if (pollAttempts < maxPolls) {
-            pollTimeoutId = setTimeout(() => pollForUpdate(), pollInterval);
-          } else {
-            fetchInvoice();
-            toast({
-              title: 'Status Update Pending',
-              description: 'Payment was received. If status does not update, please refresh the page.',
-              variant: 'default',
-              duration: 7000
-            });
-          }
-        } catch (err) {
-          console.error('[InvoiceDetail] Error in polling:', err);
-        }
-      };
-
-      pollTimeoutId = setTimeout(() => pollForUpdate(), 1000);
-
-      return () => {
-        if (pollTimeoutId) {
-          clearTimeout(pollTimeoutId);
-        }
-      };
-    }
-  }, [searchParams, id]);
-
-  const fetchInvoice = async () => {
-    const { data: invoiceData, error } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error || !invoiceData) {
-      toast({ title: 'Invoice not found', variant: 'destructive' });
-      navigate('/invoices');
-      return;
-    }
-
-    setInvoice(invoiceData);
-
-    if (invoiceData.client_id) {
-      const { data: clientData } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', invoiceData.client_id)
-        .single();
-      setClient(clientData);
-    }
-
-    const { data: items } = await supabase
-      .from('invoice_line_items')
-      .select('*')
-      .eq('invoice_id', id)
-      .order('sort_order');
-
-    setLineItems(items || []);
-    setLoading(false);
-  };
-
-
-
-  const handleRecordPayment = async () => {
-    if (!invoice) return;
-
-    const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast({ title: 'Please enter a valid amount', variant: 'destructive' });
-      return;
-    }
-
-    const newAmountPaid = (invoice.amount_paid || 0) + amount;
-    const isPaidInFull = newAmountPaid >= (invoice.total || 0);
-
-    const updates: Partial<Invoice> = {
-      amount_paid: newAmountPaid,
-      status: isPaidInFull ? 'paid' : invoice.status,
-      paid_at: isPaidInFull ? new Date().toISOString() : invoice.paid_at
-    };
-
-    const { error } = await supabase
-      .from('invoices')
-      .update(updates)
-      .eq('id', invoice.id);
-
-    if (error) {
-      toast({ title: 'Error recording payment', variant: 'destructive' });
-    } else {
-      toast({
-        title: 'Payment recorded',
-        description: isPaidInFull ? 'Invoice marked as paid in full.' : `$${amount.toFixed(2)} recorded.`
-      });
-      setPaymentAmount('');
-      fetchInvoice();
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!invoice) return;
-
-    const { error } = await supabase
-      .from('invoices')
-      .delete()
-      .eq('id', invoice.id);
-
-    if (error) {
-      toast({ title: 'Error deleting invoice', variant: 'destructive' });
-    } else {
-      toast({ title: 'Invoice deleted' });
-      navigate('/invoices');
-    }
-  };
+  const {
+    id,
+    invoice,
+    client,
+    lineItems,
+    loading,
+    paymentAmount,
+    setPaymentAmount,
+    sendingReminder,
+    downloadingPDF,
+    balance,
+    isOverdue,
+    fetchInvoice,
+    handleRecordPayment,
+    handleDelete,
+    handlePrint,
+    handleSendReminder,
+    navigate,
+  } = useInvoiceDetail();
 
   if (loading) {
     return (
@@ -256,9 +78,6 @@ export default function InvoiceDetail() {
   }
 
   if (!invoice) return null;
-
-  const balance = (invoice.total || 0) - (invoice.amount_paid || 0);
-  const isOverdue = invoice.due_date && new Date(invoice.due_date) < new Date() && invoice.status !== 'paid';
 
   return (
     <MobileLayout showNav={false}>
@@ -383,7 +202,7 @@ export default function InvoiceDetail() {
                   </div>
                   <div className="mt-2 text-sm text-muted-foreground font-medium">
                     <span className="px-2 py-0.5 bg-muted/40 rounded-md">
-                      {item.quantity} × ${safeNumber(item.unit_price).toFixed(2)}
+                      {item.quantity} x ${safeNumber(item.unit_price).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -444,26 +263,7 @@ export default function InvoiceDetail() {
               variant="outline"
               className="h-14 rounded-2xl border-border/40 bg-card/40 backdrop-blur-sm"
               disabled={downloadingPDF}
-              onClick={async () => {
-                setDownloadingPDF(true);
-                try {
-                  const response = await supabase.functions.invoke('generate-pdf', {
-                    body: { type: 'invoice', id }
-                  });
-                  if (response.error) throw response.error;
-                  const printWindow = window.open('', '_blank');
-                  if (printWindow) {
-                    printWindow.document.write(response.data.html);
-                    printWindow.document.close();
-                    printWindow.print();
-                  }
-                } catch (error) {
-                  console.error('PDF generation error:', error);
-                  toast({ title: 'Error generating PDF', description: 'Please try again.', variant: 'destructive' });
-                } finally {
-                  setDownloadingPDF(false);
-                }
-              }}
+              onClick={handlePrint}
             >
               {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-5 h-5 mr-2 text-primary" />}
               PDF
@@ -473,7 +273,8 @@ export default function InvoiceDetail() {
               variant="outline"
               className="col-span-2 h-14 rounded-2xl border-border/40 bg-card/40 backdrop-blur-sm"
               onClick={async () => {
-                const url = `${window.location.origin}/i/${id}`;
+                const publicToken = invoice?.public_token || id;
+                const url = `${window.location.origin}/i/${publicToken}`;
                 const success = await copyToClipboard(url);
                 if (success) {
                   toast({ title: 'Link copied!', description: 'Share this link with your client.' });
@@ -505,20 +306,7 @@ export default function InvoiceDetail() {
                 variant="outline"
                 className="col-span-2 h-14 rounded-2xl text-warning border-warning/30 bg-warning/5 hover:bg-warning/10"
                 disabled={sendingReminder}
-                onClick={async () => {
-                  setSendingReminder(true);
-                  try {
-                    const { error } = await supabase.functions.invoke('payment-reminder', {
-                      body: { invoice_id: id }
-                    });
-                    if (error) throw error;
-                    toast({ title: 'Reminder Sent!', description: `SMS reminder sent to ${client.name}` });
-                  } catch (err) {
-                    toast({ title: 'Failed to send reminder', variant: 'destructive' });
-                  } finally {
-                    setSendingReminder(false);
-                  }
-                }}
+                onClick={handleSendReminder}
               >
                 <Bell className={cn("w-5 h-5 mr-2", sendingReminder && "animate-bounce")} />
                 Send Overdue Reminder

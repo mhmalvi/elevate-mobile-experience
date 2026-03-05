@@ -1,14 +1,58 @@
+/**
+ * SyncManager — thin facade that composes the sync subsystem modules.
+ *
+ * Public API (unchanged for consumers):
+ *   queueSync()          — queue a local change for outbound sync
+ *   processQueue()       — push all queued changes to Supabase
+ *   fetchAndStore()      — pull latest data from Supabase into IndexedDB
+ *   clearQueue()         — wipe the sync queue (e.g. on logout)
+ *   getPendingSyncCount() — count of items awaiting sync
+ *   getSyncQueue()       — read the raw queue
+ *   onSyncComplete()     — subscribe to sync-complete notifications
+ *   isSyncing()          — check whether a sync pass is in progress
+ *
+ * Internal responsibilities delegated to:
+ *   entityConfig.ts     — table-name / local-table mappings
+ *   syncTypes.ts        — shared types and sanitizeDataForIndexedDB
+ *   syncEvents.ts       — window CustomEvent helpers + SyncListenerSet
+ *   syncLock.ts         — cross-tab BroadcastChannel lock
+ *   syncQueue.ts        — debounce / coalesce / queue CRUD
+ *   syncDispatcher.ts   — Supabase writes, conflict resolution, rollback
+ *   dataFetcher.ts      — paginated Supabase reads into IndexedDB
+ */
+
 import { db, SyncQueueItem } from './db';
-import { encryptedDb } from './encryptedDb';
-import { supabase } from '@/integrations/supabase/client';
-import { resolveConflict, hasConflict } from './conflictResolver';
-import { validateSyncQueueItem } from './syncQueueValidator';
+import { type SyncRecord } from './syncTypes';
+import { SyncListenerSet, emitSyncProgress, notifyAuthError } from './syncEvents';
+import { SyncLock } from './syncLock';
+import { SyncQueue } from './syncQueue';
+import { SyncDispatcher } from './syncDispatcher';
+import { DataFetcher } from './dataFetcher';
+
+/** Record with string keys and unknown values, representing a database row */
+type SyncRecord = Record<string, unknown>;
+
+/** Conflict field comparison */
+interface ConflictField {
+  field: string;
+  localValue: unknown;
+  serverValue: unknown;
+}
+
+/** Conflict notification details */
+interface ConflictDetails {
+  entityType: string;
+  entityId: string;
+  conflictingFields: ConflictField[];
+  localData: SyncRecord;
+  serverData: SyncRecord;
+}
 
 /**
  * Sanitize data for IndexedDB storage
  * Converts Date objects to ISO strings and removes undefined values
  */
-function sanitizeDataForIndexedDB(data: any): any {
+function sanitizeDataForIndexedDB(data: unknown): JsonValue {
   if (data === null || data === undefined) {
     return null;
   }
@@ -22,7 +66,7 @@ function sanitizeDataForIndexedDB(data: any): any {
   }
 
   if (typeof data === 'object') {
-    const sanitized: any = {};
+    const sanitized: Record<string, JsonValue> = {};
     for (const [key, value] of Object.entries(data)) {
       // Skip undefined values
       if (value !== undefined) {
@@ -32,7 +76,8 @@ function sanitizeDataForIndexedDB(data: any): any {
     return sanitized;
   }
 
-  return data;
+  // Primitives: string, number, boolean
+  return data as JsonPrimitive;
 }
 
 /**
@@ -44,13 +89,16 @@ const ENTITY_TABLE_MAP: Record<string, string> = {
   quote: 'quotes',
   invoice: 'invoices',
   client: 'clients',
+  quote_line_item: 'quote_line_items',
+  invoice_line_item: 'invoice_line_items',
 };
 
 /**
  * Entity dependency order for sync
- * Parents must be synced before children
+ * Parents must be synced before children to prevent FK violations
+ * clients -> jobs -> quotes -> quote_line_items -> invoices -> invoice_line_items
  */
-const ENTITY_DEPENDENCY_ORDER = ['client', 'job', 'quote', 'invoice'];
+const ENTITY_DEPENDENCY_ORDER = ['client', 'job', 'quote', 'quote_line_item', 'invoice', 'invoice_line_item'];
 
 /**
  * SyncManager handles synchronization between IndexedDB and Supabase
@@ -76,6 +124,12 @@ export class SyncManager {
   private static readonly SCHEMA_VERSION = 2; // Increment when schema changes
   private schemaMigrationComplete = false;
 
+  // Deduplication: prevent concurrent fetchAndStore calls for the same userId
+  private fetchInFlight: Map<string, Promise<void>> = new Map();
+
+  // Promise that resolves when schema migration is complete
+  private schemaReady: Promise<void>;
+
   // ✅ MEDIUM PRIORITY FIX #2: Sync progress tracking
   private syncProgress = {
     total: 0,
@@ -86,8 +140,24 @@ export class SyncManager {
   };
 
   constructor() {
-    // Initialize schema migration check
-    this.checkAndMigrateSchema();
+    // Initialize cross-tab sync lock
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      this.syncLockChannel = new BroadcastChannel('tradiemate-sync-lock');
+      this.syncLockChannel.onmessage = (event) => {
+        if (event.data.type === 'sync-started') {
+          // Another tab started syncing - release our lock and stop sync
+          this.hasSyncLock = false;
+          this.syncInProgress = false;
+          console.warn('[SyncManager] Another tab is syncing, releasing lock and stopping this tab\'s sync');
+        } else if (event.data.type === 'sync-completed') {
+          // Another tab completed sync
+          this.notifyListeners();
+        }
+      };
+    }
+
+    // Initialize schema migration check and store the promise
+    this.schemaReady = this.checkAndMigrateSchema();
   }
 
   /**
@@ -99,7 +169,6 @@ export class SyncManager {
 
       if (currentVersion === null) {
         // First time - set initial version
-        console.log('[SyncManager] Initializing schema version');
         await db.setMeta('schema_version', SyncManager.SCHEMA_VERSION);
         this.schemaMigrationComplete = true;
         return;
@@ -109,7 +178,6 @@ export class SyncManager {
         console.warn(`[SyncManager] Schema migration needed: v${currentVersion} → v${SyncManager.SCHEMA_VERSION}`);
         await this.runSchemaMigrations(currentVersion, SyncManager.SCHEMA_VERSION);
         await db.setMeta('schema_version', SyncManager.SCHEMA_VERSION);
-        console.log('[SyncManager] Schema migration complete');
       }
 
       this.schemaMigrationComplete = true;
@@ -124,11 +192,8 @@ export class SyncManager {
    * ✅ HIGH PRIORITY FIX #5: Run schema migrations
    */
   private async runSchemaMigrations(fromVersion: number, toVersion: number) {
-    console.log(`[SyncManager] Running migrations from v${fromVersion} to v${toVersion}`);
-
     // Run each migration sequentially
     for (let version = fromVersion; version < toVersion; version++) {
-      console.log(`[SyncManager] Running migration v${version} → v${version + 1}`);
 
       switch (version) {
         case 1:
@@ -149,38 +214,13 @@ export class SyncManager {
    * Example: Add `updated_at` field to sync queue items
    */
   private async migrateToV2() {
-    console.log('[SyncManager] Migrating to v2: Adding updated_at to sync queue');
-
-    const items = await db.syncQueue.toArray();
-
-    for (const item of items) {
-      if (!item.updated_at) {
-        await db.syncQueue.update(item.id!, {
-          updated_at: item.created_at, // Use created_at as fallback
-        });
-      }
-    }
-
-    console.log(`[SyncManager] Migrated ${items.length} sync queue items to v2`);
-  }
-
-  private constructor_original() {
-    // Initialize cross-tab sync lock
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      this.syncLockChannel = new BroadcastChannel('tradiemate-sync-lock');
-      this.syncLockChannel.onmessage = (event) => {
-        if (event.data.type === 'sync-started') {
-          // Another tab started syncing
-          if (this.syncInProgress && !this.hasSyncLock) {
-            console.warn('[SyncManager] Another tab is syncing, stopping this tab\'s sync');
-            this.syncInProgress = false;
-          }
-        } else if (event.data.type === 'sync-completed') {
-          // Another tab completed sync
-          this.notifyListeners();
-        }
-      };
-    }
+    await db.transaction('rw', db.syncQueue, async () => {
+      const items = await db.syncQueue.toArray();
+      const updates = items
+        .filter(item => !item.updated_at)
+        .map(item => db.syncQueue.update(item.id!, { updated_at: item.created_at }));
+      await Promise.all(updates);
+    });
   }
 
   /**
@@ -194,7 +234,7 @@ export class SyncManager {
     this.syncLockChannel.postMessage({ type: 'sync-started', timestamp: Date.now() });
 
     // Wait a bit to see if another tab claims priority
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     return this.hasSyncLock;
   }
@@ -215,10 +255,10 @@ export class SyncManager {
    * ✅ HIGH PRIORITY FIX #3: Debounced to prevent queue flooding
    */
   async queueSync(
-    entityType: 'job' | 'quote' | 'invoice' | 'client',
+    entityType: 'job' | 'quote' | 'invoice' | 'client' | 'quote_line_item' | 'invoice_line_item',
     entityId: string,
     action: 'create' | 'update' | 'delete',
-    data: any
+    data: SyncRecord
   ) {
     // Validate inputs to prevent corrupt queue entries
     const validation = validateSyncQueueItem({
@@ -250,7 +290,6 @@ export class SyncManager {
 
       // If there's a pending update for this entity, merge it
       if (existingPending && existingPending.action === action) {
-        console.log(`[SyncManager] Coalescing ${action} for ${entityType} ${entityId}`);
         this.pendingQueueUpdates.set(pendingKey, {
           entity_type: entityType,
           entity_id: String(entityId), // Ensure it's a string
@@ -298,7 +337,6 @@ export class SyncManager {
         // Optimistic UI update - immediately apply to local database
         if (action === 'create' || action === 'update') {
           await localTable.put(sanitizedData);
-          console.log(`[SyncManager] Optimistically updated ${entityType} ${entityId} in local DB`);
         } else if (action === 'delete') {
           // For soft delete, update the deleted_at field
           const existing = await localTable.get(entityId);
@@ -307,7 +345,6 @@ export class SyncManager {
               ...existing,
               deleted_at: new Date().toISOString(),
             });
-            console.log(`[SyncManager] Optimistically soft-deleted ${entityType} ${entityId} in local DB`);
           }
         }
       });
@@ -351,7 +388,6 @@ export class SyncManager {
     // Set new timer
     this.queueDebounceTimer = setTimeout(() => {
       if (navigator.onLine) {
-        console.log('[SyncManager] Debounce timer expired, flushing pending updates');
         this.flushPendingUpdates();
         this.processQueue();
       }
@@ -363,8 +399,6 @@ export class SyncManager {
    */
   private async flushPendingUpdates() {
     if (this.pendingQueueUpdates.size === 0) return;
-
-    console.log(`[SyncManager] Flushing ${this.pendingQueueUpdates.size} coalesced updates`);
 
     for (const [key, item] of this.pendingQueueUpdates.entries()) {
       try {
@@ -414,6 +448,8 @@ export class SyncManager {
       quote: encryptedDb.quotes,
       invoice: encryptedDb.invoices,
       client: encryptedDb.clients,
+      quote_line_item: db.quote_line_items,
+      invoice_line_item: db.invoice_line_items,
     };
     return tableMap[entityType];
   }
@@ -425,25 +461,22 @@ export class SyncManager {
    */
   async processQueue(): Promise<{ success: number; failed: number }> {
     if (this.syncInProgress) {
-      console.log('[SyncManager] Sync already in progress, skipping');
       return { success: 0, failed: 0 };
     }
 
     if (!navigator.onLine) {
-      console.log('[SyncManager] Offline, cannot sync');
       return { success: 0, failed: 0 };
     }
 
     // Wait for schema migration to complete
-    if (!this.schemaMigrationComplete) {
-      console.log('[SyncManager] Waiting for schema migration to complete...');
-      await this.waitForMigration();
-    }
+    await this.schemaReady;
+
+    // ✅ FIX H11: Clear failed parent entities from previous runs
+    this.failedParentEntities.clear();
 
     // ✅ FIX #1: Acquire cross-tab sync lock
     const hasLock = await this.acquireSyncLock();
     if (!hasLock) {
-      console.log('[SyncManager] Another tab has sync lock, skipping');
       return { success: 0, failed: 0 };
     }
 
@@ -452,15 +485,22 @@ export class SyncManager {
     let failCount = 0;
 
     try {
-      console.log('[SyncManager] Starting sync queue processing');
-
       // ✅ FIX #3: Ensure valid auth token before sync
       await this.ensureValidToken();
 
       // Order by dependency to prevent referential integrity errors
-      const items = await this.getSyncQueueOrdered();
+      const allItems = await this.getSyncQueueOrdered();
 
-      console.log(`[SyncManager] Found ${items.length} items to sync`);
+      // Exponential backoff: skip items whose backoff period hasn't elapsed yet (max 5 min)
+      const items = allItems.filter(item => {
+        if (item.retry_count && item.retry_count > 0 && item.updated_at) {
+          const backoffMs = Math.min(1000 * Math.pow(2, item.retry_count), 300000);
+          if (Date.now() - new Date(item.updated_at).getTime() < backoffMs) {
+            return false; // Skip this item, backoff not elapsed
+          }
+        }
+        return true;
+      });
 
       // ✅ MEDIUM PRIORITY FIX #2: Initialize progress tracking
       this.syncProgress = {
@@ -500,7 +540,6 @@ export class SyncManager {
         // Dependent items will be deferred if their parent failed
       }
 
-      console.log(`[SyncManager] Sync complete: ${successCount} success, ${failCount} failed`);
     } catch (error: unknown) {
       // ✅ FIX #3: Handle token refresh failures
       if (error instanceof Error && error.message.includes('token')) {
@@ -516,15 +555,8 @@ export class SyncManager {
       this.syncProgress.phase = 'idle';
       this.emitSyncProgress();
 
-      // Check for new items added during sync (race condition fix)
-      // ✅ FIX: Don't use .where('synced') index - fetch all and filter
-      const allQueueItems = await db.syncQueue.toArray();
-      const remainingCount = allQueueItems.filter(item => !item.synced).length;
-      if (remainingCount > 0 && navigator.onLine) {
-        console.log(`[SyncManager] ${remainingCount} new items detected, recursively processing...`);
-        // Don't await - let this run in background to avoid blocking
-        setTimeout(() => this.processQueue(), 100);
-      }
+      // Remaining items will be picked up by the next regular polling cycle or online event.
+      // No recursive re-invocation to avoid race conditions with syncInProgress.
 
       this.notifyListeners();
     }
@@ -572,14 +604,12 @@ export class SyncManager {
         const fiveMinutes = 5 * 60 * 1000;
 
         if (expiresInMs < fiveMinutes) {
-          console.log('[SyncManager] Token expires soon, refreshing...');
           const { error: refreshError } = await supabase.auth.refreshSession();
 
           if (refreshError) {
             throw new Error(`Token refresh failed: ${refreshError.message}`);
           }
 
-          console.log('[SyncManager] Token refreshed successfully');
         }
       }
     } catch (error: unknown) {
@@ -600,7 +630,6 @@ export class SyncManager {
       if (item.action === 'create') {
         // Remove the optimistically created item
         await localTable.delete(item.entity_id);
-        console.log(`[SyncManager] Rolled back optimistic create for ${item.entity_type} ${item.entity_id}`);
       } else if (item.action === 'delete') {
         // Restore the soft-deleted item
         const existing = await localTable.get(item.entity_id);
@@ -609,7 +638,6 @@ export class SyncManager {
             ...existing,
             deleted_at: undefined,
           });
-          console.log(`[SyncManager] Rolled back optimistic delete for ${item.entity_type} ${item.entity_id}`);
         }
       }
       // Note: For 'update', we can't easily rollback without storing original data
@@ -650,12 +678,8 @@ export class SyncManager {
   /**
    * ✅ MEDIUM PRIORITY FIX #1: Get conflicting fields between local and server data
    */
-  private getConflictingFields(localData: any, serverData: any): Array<{
-    field: string;
-    localValue: any;
-    serverValue: any;
-  }> {
-    const conflicts: Array<{ field: string; localValue: any; serverValue: any }> = [];
+  private getConflictingFields(localData: SyncRecord, serverData: SyncRecord): ConflictField[] {
+    const conflicts: ConflictField[] = [];
     const ignoreFields = ['updated_at', 'deleted_at', 'created_at'];
 
     for (const key in localData) {
@@ -679,13 +703,7 @@ export class SyncManager {
   /**
    * ✅ MEDIUM PRIORITY FIX #1: Notify user about conflict with details
    */
-  private notifyConflict(conflictDetails: {
-    entityType: string;
-    entityId: string;
-    conflictingFields: Array<{ field: string; localValue: any; serverValue: any }>;
-    localData: any;
-    serverData: any;
-  }) {
+  private notifyConflict(conflictDetails: ConflictDetails) {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('sync-conflict-detected', {
         detail: conflictDetails
@@ -698,7 +716,12 @@ export class SyncManager {
    * Parents (clients) sync before children (jobs, quotes, invoices)
    */
   private async getSyncQueueOrdered(): Promise<SyncQueueItem[]> {
-    // ✅ FIX: Don't use .where('synced') index - fetch all and filter in memory
+    // ✅ FIX: Don't use .where('synced') index - fetch all and filter in memory.
+    // The 'synced' field is intentionally NOT indexed in the Dexie schema because
+    // boolean indexing causes IDBKeyRange errors (see db.ts version history).
+    // Adding a Dexie index for 'synced' would require a schema version bump and
+    // risks triggering the same IDBKeyRange issues. The sync queue is small enough
+    // that in-memory filtering is acceptable.
     const allItems = await db.syncQueue.toArray();
     const items = allItems.filter(item => !item.synced);
 
@@ -741,7 +764,6 @@ export class SyncManager {
       }
     }
 
-    console.log(`[SyncManager] Grouped ${items.length} items into ${batches.length} batches`);
     return batches;
   }
 
@@ -761,8 +783,6 @@ export class SyncManager {
     const entityType = batch[0].entity_type;
     const action = batch[0].action;
     const table = this.getTableName(entityType);
-
-    console.log(`[SyncManager] Processing batch: ${entityType} ${action} (${batch.length} items)`);
 
     let successCount = 0;
     let failCount = 0;
@@ -791,49 +811,41 @@ export class SyncManager {
     }
 
     if (validBatch.length === 0) {
-      console.log(`[SyncManager] All items in batch deferred due to parent failures`);
       return { success: 0, failed: 0, failedParents };
     }
 
     try {
       if (action === 'create') {
-        // Batch insert
+        // Batch upsert to handle duplicate queue items safely
         const dataToInsert = validBatch.map(item => item.data);
-        const { error } = await supabase.from(table).insert(dataToInsert);
+        const { error } = await supabase.from(table).upsert(dataToInsert, { onConflict: 'id' });
 
         if (error) {
           throw error;
         }
 
-        // Mark all as synced
+        // Delete synced items from queue to prevent unbounded growth
         for (const item of validBatch) {
-          await db.syncQueue.update(item.id!, {
-            synced: true,
-            sync_error: undefined,
-          });
+          await db.syncQueue.delete(item.id!);
           successCount++;
         }
 
-        console.log(`[SyncManager] Batch insert successful: ${validBatch.length} ${entityType}s`);
       } else if (action === 'update') {
         // Updates need individual processing for conflict resolution
         for (const item of validBatch) {
           try {
             await this.syncItem(item);
 
-            await db.syncQueue.update(item.id!, {
-              synced: true,
-              sync_error: undefined,
-            });
+            await db.syncQueue.delete(item.id!);
 
             successCount++;
           } catch (error: unknown) {
             await this.handleSyncItemError(item, error);
             failCount++;
 
-            // Track failed parent entities
-            if (item.entity_type === 'client') {
-              failedParents.push(`client:${item.entity_id}`);
+            // Track failed parent entities (clients, quotes, invoices can be parents)
+            if (['client', 'quote', 'invoice'].includes(item.entity_type)) {
+              failedParents.push(`${item.entity_type}:${item.entity_id}`);
             }
           }
         }
@@ -849,16 +861,12 @@ export class SyncManager {
           throw error;
         }
 
-        // Mark all as synced
+        // Delete synced items from queue to prevent unbounded growth
         for (const item of validBatch) {
-          await db.syncQueue.update(item.id!, {
-            synced: true,
-            sync_error: undefined,
-          });
+          await db.syncQueue.delete(item.id!);
           successCount++;
         }
 
-        console.log(`[SyncManager] Batch delete successful: ${validBatch.length} ${entityType}s`);
       }
     } catch (error: unknown) {
       // Batch operation failed - process individually
@@ -868,10 +876,7 @@ export class SyncManager {
         try {
           await this.syncItem(item);
 
-          await db.syncQueue.update(item.id!, {
-            synced: true,
-            sync_error: undefined,
-          });
+          await db.syncQueue.delete(item.id!);
 
           successCount++;
         } catch (itemError: unknown) {
@@ -879,8 +884,8 @@ export class SyncManager {
           failCount++;
 
           // ✅ HIGH PRIORITY FIX #4: Track failed parent entities instead of halting
-          if (item.entity_type === 'client' && item.action === 'create') {
-            failedParents.push(`client:${item.entity_id}`);
+          if (['client', 'quote', 'invoice'].includes(item.entity_type) && item.action === 'create') {
+            failedParents.push(`${item.entity_type}:${item.entity_id}`);
           }
         }
       }
@@ -902,6 +907,22 @@ export class SyncManager {
     const clientId = item.data?.client_id;
     if (clientId && this.failedParentEntities.has(`client:${clientId}`)) {
       return true;
+    }
+
+    // Check if quote line item's parent quote failed
+    if (item.entity_type === 'quote_line_item') {
+      const quoteId = item.data?.quote_id;
+      if (quoteId && this.failedParentEntities.has(`quote:${quoteId}`)) {
+        return true;
+      }
+    }
+
+    // Check if invoice line item's parent invoice failed
+    if (item.entity_type === 'invoice_line_item') {
+      const invoiceId = item.data?.invoice_id;
+      if (invoiceId && this.failedParentEntities.has(`invoice:${invoiceId}`)) {
+        return true;
+      }
     }
 
     return false;
@@ -926,10 +947,8 @@ export class SyncManager {
 
       await this.rollbackOptimisticUpdate(item);
 
-      await db.syncQueue.update(item.id!, {
-        synced: true,
-        sync_error: `Failed after 3 retries: ${errorMessage}. Optimistic update rolled back.`,
-      });
+      // Delete permanently failed item from queue after rollback
+      await db.syncQueue.delete(item.id!);
     }
   }
 
@@ -981,8 +1000,6 @@ export class SyncManager {
             serverData,
             'last-write-wins'
           );
-
-          console.log(`[SyncManager] Conflict resolution: ${message}`);
 
           // Update with resolved data
           const { error: updateError } = await supabase
@@ -1036,26 +1053,34 @@ export class SyncManager {
    */
   async fetchAndStore(userId: string, options?: { pageSize?: number; onProgress?: (progress: number) => void }) {
     if (!navigator.onLine) {
-      console.log('[SyncManager] Offline, skipping fetch');
       return;
     }
 
-    // Wait for schema migration to complete
-    if (!this.schemaMigrationComplete) {
-      console.log('[SyncManager] Waiting for schema migration to complete...');
-      await this.waitForMigration();
+    // Deduplicate: if a fetch is already in-flight for this userId, reuse it
+    const existing = this.fetchInFlight.get(userId);
+    if (existing) {
+      return existing;
     }
 
-    const pageSize = options?.pageSize || 100; // Default: 100 records per page
-    console.log(`[SyncManager] Fetching data from Supabase (page size: ${pageSize})`);
+    const fetchPromise = this._fetchAndStoreImpl(userId, options).finally(() => {
+      this.fetchInFlight.delete(userId);
+    });
+    this.fetchInFlight.set(userId, fetchPromise);
+    return fetchPromise;
+  }
 
+  private async _fetchAndStoreImpl(userId: string, options?: { pageSize?: number; onProgress?: (progress: number) => void }) {
+    // Wait for schema migration to complete
+    await this.schemaReady;
+
+    const pageSize = options?.pageSize || 100; // Default: 100 records per page
     try {
       // Get IDs of entities with pending sync operations
       const pendingIds = await this.getPendingSyncIds();
 
       // Fetch each entity type with pagination
       let totalFetched = 0;
-      let totalExpected = 4; // 4 entity types
+      let totalExpected = 6; // 6 entity types (4 main + 2 line item tables)
 
       // Jobs
       const jobsCount = await this.fetchAndStoreEntity(
@@ -1079,6 +1104,18 @@ export class SyncManager {
       totalFetched++;
       options?.onProgress?.(totalFetched / totalExpected);
 
+      // Quote Line Items - fetch based on synced quote IDs
+      const quoteLineItemsCount = await this.fetchAndStoreLineItems(
+        'quote_line_items',
+        'quote_id',
+        db.quotes,
+        pendingIds.quote_line_item,
+        pageSize,
+        db.quote_line_items
+      );
+      totalFetched++;
+      options?.onProgress?.(totalFetched / totalExpected);
+
       // Invoices
       const invoicesCount = await this.fetchAndStoreEntity(
         'invoices',
@@ -1086,6 +1123,18 @@ export class SyncManager {
         pendingIds.invoice,
         pageSize,
         encryptedDb.invoices
+      );
+      totalFetched++;
+      options?.onProgress?.(totalFetched / totalExpected);
+
+      // Invoice Line Items - fetch based on synced invoice IDs
+      const invoiceLineItemsCount = await this.fetchAndStoreLineItems(
+        'invoice_line_items',
+        'invoice_id',
+        db.invoices,
+        pendingIds.invoice_line_item,
+        pageSize,
+        db.invoice_line_items
       );
       totalFetched++;
       options?.onProgress?.(totalFetched / totalExpected);
@@ -1101,12 +1150,6 @@ export class SyncManager {
       totalFetched++;
       options?.onProgress?.(totalFetched / totalExpected);
 
-      console.log('[SyncManager] Data fetch and store complete:', {
-        jobs: jobsCount,
-        quotes: quotesCount,
-        invoices: invoicesCount,
-        clients: clientsCount,
-      });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[SyncManager] Error fetching data:', errorMessage);
@@ -1122,13 +1165,11 @@ export class SyncManager {
     userId: string,
     pendingIds: Set<string>,
     pageSize: number,
-    localTable: any
+    localTable: Table
   ): Promise<number> {
     let totalStored = 0;
     let offset = 0;
     let hasMore = true;
-
-    console.log(`[SyncManager] Fetching ${tableName} with pagination...`);
 
     while (hasMore) {
       // ✅ Ensure offset and pageSize are valid positive numbers
@@ -1161,7 +1202,7 @@ export class SyncManager {
       }
 
       // Filter out invalid IDs and pending syncs
-      const validRecords = data.filter(record =>
+      const validRecords = data.filter((record: { id?: unknown }) =>
         record.id &&
         typeof record.id === 'string' &&
         !pendingIds.has(record.id)
@@ -1178,8 +1219,6 @@ export class SyncManager {
         totalStored += validRecords.length;
       }
 
-      console.log(`[SyncManager] ${tableName}: Fetched page ${Math.floor(offset / pageSize) + 1}, stored ${validRecords.length} records`);
-
       // Check if there are more pages
       offset += pageSize;
       if (count !== null && offset >= count) {
@@ -1193,7 +1232,93 @@ export class SyncManager {
     }
 
     await db.setLastSyncTime(tableName);
-    console.log(`[SyncManager] ${tableName}: Total stored ${totalStored} records`);
+
+    return totalStored;
+  }
+
+  /**
+   * Fetch and store line items based on parent entity IDs already in IndexedDB
+   * Line items don't have user_id; they are fetched via their parent FK (quote_id or invoice_id)
+   */
+  private async fetchAndStoreLineItems(
+    tableName: string,
+    parentFkField: string,
+    parentLocalTable: Table,
+    pendingIds: Set<string>,
+    pageSize: number,
+    localTable: Table
+  ): Promise<number> {
+    let totalStored = 0;
+
+    try {
+      // Get all parent IDs from local IndexedDB
+      const parentRecords = await parentLocalTable.toArray();
+      const parentIds: string[] = parentRecords
+        .map((r: { id?: unknown }) => r.id)
+        .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
+
+      if (parentIds.length === 0) {
+        return 0;
+      }
+
+      // Fetch line items in batches of parent IDs to avoid overly large queries
+      const parentIdBatchSize = 50;
+      for (let i = 0; i < parentIds.length; i += parentIdBatchSize) {
+        const parentIdBatch = parentIds.slice(i, i + parentIdBatchSize);
+
+        let offset = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+          if (!Number.isFinite(offset) || offset < 0) break;
+
+          const { data, error, count } = await supabase
+            .from(tableName)
+            .select('*', { count: 'exact' })
+            .in(parentFkField, parentIdBatch)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + pageSize - 1);
+
+          if (error) {
+            console.error(`[SyncManager] ${tableName} fetch error:`, error);
+            break;
+          }
+
+          if (!data || data.length === 0) {
+            hasMore = false;
+            break;
+          }
+
+          // Filter out invalid IDs and pending syncs
+          const validRecords = data.filter((record: { id?: unknown }) =>
+            record.id &&
+            typeof record.id === 'string' &&
+            !pendingIds.has(record.id)
+          );
+
+          if (validRecords.length > 0) {
+            await localTable.bulkPut(validRecords);
+            totalStored += validRecords.length;
+          }
+
+          offset += pageSize;
+          if (count !== null && offset >= count) {
+            hasMore = false;
+          } else if (data.length < pageSize) {
+            hasMore = false;
+          }
+
+          // Yield to event loop to prevent blocking UI
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+
+      await db.setLastSyncTime(tableName);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[SyncManager] Error fetching ${tableName}:`, errorMessage);
+    }
 
     return totalStored;
   }
@@ -1207,12 +1332,16 @@ export class SyncManager {
     quote: Set<string>;
     invoice: Set<string>;
     client: Set<string>;
+    quote_line_item: Set<string>;
+    invoice_line_item: Set<string>;
   }> {
-    const result = {
+    const result: Record<string, Set<string>> = {
       job: new Set<string>(),
       quote: new Set<string>(),
       invoice: new Set<string>(),
       client: new Set<string>(),
+      quote_line_item: new Set<string>(),
+      invoice_line_item: new Set<string>(),
     };
 
     try {
@@ -1241,7 +1370,6 @@ export class SyncManager {
    */
   async clearQueue() {
     await db.syncQueue.clear();
-    console.log('[SyncManager] Sync queue cleared');
   }
 
   private lastQueueClearTime = 0;
@@ -1278,7 +1406,6 @@ export class SyncManager {
           try {
             await db.syncQueue.clear();
             this.queueErrorCount = 0;
-            console.log('[SyncManager] Queue cleared successfully');
           } catch (clearError: unknown) {
             const clearErrorMessage = clearError instanceof Error ? clearError.message : 'Unknown error';
             console.error('[SyncManager] Failed to clear corrupt queue:', clearErrorMessage);
@@ -1359,11 +1486,6 @@ export const syncManager = new SyncManager();
 // Auto-sync when coming back online
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
-    console.log('[SyncManager] Connection restored, processing sync queue');
     syncManager.processQueue();
-  });
-
-  window.addEventListener('offline', () => {
-    console.log('[SyncManager] Connection lost, entering offline mode');
   });
 }

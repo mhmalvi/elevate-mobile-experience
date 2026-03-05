@@ -85,7 +85,7 @@ function mergeData<T extends Record<string, any>>(localData: T, serverData: T): 
   const merged = { ...serverData };
 
   // For each field in local data
-  for (const key in localData) {
+  for (const key of Object.keys(localData)) {
     // Skip metadata fields
     if (key === 'id' || key === 'created_at' || key === 'updated_at') {
       continue;
@@ -139,7 +139,7 @@ export function hasConflict<T extends Record<string, any>>(
   serverData: T,
   ignoreFields: string[] = ['updated_at', 'deleted_at']
 ): boolean {
-  for (const key in localData) {
+  for (const key of Object.keys(localData)) {
     if (ignoreFields.includes(key)) continue;
 
     const localValue = localData[key];
@@ -163,7 +163,7 @@ export function getConflictingFields<T extends Record<string, any>>(
 ): string[] {
   const conflicts: string[] = [];
 
-  for (const key in localData) {
+  for (const key of Object.keys(localData)) {
     if (ignoreFields.includes(key)) continue;
 
     const localValue = localData[key];
@@ -192,7 +192,7 @@ export function formatConflictMessage(
 /**
  * Batch resolve conflicts for multiple entities
  */
-export function batchResolveConflicts<T extends { updated_at: string }>(
+export function batchResolveConflicts<T extends { updated_at: string; id?: string }>(
   localItems: T[],
   serverItems: T[],
   strategy: ConflictStrategy = 'last-write-wins'
@@ -201,11 +201,11 @@ export function batchResolveConflicts<T extends { updated_at: string }>(
 
   // Create a map of server items by ID
   const serverMap = new Map(
-    serverItems.map(item => [(item as any).id, item])
+    serverItems.map(item => [item.id, item])
   );
 
   for (const localItem of localItems) {
-    const id = (localItem as any).id;
+    const id = localItem.id;
     const serverItem = serverMap.get(id);
 
     if (serverItem) {

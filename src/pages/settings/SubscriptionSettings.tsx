@@ -11,7 +11,7 @@ import { SUBSCRIPTION_TIERS, getTierById } from '@/lib/subscriptionTiers';
 import { getPlatform, getPaymentProvider, isNativeApp } from '@/lib/platformPayments';
 import { purchasePackage, restorePurchases, REVENUECAT_PRODUCTS } from '@/lib/purchases';
 import { formatLimit, SubscriptionTier } from '@/lib/tierLimits';
-import { toast } from 'sonner';
+import { useToast } from '@/hooks/use-toast';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Crown,
@@ -75,23 +75,24 @@ export default function SubscriptionSettings() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  const { toast } = useToast();
   const currentTier = (profile?.subscription_tier as SubscriptionTier) || 'free';
   const currentTierConfig = getTierById(currentTier);
 
   // Check for success/cancel from Stripe checkout
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
-      toast.success('Subscription activated! Welcome aboard.');
+      toast({ title: 'Subscription activated! Welcome aboard.' });
       checkSubscriptionStatus();
     } else if (searchParams.get('canceled') === 'true') {
-      toast.info('Checkout was cancelled.');
+      toast({ title: 'Checkout was cancelled.' });
     }
   }, [searchParams]);
 
   const getAuthHeaders = async (): Promise<Record<string, string> | null> => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
-      toast.error('Session expired. Please sign in again.');
+      toast({ title: 'Session expired. Please sign in again.', variant: 'destructive' });
       navigate('/auth');
       return null;
     }
@@ -112,7 +113,7 @@ export default function SubscriptionSettings() {
   const handleUpgrade = async (tierId: string) => {
     const tier = getTierById(tierId);
     if (!tier) {
-      toast.error('This plan is not available yet');
+      toast({ title: 'This plan is not available yet', variant: 'destructive' });
       return;
     }
 
@@ -123,16 +124,14 @@ export default function SubscriptionSettings() {
       const provider = getPaymentProvider(platform);
 
       if (provider === 'stripe') {
-        // Use annual price if available, otherwise fall back to monthly
-        let priceId = billingPeriod === 'annual' ? tier.annualStripePriceId : tier.stripePriceId;
-        let usingFallback = false;
-        if (!priceId && billingPeriod === 'annual' && tier.stripePriceId) {
-          // Annual price not configured - fall back to monthly
-          priceId = tier.stripePriceId;
-          usingFallback = true;
-        }
+        const priceId = billingPeriod === 'annual' ? tier.annualStripePriceId : tier.stripePriceId;
         if (!priceId) {
-          toast.error('Stripe is not configured for this plan');
+          toast({
+            title: billingPeriod === 'annual'
+              ? 'Annual billing is not configured for this plan. Please try monthly or contact support.'
+              : 'Stripe is not configured for this plan',
+            variant: 'destructive',
+          });
           return;
         }
 
@@ -146,19 +145,16 @@ export default function SubscriptionSettings() {
 
         if (error) throw error;
         if (data?.url) {
-          if (usingFallback) {
-            toast.info('Annual billing coming soon. Redirecting to monthly checkout.');
-          }
           // Use location.href instead of window.open to avoid popup blockers on mobile
           window.location.href = data.url;
         } else {
-          toast.error('Failed to create checkout session. Please try again.');
+          toast({ title: 'Failed to create checkout session. Please try again.', variant: 'destructive' });
         }
       } else {
         // Mobile: use RevenueCat for in-app purchases
         const productConfig = REVENUECAT_PRODUCTS[tierId as keyof typeof REVENUECAT_PRODUCTS];
         if (!productConfig) {
-          toast.error('This plan is not available for in-app purchase');
+          toast({ title: 'This plan is not available for in-app purchase', variant: 'destructive' });
           return;
         }
 
@@ -169,15 +165,15 @@ export default function SubscriptionSettings() {
         const result = await purchasePackage(productId);
 
         if (result.success) {
-          toast.success('Subscription activated! Welcome aboard.');
+          toast({ title: 'Subscription activated! Welcome aboard.' });
           refetchProfile?.();
         } else if (result.error) {
-          toast.error(result.error);
+          toast({ title: result.error, variant: 'destructive' });
         }
       }
     } catch (error) {
       console.error('Error creating checkout:', error);
-      toast.error('Failed to start checkout. Please try again.');
+      toast({ title: 'Failed to start checkout. Please try again.', variant: 'destructive' });
     } finally {
       setLoadingTier(null);
     }
@@ -188,14 +184,14 @@ export default function SubscriptionSettings() {
     try {
       const result = await restorePurchases();
       if (result.success) {
-        toast.success('Purchases restored successfully!');
+        toast({ title: 'Purchases restored successfully!' });
         refetchProfile?.();
       } else if (result.error) {
-        toast.error(result.error);
+        toast({ title: result.error, variant: 'destructive' });
       }
     } catch (error) {
       console.error('Error restoring purchases:', error);
-      toast.error('Failed to restore purchases. Please try again.');
+      toast({ title: 'Failed to restore purchases. Please try again.', variant: 'destructive' });
     } finally {
       setIsRestoring(false);
     }
@@ -222,16 +218,16 @@ export default function SubscriptionSettings() {
       if (data?.url) {
         window.location.href = data.url;
       } else {
-        toast.error('Failed to open subscription management. Please try again.');
+        toast({ title: 'Failed to open subscription management. Please try again.', variant: 'destructive' });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error opening portal:', error);
       let errorMsg = 'Failed to open subscription management. Please try again.';
       try {
-        const parsed = JSON.parse(error.message);
+        const parsed = JSON.parse(error instanceof Error ? error.message : '');
         errorMsg = parsed.error || errorMsg;
       } catch { /* use default */ }
-      toast.error(errorMsg);
+      toast({ title: errorMsg, variant: 'destructive' });
     }
   };
 

@@ -63,9 +63,6 @@ export default function Onboarding() {
       return;
     }
 
-    console.log('Starting onboarding completion for user:', user.id);
-    console.log('Form data:', formData);
-
     setLoading(true);
     try {
       // Check if profile exists (using maybeSingle to handle 0 or 1 rows)
@@ -80,8 +77,6 @@ export default function Onboarding() {
         throw new Error(`Profile fetch failed: ${fetchError.message}`);
       }
 
-      console.log('Existing profile:', existingProfile);
-
       const profileData = {
         trade_type: formData.trade_type || null,
         business_name: formData.business_name || null,
@@ -94,7 +89,6 @@ export default function Onboarding() {
 
       if (existingProfile) {
         // Update existing profile
-        console.log('Updating existing profile...');
         result = await supabase
           .from('profiles')
           .update(profileData)
@@ -102,7 +96,6 @@ export default function Onboarding() {
           .select();
       } else {
         // Create new profile
-        console.log('Creating new profile...');
         result = await supabase
           .from('profiles')
           .insert({
@@ -116,14 +109,8 @@ export default function Onboarding() {
       const { data, error } = result;
 
       if (error) {
-        console.error('Profile save error:', error);
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
-        console.error('Error details:', error.details);
         throw error;
       }
-
-      console.log('Profile saved successfully:', data);
 
       toast({
         title: "You're all set! 🎉",
@@ -131,13 +118,10 @@ export default function Onboarding() {
       });
 
       navigate('/dashboard');
-    } catch (error: any) {
-      console.error('Onboarding error:', error);
-      console.error('Error message:', error?.message);
-      console.error('Error details:', JSON.stringify(error, null, 2));
+    } catch (error: unknown) {
       toast({
         title: "Something went wrong",
-        description: error?.message || "Please try again.",
+        description: error instanceof Error ? error.message : "Please try again.",
         variant: "destructive",
       });
     } finally {

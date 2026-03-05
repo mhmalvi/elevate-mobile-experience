@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { Tables } from '@/integrations/supabase/types';
@@ -11,16 +11,7 @@ export function useProfile() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (user) {
-      fetchProfile();
-    } else {
-      setProfile(null);
-      setLoading(false);
-    }
-  }, [user]);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     if (!user) return;
 
     const { data, error } = await supabase
@@ -41,17 +32,26 @@ export function useProfile() {
     } else if (error) {
       // Offline or network error — use cached subscription data
       const cached = await getCachedSubscription(user.id);
-      if (cached && profile) {
+      if (cached) {
         setProfile({
-          ...profile,
+          user_id: user.id,
           subscription_tier: cached.tier,
           subscription_expires_at: cached.expiresAt,
           subscription_provider: cached.provider,
-        });
+        } as Partial<typeof profile>);
       }
     }
     setLoading(false);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile();
+    } else {
+      setProfile(null);
+      setLoading(false);
+    }
+  }, [user, fetchProfile]);
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) return { error: new Error('Not authenticated') };

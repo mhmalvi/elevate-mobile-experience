@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
@@ -10,9 +11,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import { cn, formatCurrency } from '@/lib/utils';
 import {
     FileText,
@@ -24,174 +29,32 @@ import {
     Loader2,
     RefreshCw,
     AlertTriangle,
+    Plus,
+    ShoppingCart,
 } from 'lucide-react';
-import { format, startOfQuarter, endOfQuarter, subQuarters, getQuarter, getYear } from 'date-fns';
-
-interface BASData {
-    totalSales: number;
-    gstCollected: number;
-    totalPurchases: number;
-    gstPaid: number;
-    netGST: number;
-    invoiceCount: number;
-    paidInvoiceCount: number;
-    unpaidAmount: number;
-}
-
-interface QuarterOption {
-    label: string;
-    value: string;
-    start: Date;
-    end: Date;
-}
-
-const generateQuarterOptions = (): QuarterOption[] => {
-    const options: QuarterOption[] = [];
-    const now = new Date();
-
-    for (let i = 0; i < 8; i++) {
-        const date = subQuarters(now, i);
-        const start = startOfQuarter(date);
-        const end = endOfQuarter(date);
-        const quarter = getQuarter(date);
-        const year = getYear(date);
-
-        options.push({
-            label: `Q${quarter} ${year} (${format(start, 'MMM')} - ${format(end, 'MMM yyyy')})`,
-            value: `${year}-Q${quarter}`,
-            start,
-            end,
-        });
-    }
-
-    return options;
-};
+import { format } from 'date-fns';
+import { useBASReport, EXPENSE_CATEGORIES } from '@/hooks/useBASReport';
 
 export default function BASReport() {
     const navigate = useNavigate();
-    const { user } = useAuth();
-    const { toast } = useToast();
-    const [loading, setLoading] = useState(true);
-    const [exporting, setExporting] = useState(false);
-    const [selectedQuarter, setSelectedQuarter] = useState<string>('');
-    const [data, setData] = useState<BASData | null>(null);
-
-    const quarterOptions = useMemo(() => generateQuarterOptions(), []);
-
-    useEffect(() => {
-        if (quarterOptions.length > 0 && !selectedQuarter) {
-            setSelectedQuarter(quarterOptions[0].value);
-        }
-    }, [quarterOptions, selectedQuarter]);
-
-    useEffect(() => {
-        if (user && selectedQuarter) {
-            fetchBASData();
-        }
-    }, [user, selectedQuarter]);
-
-    const getSelectedQuarterDates = () => {
-        return quarterOptions.find(q => q.value === selectedQuarter);
-    };
-
-    const fetchBASData = async () => {
-        setLoading(true);
-        const quarter = getSelectedQuarterDates();
-        if (!quarter) return;
-
-        try {
-            // Fetch invoices for the quarter
-            const { data: invoices, error } = await supabase
-                .from('invoices')
-                .select('total, gst, subtotal, status, amount_paid')
-                .eq('user_id', user?.id)
-                .gte('created_at', quarter.start.toISOString())
-                .lte('created_at', quarter.end.toISOString());
-
-            if (error) throw error;
-
-            const invoiceList = invoices || [];
-
-            // Calculate BAS figures
-            const totalSales = invoiceList.reduce((sum, inv) => sum + (Number(inv.subtotal) || 0), 0);
-            const gstCollected = invoiceList.reduce((sum, inv) => sum + (Number(inv.gst) || 0), 0);
-
-            // For now, we'll estimate GST paid as 10% of assumed expenses (simplified)
-            // In a real scenario, this would come from an expenses table
-            const estimatedExpenses = totalSales * 0.3; // Assume 30% expenses
-            const gstPaid = estimatedExpenses * 0.1;
-
-            const paidInvoices = invoiceList.filter(inv => inv.status === 'paid');
-            const unpaidInvoices = invoiceList.filter(inv => inv.status !== 'paid');
-
-            setData({
-                totalSales,
-                gstCollected,
-                totalPurchases: estimatedExpenses,
-                gstPaid,
-                netGST: gstCollected - gstPaid,
-                invoiceCount: invoiceList.length,
-                paidInvoiceCount: paidInvoices.length,
-                unpaidAmount: unpaidInvoices.reduce((sum, inv) =>
-                    sum + (Number(inv.total) || 0) - (Number(inv.amount_paid) || 0), 0
-                ),
-            });
-        } catch (error) {
-            console.error('Error fetching BAS data:', error);
-            toast({ title: 'Error loading data', variant: 'destructive' });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleExport = async () => {
-        if (!data) return;
-        setExporting(true);
-
-        const quarter = getSelectedQuarterDates();
-        if (!quarter) return;
-
-        try {
-            // Generate CSV content
-            const csvContent = [
-                ['BAS Report'],
-                [`Period: ${quarter.label}`],
-                [`Generated: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`],
-                [''],
-                ['GST Summary'],
-                ['Description', 'Amount (AUD)'],
-                ['Total Sales (ex GST)', data.totalSales.toFixed(2)],
-                ['GST Collected (1A)', data.gstCollected.toFixed(2)],
-                [''],
-                ['Total Purchases (ex GST)', data.totalPurchases.toFixed(2)],
-                ['GST Paid (1B)', data.gstPaid.toFixed(2)],
-                [''],
-                ['Net GST Payable/Refundable', data.netGST.toFixed(2)],
-                [''],
-                ['Invoice Summary'],
-                ['Total Invoices', data.invoiceCount.toString()],
-                ['Paid Invoices', data.paidInvoiceCount.toString()],
-                ['Outstanding Amount', data.unpaidAmount.toFixed(2)],
-            ].map(row => row.join(',')).join('\n');
-
-            // Download CSV
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `BAS-Report-${selectedQuarter}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-
-            toast({ title: 'Report exported! 📊' });
-        } catch (error) {
-            toast({ title: 'Export failed', variant: 'destructive' });
-        } finally {
-            setExporting(false);
-        }
-    };
+    const {
+        loading,
+        exporting,
+        selectedQuarter,
+        setSelectedQuarter,
+        data,
+        expenses,
+        addExpenseOpen,
+        setAddExpenseOpen,
+        savingExpense,
+        newExpense,
+        setNewExpense,
+        quarterOptions,
+        fetchBASData,
+        handleAddExpense,
+        handleAmountChange,
+        handleExport,
+    } = useBASReport();
 
     return (
         <MobileLayout>
@@ -334,6 +197,176 @@ export default function BASReport() {
                                 </div>
                             </div>
 
+                            {/* Expenses Breakdown */}
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between px-1">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-1.5 h-6 bg-destructive rounded-full" />
+                                        <h3 className="font-bold text-lg text-destructive">Expenses</h3>
+                                    </div>
+                                    <Dialog open={addExpenseOpen} onOpenChange={setAddExpenseOpen}>
+                                        <DialogTrigger asChild>
+                                            <Button size="sm" variant="outline" className="rounded-xl h-8">
+                                                <Plus className="w-4 h-4 mr-1" />
+                                                Add Expense
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent className="max-w-sm mx-auto rounded-2xl">
+                                            <DialogHeader>
+                                                <DialogTitle>Add Expense</DialogTitle>
+                                            </DialogHeader>
+                                            <div className="space-y-4 pt-2">
+                                                <div className="space-y-2">
+                                                    <Label>Description *</Label>
+                                                    <Input
+                                                        placeholder="e.g. Bunnings timber order"
+                                                        value={newExpense.description}
+                                                        onChange={e => setNewExpense(prev => ({ ...prev, description: e.target.value }))}
+                                                        className="rounded-xl"
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div className="space-y-2">
+                                                        <Label>Amount (inc. GST) *</Label>
+                                                        <Input
+                                                            type="number"
+                                                            step="0.01"
+                                                            placeholder="0.00"
+                                                            value={newExpense.amount}
+                                                            onChange={e => handleAmountChange(e.target.value)}
+                                                            className="rounded-xl"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label>GST Amount</Label>
+                                                        <Input
+                                                            type="number"
+                                                            step="0.01"
+                                                            placeholder="0.00"
+                                                            value={newExpense.gst_amount}
+                                                            onChange={e => setNewExpense(prev => ({ ...prev, gst_amount: e.target.value }))}
+                                                            className="rounded-xl"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Category</Label>
+                                                    <Select
+                                                        value={newExpense.category}
+                                                        onValueChange={val => setNewExpense(prev => ({ ...prev, category: val }))}
+                                                    >
+                                                        <SelectTrigger className="rounded-xl">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {EXPENSE_CATEGORIES.map(cat => (
+                                                                <SelectItem key={cat.value} value={cat.value}>
+                                                                    {cat.label}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div className="space-y-2">
+                                                        <Label>Date</Label>
+                                                        <Input
+                                                            type="date"
+                                                            value={newExpense.date}
+                                                            onChange={e => setNewExpense(prev => ({ ...prev, date: e.target.value }))}
+                                                            className="rounded-xl"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label>Supplier</Label>
+                                                        <Input
+                                                            placeholder="Optional"
+                                                            value={newExpense.supplier_name}
+                                                            onChange={e => setNewExpense(prev => ({ ...prev, supplier_name: e.target.value }))}
+                                                            className="rounded-xl"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    onClick={handleAddExpense}
+                                                    disabled={savingExpense}
+                                                    className="w-full h-12 rounded-xl"
+                                                >
+                                                    {savingExpense ? (
+                                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                    ) : (
+                                                        <Plus className="w-4 h-4 mr-2" />
+                                                    )}
+                                                    Save Expense
+                                                </Button>
+                                            </div>
+                                        </DialogContent>
+                                    </Dialog>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                            Total Expenses
+                                        </p>
+                                        <p className="text-2xl font-black text-foreground mt-1">
+                                            {formatCurrency(data.totalPurchases)}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-1">incl. GST</p>
+                                    </div>
+
+                                    <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                            GST Credits
+                                        </p>
+                                        <p className="text-2xl font-black text-foreground mt-1">
+                                            {formatCurrency(data.gstPaid)}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {expenses.length} expense{expenses.length !== 1 ? 's' : ''}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Recent expenses list */}
+                                {expenses.length > 0 && (
+                                    <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-3">
+                                        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                                            Recent Expenses
+                                        </p>
+                                        <div className="space-y-2">
+                                            {expenses.slice(0, 5).map(expense => (
+                                                <div key={expense.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        <ShoppingCart className="w-4 h-4 text-muted-foreground shrink-0" />
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-medium truncate">{expense.description}</p>
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {format(new Date(expense.date), 'dd MMM yyyy')}
+                                                                {expense.supplier_name ? ` - ${expense.supplier_name}` : ''}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right shrink-0 ml-2">
+                                                        <p className="text-sm font-bold">{formatCurrency(expense.amount)}</p>
+                                                        {expense.gst_amount > 0 && (
+                                                            <p className="text-xs text-muted-foreground">
+                                                                GST: {formatCurrency(expense.gst_amount)}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {expenses.length > 5 && (
+                                            <p className="text-xs text-center text-muted-foreground pt-1">
+                                                + {expenses.length - 5} more expense{expenses.length - 5 !== 1 ? 's' : ''}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Outstanding Warning */}
                             {data.unpaidAmount > 0 && (
                                 <div className="p-4 bg-warning/5 border border-warning/20 rounded-2xl flex items-start gap-3">
@@ -350,8 +383,9 @@ export default function BASReport() {
                             {/* Disclaimer */}
                             <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-2xl">
                                 <p className="text-sm text-blue-900 dark:text-blue-100">
-                                    <strong>Note:</strong> This is a simplified GST summary. Expenses are estimated at 30% of sales.
-                                    For accurate BAS lodgement, please consult your accountant or use integrated accounting software.
+                                    <strong>Note:</strong> GST calculations are based on your recorded invoices and expenses.
+                                    Ensure all business expenses are entered for accurate BAS figures.
+                                    For official BAS lodgement, please consult your accountant.
                                 </p>
                             </div>
 

@@ -123,8 +123,8 @@ export default function VoiceQuoteWizard() {
                 toast({ title: 'Quote Created! 🎉' });
                 navigate(`/quotes/${quote.id}`);
             }
-        } catch (error: any) {
-            toast({ title: 'Error creating quote', description: error.message, variant: 'destructive' });
+        } catch (error: unknown) {
+            toast({ title: 'Error creating quote', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
         }
     };
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { z } from 'zod';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,14 +9,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
 import { useUsageLimits } from '@/hooks/useUsageLimits';
+import { useAllClients } from '@/hooks/queries/useClients';
 import { UsageLimitBanner, UsageLimitBlocker } from '@/components/UsageLimitBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, User, ArrowLeft, Briefcase, Users } from 'lucide-react';
-import { Tables } from '@/integrations/supabase/types';
 import { useTeam } from '@/hooks/useTeam';
-
-type Client = Tables<'clients'>;
 
 const JOB_STATUSES = [
   { value: 'quoted', label: 'Quoted' },
@@ -25,14 +24,25 @@ const JOB_STATUSES = [
   { value: 'completed', label: 'Completed' },
 ];
 
+const jobSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200),
+  client_id: z.string().optional(),
+  description: z.string().max(5000).optional(),
+  site_address: z.string().max(500).optional(),
+  scheduled_date: z.string().optional(),
+  status: z.enum(['quoted', 'approved', 'scheduled', 'in_progress', 'completed']),
+  notes: z.string().max(5000).optional(),
+  assigned_to: z.string().optional(),
+});
+
 export default function JobForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
   const { canCreate, used, limit, tier, isUnlimited, incrementUsage } = useUsageLimits('jobs');
+  const { data: clients = [] } = useAllClients();
   const [loading, setLoading] = useState(false);
-  const [clients, setClients] = useState<Client[]>([]);
-  const { teamMembers } = useTeam();
+  const { team, teamMembers } = useTeam();
   const [form, setForm] = useState({
     client_id: '',
     title: '',
@@ -44,19 +54,6 @@ export default function JobForm() {
     assigned_to: '',
   });
 
-  useEffect(() => {
-    if (user) fetchClients();
-  }, [user]);
-
-  const fetchClients = async () => {
-    const { data } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('name');
-    setClients(data || []);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -66,15 +63,24 @@ export default function JobForm() {
       return;
     }
 
+    // Zod schema validation
+    const result = jobSchema.safeParse(form);
+    if (!result.success) {
+      const firstError = result.error.errors[0];
+      toast({ title: 'Validation error', description: firstError.message, variant: 'destructive' });
+      return;
+    }
+
     setLoading(true);
     const { error } = await supabase.from('jobs').insert({
       user_id: user.id,
+      team_id: team?.id || null,
       client_id: form.client_id || null,
       title: form.title,
       description: form.description,
       site_address: form.site_address,
       scheduled_date: form.scheduled_date || null,
-      status: form.status as any,
+      status: form.status,
       notes: form.notes,
       assigned_to: form.assigned_to || null,
     });

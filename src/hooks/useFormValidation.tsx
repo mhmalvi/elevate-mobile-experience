@@ -9,7 +9,7 @@ import { useState, useCallback } from 'react';
 import { ValidationResult } from '@/lib/validation';
 
 export interface FieldValidation {
-  validate: (value: any) => ValidationResult;
+  validate: (value: unknown) => ValidationResult;
   required?: boolean;
 }
 
@@ -25,8 +25,13 @@ export interface FormTouched {
   [fieldName: string]: boolean;
 }
 
-export function useFormValidation<T extends Record<string, any>>(
+export function useFormValidation<T extends Record<string, unknown>>(
   initialValues: T,
+  /**
+   * Configuration object mapping field names to their validation rules.
+   * **Important:** Callers should memoize this object (e.g. with `useMemo`) to
+   * avoid unnecessary re-renders and re-validations on every render cycle.
+   */
   validationConfig: FormValidationConfig
 ) {
   const [values, setValues] = useState<T>(initialValues);
@@ -37,7 +42,7 @@ export function useFormValidation<T extends Record<string, any>>(
    * Validate a single field
    */
   const validateField = useCallback(
-    (fieldName: string, value: any): string | undefined => {
+    (fieldName: string, value: unknown): string | undefined => {
       const config = validationConfig[fieldName];
 
       if (!config) {
@@ -94,7 +99,7 @@ export function useFormValidation<T extends Record<string, any>>(
    * Handle field change with validation
    */
   const handleChange = useCallback(
-    (fieldName: string, value: any) => {
+    (fieldName: string, value: unknown) => {
       // Update value
       setValues((prev) => ({
         ...prev,

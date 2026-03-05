@@ -1,6 +1,6 @@
 import type { SyncQueueItem } from './db';
 
-const VALID_ENTITY_TYPES = ['job', 'quote', 'invoice', 'client'] as const;
+const VALID_ENTITY_TYPES = ['job', 'quote', 'invoice', 'client', 'quote_line_item', 'invoice_line_item'] as const;
 const VALID_ACTIONS = ['create', 'update', 'delete'] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_DATA_SIZE_BYTES = 500 * 1024; // 500KB
@@ -18,7 +18,7 @@ export function validateSyncQueueItem(item: Partial<SyncQueueItem>): {
   // Required: entity_type
   if (!item.entity_type) {
     errors.push('Missing required field: entity_type');
-  } else if (!VALID_ENTITY_TYPES.includes(item.entity_type as any)) {
+  } else if (!(VALID_ENTITY_TYPES as readonly string[]).includes(item.entity_type)) {
     errors.push(`Invalid entity_type: "${item.entity_type}". Must be one of: ${VALID_ENTITY_TYPES.join(', ')}`);
   }
 
@@ -36,7 +36,7 @@ export function validateSyncQueueItem(item: Partial<SyncQueueItem>): {
   // Required: action
   if (!item.action) {
     errors.push('Missing required field: action');
-  } else if (!VALID_ACTIONS.includes(item.action as any)) {
+  } else if (!(VALID_ACTIONS as readonly string[]).includes(item.action)) {
     errors.push(`Invalid action: "${item.action}". Must be one of: ${VALID_ACTIONS.join(', ')}`);
   }
 

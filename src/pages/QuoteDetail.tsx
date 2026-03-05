@@ -7,8 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SendNotificationButton } from '@/components/SendNotificationButton';
 import { PDFPreviewModal } from '@/components/PDFPreviewModal';
 import { useAuth } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { usePrintDocument } from '@/hooks/usePrintDocument';
 import { User, FileText, Send, Receipt, Download, Share2, Loader2, Briefcase, ArrowLeft, Edit, Camera, Trash2, Image } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils/clipboard';
 import { safeNumber } from '@/lib/utils';
@@ -20,13 +22,18 @@ export default function QuoteDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { team } = useTeam();
   const { toast } = useToast();
   const [quote, setQuote] = useState<any>(null);
   const [lineItems, setLineItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [downloadingPDF, setDownloadingPDF] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+
+  const { printing: downloadingPDF, handlePrint } = usePrintDocument({
+    documentType: 'quote',
+    documentId: id || '',
+  });
 
   useEffect(() => {
     if (user && id) {
@@ -109,7 +116,7 @@ export default function QuoteDetail() {
   };
 
   const updateStatus = async (status: string) => {
-    const updates: any = { status };
+    const updates: Record<string, string> = { status };
     if (status === 'sent' && !quote.sent_at) updates.sent_at = new Date().toISOString();
     if (status === 'accepted') updates.accepted_at = new Date().toISOString();
     if (status === 'declined') updates.declined_at = new Date().toISOString();
@@ -128,6 +135,7 @@ export default function QuoteDetail() {
 
     const { data: job, error } = await supabase.from('jobs').insert({
       user_id: user?.id,
+      team_id: team?.id || null,
       client_id: quote.client_id,
       quote_id: quote.id,
       title: quote.title,
@@ -146,18 +154,27 @@ export default function QuoteDetail() {
   const convertToInvoice = async () => {
     if (!quote) return;
 
-    const invoiceNumber = `INV${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    const invoiceNumber = await (async () => {
+      const { data, error } = await supabase.rpc('get_next_document_number', { p_document_type: 'invoice' });
+      if (error || !data) {
+        return `INV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`;
+      }
+      return data as string;
+    })();
 
     const { data: invoice, error: invoiceError } = await supabase.from('invoices').insert({
       user_id: user?.id,
+      team_id: team?.id || null,
       client_id: quote.client_id,
       quote_id: quote.id,
       invoice_number: invoiceNumber,
       title: quote.title,
       description: quote.description,
+      notes: quote.notes,
       subtotal: quote.subtotal,
       gst: quote.gst,
       total: quote.total,
+      due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       status: 'draft',
     }).select().single();
 
@@ -343,26 +360,7 @@ export default function QuoteDetail() {
               variant="outline"
               className="h-14 rounded-2xl border-border/40 bg-card/40 backdrop-blur-sm"
               disabled={downloadingPDF}
-              onClick={async () => {
-                setDownloadingPDF(true);
-                try {
-                  const response = await supabase.functions.invoke('generate-pdf', {
-                    body: { type: 'quote', id }
-                  });
-                  if (response.error) throw response.error;
-                  const printWindow = window.open('', '_blank');
-                  if (printWindow) {
-                    printWindow.document.write(response.data.html);
-                    printWindow.document.close();
-                    printWindow.print();
-                  }
-                } catch (error) {
-                  console.error('PDF generation error:', error);
-                  toast({ title: 'Error generating PDF', description: 'Please try again.', variant: 'destructive' });
-                } finally {
-                  setDownloadingPDF(false);
-                }
-              }}
+              onClick={handlePrint}
             >
               {downloadingPDF ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-5 h-5 mr-2 text-primary" />}
               PDF
@@ -372,7 +370,8 @@ export default function QuoteDetail() {
               variant="outline"
               className="col-span-2 h-14 rounded-2xl border-border/40 bg-card/40 backdrop-blur-sm"
               onClick={async () => {
-                const url = `${window.location.origin}/q/${id}`;
+                const publicToken = quote?.public_token || id;
+                const url = `${window.location.origin}/q/${publicToken}`;
                 const success = await copyToClipboard(url);
                 if (success) {
                   toast({ title: 'Link copied!', description: 'Share this link with your client.' });

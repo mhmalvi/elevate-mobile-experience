@@ -1,13 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { StatCard } from '@/components/ui/stat-card';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { useAuth } from '@/hooks/useAuth';
-import { useTeam } from '@/hooks/useTeam';
-import { useProfile } from '@/hooks/useProfile';
-import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { supabase } from '@/integrations/supabase/client';
+import { useDashboardData } from '@/hooks/useDashboardData';
 import {
   DollarSign,
   FileText,
@@ -21,10 +16,9 @@ import {
   Clock,
   CheckCircle2,
   ArrowUpRight,
-  Users
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
   Select,
@@ -32,217 +26,30 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { team, allTeams, switchTeam, loading: teamLoading, teamMembers } = useTeam();
-  const { profile } = useProfile();
-  const { toast } = useToast();
-  const [stats, setStats] = useState({
-    monthlyRevenue: 0,
-    outstandingInvoices: 0,
-    activeJobs: 0,
-    pendingQuotes: 0,
-  });
-  const [overdueStats, setOverdueStats] = useState({ count: 0, total: 0 });
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
-  const [sendingReminders, setSendingReminders] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<string>('');
-  const [memberStats, setMemberStats] = useState<{
-    assignedJobs: number;
-    completedJobs: number;
-    revenue: number;
-    completionRate: number;
-  } | null>(null);
 
-  const fetchData = useCallback(async () => {
-    if (!user || !team) return;
-    await Promise.all([fetchStats(), fetchRecentActivity(), fetchOverdueInvoices()]);
-  }, [user, team]);
-
-  useEffect(() => {
-    if (user && team) {
-      fetchData();
-    }
-  }, [user, team]);
-
-  const { containerProps, RefreshIndicator } = usePullToRefresh({
-    onRefresh: fetchData,
-  });
-
-  const fetchStats = async () => {
-    if (!team || !user) return;
-
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const ownershipFilter = `team_id.eq.${team.id},and(team_id.is.null,user_id.eq.${user.id})`;
-
-    const [jobsRes, quotesRes, outstandingRes, paidRes] = await Promise.all([
-      supabase
-        .from('jobs')
-        .select('*', { count: 'exact', head: true })
-        .or(ownershipFilter)
-        .in('status', ['approved', 'scheduled', 'in_progress']),
-
-      supabase
-        .from('quotes')
-        .select('*', { count: 'exact', head: true })
-        .or(ownershipFilter)
-        .in('status', ['sent', 'viewed']),
-
-      supabase
-        .from('invoices')
-        .select('total, amount_paid')
-        .or(ownershipFilter)
-        .in('status', ['sent', 'viewed', 'partially_paid', 'overdue']),
-
-      supabase
-        .from('invoices')
-        .select('amount_paid, paid_at')
-        .or(ownershipFilter)
-        .eq('status', 'paid')
-        .gte('paid_at', startOfMonth),
-    ]);
-
-    const outstanding = outstandingRes.data?.reduce((sum, inv) =>
-      sum + (Number(inv.total) - Number(inv.amount_paid || 0)), 0) || 0;
-
-    const monthlyRevenue = paidRes.data?.reduce((sum, inv) =>
-      sum + Number(inv.amount_paid || 0), 0) || 0;
-
-    setStats({
-      monthlyRevenue,
-      outstandingInvoices: outstanding,
-      activeJobs: jobsRes.count || 0,
-      pendingQuotes: quotesRes.count || 0,
-    });
-  };
-
-  const fetchOverdueInvoices = async () => {
-    if (!team || !user) return;
-
-    const today = new Date().toISOString().split('T')[0];
-    const ownershipFilter = `team_id.eq.${team.id},and(team_id.is.null,user_id.eq.${user.id})`;
-
-    const { data: overdue } = await supabase
-      .from('invoices')
-      .select('id, total, amount_paid')
-      .or(ownershipFilter)
-      .lt('due_date', today)
-      .not('status', 'eq', 'paid')
-      .not('status', 'eq', 'cancelled');
-
-    if (overdue) {
-      const total = overdue.reduce((sum, inv) =>
-        sum + (Number(inv.total) - Number(inv.amount_paid || 0)), 0);
-      setOverdueStats({ count: overdue.length, total });
-    }
-  };
-
-  const fetchRecentActivity = async () => {
-    if (!team || !user) return;
-
-    const ownershipFilter = `team_id.eq.${team.id},and(team_id.is.null,user_id.eq.${user.id})`;
-
-    const { data: quotes } = await supabase
-      .from('quotes')
-      .select('id, title, status, created_at')
-      .or(ownershipFilter)
-      .order('created_at', { ascending: false })
-      .limit(5);
-
-    setRecentActivity(quotes || []);
-  };
-
-  const handleSendReminders = async () => {
-    setSendingReminders(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('payment-reminder', {
-        body: { user_id: user?.id, team_id: team?.id }
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: 'Reminders sent!',
-        description: `Payment reminders sent to ${data?.sent || 0} clients`,
-      });
-
-      fetchOverdueInvoices();
-    } catch (error: any) {
-      console.error('Error sending reminders:', error);
-      toast({
-        title: 'Failed to send reminders',
-        description: error.message || 'Please try again',
-        variant: 'destructive',
-      });
-    } finally {
-      setSendingReminders(false);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedMember && team) {
-      fetchMemberStats(selectedMember);
-    } else {
-      setMemberStats(null);
-    }
-  }, [selectedMember, team]);
-
-  const fetchMemberStats = async (memberId: string) => {
-    if (!team || !user) return;
-
-    const ownershipFilter = `team_id.eq.${team.id},and(team_id.is.null,user_id.eq.${user.id})`;
-
-    const [jobsRes, completedRes, invoicesRes] = await Promise.all([
-      supabase
-        .from('jobs')
-        .select('*', { count: 'exact', head: true })
-        .or(ownershipFilter)
-        .eq('assigned_to', memberId),
-      supabase
-        .from('jobs')
-        .select('*', { count: 'exact', head: true })
-        .or(ownershipFilter)
-        .eq('assigned_to', memberId)
-        .in('status', ['completed', 'invoiced']),
-      supabase
-        .from('invoices')
-        .select('total')
-        .or(ownershipFilter)
-        .eq('status', 'paid')
-        .in('job_id', (
-          await supabase
-            .from('jobs')
-            .select('id')
-            .or(ownershipFilter)
-            .eq('assigned_to', memberId)
-        ).data?.map(j => j.id) || []),
-    ]);
-
-    const assignedJobs = jobsRes.count || 0;
-    const completedJobs = completedRes.count || 0;
-    const revenue = invoicesRes.data?.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0) || 0;
-    const completionRate = assignedJobs > 0 ? Math.round((completedJobs / assignedJobs) * 100) : 0;
-
-    setMemberStats({ assignedJobs, completedJobs, revenue, completionRate });
-  };
-
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 17) return "Good afternoon";
-    return "Good evening";
-  };
-
-  const getTimeOfDay = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "morning";
-    if (hour < 17) return "afternoon";
-    return "evening";
-  };
+  const {
+    team,
+    allTeams,
+    switchTeam,
+    teamMembers,
+    profile,
+    stats,
+    overdueStats,
+    recentActivity,
+    memberStats,
+    selectedMember,
+    setSelectedMember,
+    sendingReminders,
+    handleSendReminders,
+    containerProps,
+    RefreshIndicator,
+    greeting,
+    timeOfDay,
+  } = useDashboardData();
 
   return (
     <MobileLayout>
@@ -264,10 +71,10 @@ export default function Dashboard() {
                   <span className="text-sm font-medium text-primary">Welcome back</span>
                 </div>
                 <h1 className="text-3xl font-bold text-foreground">
-                  {greeting()}, {profile?.business_name || 'there'}!
+                  {greeting}, {profile?.business_name || 'there'}!
                 </h1>
                 <p className="text-muted-foreground mt-1">
-                  Here's your business snapshot this {getTimeOfDay()}
+                  Here's your business snapshot this {timeOfDay}
                 </p>
               </div>
 

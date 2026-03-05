@@ -5,54 +5,97 @@
  * Uses Web Crypto API with AES-GCM encryption
  *
  * NOTE: crypto.subtle is only available in secure contexts (HTTPS or localhost).
- * In non-secure contexts (HTTP), encryption is disabled and data is stored as-is.
+ * In non-secure contexts (HTTP), encryption is unavailable. Data is base64-encoded
+ * and prefixed with UNENC: so unencrypted records can be identified and remediated.
+ *
+ * SECURITY (SEC-M8): The encryption key is stored via secureStorage, which uses
+ * platform-specific encrypted storage:
+ * - iOS: Keychain
+ * - Android: EncryptedSharedPreferences
+ * - Web: sessionStorage (key is lost on tab close; a new key is generated each session,
+ *   meaning previously encrypted IndexedDB data will be unreadable after session end.
+ *   On web, the UNENC: fallback path is the practical storage path for offline data.)
+ *
+ * LIMITATION: On web there is no persistent secure key store, so true cross-session
+ * encryption of IndexedDB PII is not achievable without a server-side key escrow.
+ * This is a known architectural limitation documented here.
  */
 
-import { Preferences } from '@capacitor/preferences';
+import { secureStorage } from '@/lib/secureStorage';
 import { safeNumber } from '@/lib/utils';
+import type { OfflineClient, OfflineInvoice, OfflineQuote } from './db';
 
 const ENCRYPTION_KEY_NAME = 'offline_encryption_key';
 const ALGORITHM = 'AES-GCM';
 const KEY_LENGTH = 256;
 
 /**
- * Check if we're in a secure context where crypto.subtle is available
+ * Prefix applied to base64-encoded plaintext when crypto.subtle is unavailable.
+ * This lets us distinguish unencrypted records from encrypted ones so they can
+ * be identified, reported, and remediated.
+ */
+const UNENC_PREFIX = 'UNENC:';
+
+/**
+ * Check if the Web Crypto API is available in this context.
+ * crypto.subtle is only present in secure contexts (HTTPS or localhost).
  */
 function isSecureContext(): boolean {
-  // crypto.subtle is only available in secure contexts
   return typeof crypto !== 'undefined' &&
          typeof crypto.subtle !== 'undefined' &&
          typeof crypto.subtle.generateKey === 'function';
 }
 
-// Cache the secure context check
+// Cache the secure context check so the warning fires exactly once.
 let _isSecureContextCached: boolean | null = null;
 function getIsSecureContext(): boolean {
   if (_isSecureContextCached === null) {
     _isSecureContextCached = isSecureContext();
     if (!_isSecureContextCached) {
-      console.warn('[Encryption] crypto.subtle not available (non-secure context). Encryption disabled.');
+      // SEC-M7: Explicit warning — do NOT silently store plaintext PII.
+      console.warn(
+        '[Encryption] SECURITY WARNING: crypto.subtle is not available in this context ' +
+        '(page served over HTTP or in an insecure environment). ' +
+        'Sensitive fields will be base64-encoded and marked with the UNENC: prefix ' +
+        'rather than encrypted. This data is NOT protected against device compromise. ' +
+        'Ensure the app is served over HTTPS in production.'
+      );
     }
   }
   return _isSecureContextCached;
 }
 
 /**
- * Get or generate encryption key
- * Stored securely in Capacitor Preferences (encrypted storage on mobile)
+ * Returns true when AES-GCM encryption is available.
+ * Components can call this to show a warning UI or restrict offline usage
+ * when running in a non-secure context.
+ */
+export function isEncryptionAvailable(): boolean {
+  return getIsSecureContext();
+}
+
+/**
+ * Get or generate encryption key.
+ *
+ * SEC-M8: Key is stored via secureStorage (not Preferences directly) so that
+ * the correct platform-specific backend is used:
+ * - iOS: Keychain
+ * - Android: EncryptedSharedPreferences
+ * - Web: sessionStorage (ephemeral; a new key is generated each browser session)
+ *
+ * On web, the ephemeral key means IndexedDB data encrypted in one session cannot
+ * be decrypted in a later session. This is a known limitation — see module header.
  */
 async function getOrCreateEncryptionKey(): Promise<CryptoKey | null> {
-  // Check if encryption is available
   if (!getIsSecureContext()) {
     return null;
   }
 
   try {
-    // Try to get existing key from secure storage
-    const { value: keyData } = await Preferences.get({ key: ENCRYPTION_KEY_NAME });
+    // Try to load an existing key from secure storage.
+    const keyData = await secureStorage.getItem(ENCRYPTION_KEY_NAME);
 
     if (keyData) {
-      // Import existing key
       const keyBuffer = base64ToArrayBuffer(keyData);
       return await crypto.subtle.importKey(
         'raw',
@@ -66,7 +109,7 @@ async function getOrCreateEncryptionKey(): Promise<CryptoKey | null> {
     console.warn('[Encryption] Could not retrieve existing key:', error);
   }
 
-  // Generate new key
+  // Generate a new key and persist it.
   try {
     const key = await crypto.subtle.generateKey(
       { name: ALGORITHM, length: KEY_LENGTH },
@@ -74,11 +117,10 @@ async function getOrCreateEncryptionKey(): Promise<CryptoKey | null> {
       ['encrypt', 'decrypt']
     );
 
-    // Store for future use
     try {
       const keyBuffer = await crypto.subtle.exportKey('raw', key);
       const keyData = arrayBufferToBase64(keyBuffer);
-      await Preferences.set({ key: ENCRYPTION_KEY_NAME, value: keyData });
+      await secureStorage.setItem(ENCRYPTION_KEY_NAME, keyData);
     } catch (error) {
       console.error('[Encryption] Failed to store encryption key:', error);
     }
@@ -91,23 +133,38 @@ async function getOrCreateEncryptionKey(): Promise<CryptoKey | null> {
 }
 
 /**
- * Encrypt a string value
- * In non-secure contexts, returns the plaintext as-is
+ * Encode a value as UNENC: prefixed base64 when true encryption is unavailable.
+ * The data is not protected but is not trivially readable, and is clearly marked
+ * so that unencrypted records can be identified and remediated later.
+ */
+function encodeUnencrypted(plaintext: string): string {
+  return UNENC_PREFIX + btoa(unescape(encodeURIComponent(plaintext)));
+}
+
+/**
+ * Encrypt a string value using AES-GCM.
+ *
+ * When crypto.subtle is unavailable (non-secure context) or key creation fails,
+ * the value is base64-encoded and prefixed with UNENC: instead of being stored
+ * as raw plaintext. This makes unencrypted records identifiable and ensures PII
+ * is never silently stored in a trivially readable form. (SEC-M7)
  */
 export async function encryptField(plaintext: string | null | undefined): Promise<string | null> {
   if (!plaintext || plaintext.trim() === '') {
     return null;
   }
 
-  // If encryption is not available, return plaintext
   if (!getIsSecureContext()) {
-    return plaintext;
+    // SEC-M7: Do NOT fall back to raw plaintext — use marked base64 encoding.
+    return encodeUnencrypted(plaintext);
   }
 
   try {
     const key = await getOrCreateEncryptionKey();
     if (!key) {
-      return plaintext; // Fallback to plaintext if key creation fails
+      // SEC-M7: Key creation failed — use marked base64 encoding, not raw plaintext.
+      console.warn('[Encryption] Key unavailable, storing field as UNENC: encoded value.');
+      return encodeUnencrypted(plaintext);
     }
 
     // Generate random IV (Initialization Vector)
@@ -130,35 +187,52 @@ export async function encryptField(plaintext: string | null | undefined): Promis
     return arrayBufferToBase64(combined.buffer);
   } catch (error) {
     console.error('[Encryption] Failed to encrypt field:', error);
-    // In case of error, return plaintext to prevent data loss
-    return plaintext;
+    // SEC-M7: On error, use marked base64 encoding rather than raw plaintext.
+    return encodeUnencrypted(plaintext);
   }
 }
 
 /**
- * Decrypt a string value
- * In non-secure contexts, returns the ciphertext as-is (assuming it's plaintext)
+ * Decrypt a string value.
+ *
+ * Handles three storage formats transparently:
+ * 1. AES-GCM encrypted base64 (normal case — produced by encryptField in secure context)
+ * 2. UNENC: prefixed base64 (produced by encryptField when crypto.subtle was unavailable)
+ * 3. Raw plaintext (legacy records written before this fix was applied)
  */
 export async function decryptField(ciphertext: string | null | undefined): Promise<string | null> {
   if (!ciphertext || ciphertext.trim() === '') {
     return null;
   }
 
-  // If encryption is not available, return as-is (data was stored as plaintext)
+  // SEC-M7: Handle UNENC: prefixed records written when encryption was unavailable.
+  if (ciphertext.startsWith(UNENC_PREFIX)) {
+    try {
+      const encoded = ciphertext.slice(UNENC_PREFIX.length);
+      return decodeURIComponent(escape(atob(encoded)));
+    } catch {
+      // Malformed UNENC: value — return the raw string rather than losing the data.
+      console.warn('[Encryption] Failed to decode UNENC: prefixed value, returning raw.');
+      return ciphertext;
+    }
+  }
+
   if (!getIsSecureContext()) {
+    // No crypto.subtle — treat the value as raw plaintext (legacy pre-fix records).
     return ciphertext;
   }
 
   try {
     const key = await getOrCreateEncryptionKey();
     if (!key) {
-      return ciphertext; // Fallback - treat as plaintext
+      // Cannot decrypt without a key — return as-is (may be a legacy plaintext record).
+      return ciphertext;
     }
 
     // Decode from base64
     const combined = base64ToArrayBuffer(ciphertext);
 
-    // Extract IV and encrypted data
+    // Extract IV (first 12 bytes) and ciphertext body
     const iv = combined.slice(0, 12);
     const data = combined.slice(12);
 
@@ -169,13 +243,12 @@ export async function decryptField(ciphertext: string | null | undefined): Promi
       data
     );
 
-    // Decode to string
     const decoder = new TextDecoder();
     return decoder.decode(decrypted);
   } catch (error) {
-    // If decryption fails, the data might have been stored as plaintext
-    // (e.g., from a previous non-secure session)
-    console.warn('[Encryption] Decryption failed, treating as plaintext:', error);
+    // Decryption failed — the record may be a legacy plaintext value written before
+    // encryption was enabled. Return as-is rather than losing the data, but warn.
+    console.warn('[Encryption] Decryption failed — record may be a legacy plaintext value:', error);
     return ciphertext;
   }
 }
@@ -183,16 +256,16 @@ export async function decryptField(ciphertext: string | null | undefined): Promi
 /**
  * Encrypt sensitive fields in a client object
  */
-export async function encryptClientFields(client: any): Promise<any> {
+export async function encryptClientFields(client: OfflineClient): Promise<OfflineClient> {
   if (!client) return client;
 
   const encrypted = { ...client };
 
-  // Encrypt PII fields
-  if (client.name) encrypted.name = await encryptField(client.name);
-  if (client.email) encrypted.email = await encryptField(client.email);
-  if (client.phone) encrypted.phone = await encryptField(client.phone);
-  if (client.address) encrypted.address = await encryptField(client.address);
+  // Encrypt PII fields (encrypted values are always non-null when input is truthy)
+  if (client.name) encrypted.name = (await encryptField(client.name))!;
+  if (client.email) encrypted.email = (await encryptField(client.email)) ?? undefined;
+  if (client.phone) encrypted.phone = (await encryptField(client.phone)) ?? undefined;
+  if (client.address) encrypted.address = (await encryptField(client.address)) ?? undefined;
 
   return encrypted;
 }
@@ -200,16 +273,16 @@ export async function encryptClientFields(client: any): Promise<any> {
 /**
  * Decrypt sensitive fields in a client object
  */
-export async function decryptClientFields(client: any): Promise<any> {
+export async function decryptClientFields(client: OfflineClient): Promise<OfflineClient> {
   if (!client) return client;
 
   const decrypted = { ...client };
 
-  // Decrypt PII fields
-  if (client.name) decrypted.name = await decryptField(client.name);
-  if (client.email) decrypted.email = await decryptField(client.email);
-  if (client.phone) decrypted.phone = await decryptField(client.phone);
-  if (client.address) decrypted.address = await decryptField(client.address);
+  // Decrypt PII fields (decrypted values are always non-null when input is truthy)
+  if (client.name) decrypted.name = (await decryptField(client.name))!;
+  if (client.email) decrypted.email = (await decryptField(client.email)) ?? undefined;
+  if (client.phone) decrypted.phone = (await decryptField(client.phone)) ?? undefined;
+  if (client.address) decrypted.address = (await decryptField(client.address)) ?? undefined;
 
   return decrypted;
 }
@@ -217,17 +290,18 @@ export async function decryptClientFields(client: any): Promise<any> {
 /**
  * Encrypt sensitive fields in an invoice object
  */
-export async function encryptInvoiceFields(invoice: any): Promise<any> {
+export async function encryptInvoiceFields(invoice: OfflineInvoice): Promise<OfflineInvoice> {
   if (!invoice) return invoice;
 
   const encrypted = { ...invoice };
 
   // Encrypt financial amounts (convert to string first, handle null/undefined)
+  // Note: encrypted values are stored as strings in IndexedDB, cast to satisfy the type
   if (invoice.total !== undefined && invoice.total !== null) {
-    encrypted.total = await encryptField(String(invoice.total));
+    encrypted.total = (await encryptField(String(invoice.total))) as unknown as number;
   }
   if (invoice.amount_paid !== undefined && invoice.amount_paid !== null) {
-    encrypted.amount_paid = await encryptField(String(invoice.amount_paid));
+    encrypted.amount_paid = (await encryptField(String(invoice.amount_paid))) as unknown as number;
   }
 
   return encrypted;
@@ -236,7 +310,7 @@ export async function encryptInvoiceFields(invoice: any): Promise<any> {
 /**
  * Decrypt sensitive fields in an invoice object
  */
-export async function decryptInvoiceFields(invoice: any): Promise<any> {
+export async function decryptInvoiceFields(invoice: OfflineInvoice): Promise<OfflineInvoice> {
   if (!invoice) return invoice;
 
   const decrypted = { ...invoice };
@@ -266,14 +340,15 @@ export async function decryptInvoiceFields(invoice: any): Promise<any> {
 /**
  * Encrypt sensitive fields in a quote object
  */
-export async function encryptQuoteFields(quote: any): Promise<any> {
+export async function encryptQuoteFields(quote: OfflineQuote): Promise<OfflineQuote> {
   if (!quote) return quote;
 
   const encrypted = { ...quote };
 
   // Encrypt financial amounts (handle null/undefined)
+  // Note: encrypted values are stored as strings in IndexedDB, cast to satisfy the type
   if (quote.total !== undefined && quote.total !== null) {
-    encrypted.total = await encryptField(String(quote.total));
+    encrypted.total = (await encryptField(String(quote.total))) as unknown as number;
   }
 
   return encrypted;
@@ -282,7 +357,7 @@ export async function encryptQuoteFields(quote: any): Promise<any> {
 /**
  * Decrypt sensitive fields in a quote object
  */
-export async function decryptQuoteFields(quote: any): Promise<any> {
+export async function decryptQuoteFields(quote: OfflineQuote): Promise<OfflineQuote> {
   if (!quote) return quote;
 
   const decrypted = { ...quote };
@@ -302,11 +377,15 @@ export async function decryptQuoteFields(quote: any): Promise<any> {
 }
 
 /**
- * Clear encryption key (useful for logout)
+ * Clear encryption key (useful for logout).
+ * Uses secureStorage so the correct platform backend is targeted (SEC-M8).
  */
 export async function clearEncryptionKey(): Promise<void> {
   try {
-    await Preferences.remove({ key: ENCRYPTION_KEY_NAME });
+    await secureStorage.removeItem(ENCRYPTION_KEY_NAME);
+    // Reset the cached secure-context result so it is re-evaluated if the
+    // environment changes (e.g. in tests or if the page reloads).
+    _isSecureContextCached = null;
   } catch (error) {
     console.error('[Encryption] Failed to clear encryption key:', error);
   }

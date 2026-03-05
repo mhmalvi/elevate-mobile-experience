@@ -62,8 +62,8 @@ export default function BusinessSettings() {
         email: profile.email || '',
         address: profile.address || '',
         default_hourly_rate: profile.default_hourly_rate || 85,
-        license_number: (profile as any).license_number || '',
-        gst_registered: (profile as any).gst_registered ?? true,
+        license_number: (profile as Record<string, unknown>).license_number as string || '',
+        gst_registered: (profile as Record<string, unknown>).gst_registered as boolean ?? true,
       });
     }
   }, [profile]);
@@ -204,6 +204,7 @@ export default function BusinessSettings() {
                     <button
                       type="button"
                       onClick={handleRemoveLogo}
+                      aria-label="Remove business logo"
                       disabled={uploading}
                       className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:scale-110 transition-transform"
                     >

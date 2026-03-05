@@ -30,6 +30,57 @@ interface XeroContactsResponse {
   Contacts: XeroContact[];
 }
 
+// Mid-batch token refresh threshold: refresh proactively at 25 minutes
+// to avoid expiry during a long sync (Xero tokens last 30 minutes)
+const TOKEN_REFRESH_THRESHOLD_MS = 25 * 60 * 1000;
+
+/**
+ * Checks whether the Xero access token should be proactively refreshed
+ * based on elapsed time since last refresh, and performs the refresh if needed.
+ * Returns the current (possibly refreshed) access token.
+ */
+async function ensureFreshToken(
+  accessToken: string,
+  tokenObtainedAt: number,
+  supabase: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  authHeader: string,
+  userId: string,
+): Promise<{ accessToken: string; tokenObtainedAt: number }> {
+  const elapsed = Date.now() - tokenObtainedAt;
+  if (elapsed < TOKEN_REFRESH_THRESHOLD_MS) {
+    return { accessToken, tokenObtainedAt };
+  }
+
+  console.log(`Token age ${Math.round(elapsed / 1000)}s exceeds threshold, refreshing proactively...`);
+
+  const refreshResponse = await fetch(
+    `${supabaseUrl}/functions/v1/xero-oauth`,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "refresh" }),
+    }
+  );
+
+  if (!refreshResponse.ok) {
+    throw new Error("Failed to refresh Xero token mid-batch. Please reconnect Xero.");
+  }
+
+  const { data: refreshedProfile } = await supabase
+    .from("profiles")
+    .select("xero_access_token")
+    .eq("user_id", userId)
+    .single();
+
+  const newToken = await decryptToken(refreshedProfile.xero_access_token);
+  console.log("Mid-batch token refresh successful.");
+  return { accessToken: newToken, tokenObtainedAt: Date.now() };
+}
+
 serve(async (req) => {
   // SECURITY: Get secure CORS headers
   const corsHeaders = getCorsHeaders(req);
@@ -91,6 +142,9 @@ serve(async (req) => {
 
     // Decrypt the access token
     let accessToken: string;
+    // Track when we obtained/refreshed the token for mid-batch refresh logic
+    let tokenObtainedAt = Date.now();
+
     try {
       accessToken = await decryptToken(profile.xero_access_token);
       console.log("Token decrypted successfully, length:", accessToken?.length);
@@ -105,7 +159,7 @@ serve(async (req) => {
       );
     }
 
-    // Check if token needs refresh
+    // Check if token is already expired and needs immediate refresh
     const tokenExpiry = new Date(profile.xero_token_expires_at);
     console.log("Token expires at:", tokenExpiry, "Current time:", new Date());
 
@@ -114,12 +168,14 @@ serve(async (req) => {
 
       // Call refresh endpoint
       const refreshResponse = await fetch(
-        `${supabaseUrl}/functions/v1/xero-oauth?action=refresh`,
+        `${supabaseUrl}/functions/v1/xero-oauth`,
         {
-          method: "GET",
+          method: "POST",
           headers: {
             "Authorization": authHeader,
+            "Content-Type": "application/json",
           },
+          body: JSON.stringify({ action: "refresh" }),
         }
       );
 
@@ -138,20 +194,42 @@ serve(async (req) => {
         .single();
 
       accessToken = await decryptToken(refreshedProfile.xero_access_token);
+      tokenObtainedAt = Date.now();
+    } else {
+      // Token not yet expired -- estimate how long ago it was obtained
+      // so mid-batch refresh triggers at the right time.
+      // Xero tokens last 30 minutes, so age = 30min - remaining time.
+      const remainingMs = tokenExpiry.getTime() - Date.now();
+      const estimatedAge = (30 * 60 * 1000) - remainingMs;
+      tokenObtainedAt = Date.now() - Math.max(0, estimatedAge);
     }
 
     // Determine which clients to sync
     let clientsToSync: any[];
 
     if (sync_all) {
-      // Sync all clients
-      const { data: clients } = await supabase
-        .from("clients")
-        .select("*")
-        .eq("user_id", user.id)
-        .is("deleted_at", null);
+      // Sync all clients with pagination (Supabase default limit is 1000)
+      const PAGE_SIZE = 500;
+      let allClients: typeof clientsToSync = [];
+      let from = 0;
+      let hasMore = true;
 
-      clientsToSync = clients || [];
+      while (hasMore) {
+        const { data: page } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("user_id", user.id)
+          .is("deleted_at", null)
+          .range(from, from + PAGE_SIZE - 1);
+
+        const results = page || [];
+        allClients = allClients.concat(results);
+        hasMore = results.length === PAGE_SIZE;
+        from += PAGE_SIZE;
+      }
+
+      clientsToSync = allClients;
+      console.log(`Fetched ${clientsToSync.length} clients to sync (paginated).`);
     } else if (client_id) {
       // Sync specific client
       const { data: client } = await supabase
@@ -185,6 +263,11 @@ serve(async (req) => {
     // Sync each client to Xero
     for (const client of clientsToSync) {
       try {
+        // Proactively refresh token if approaching expiry (25 min threshold)
+        ({ accessToken, tokenObtainedAt } = await ensureFreshToken(
+          accessToken, tokenObtainedAt, supabase, supabaseUrl, authHeader, user.id
+        ));
+
         // Build Xero contact object
         const xeroContact: XeroContact = {
           Name: client.name,
