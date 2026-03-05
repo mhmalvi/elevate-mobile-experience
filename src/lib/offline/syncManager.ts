@@ -28,6 +28,9 @@ import { SyncLock } from './syncLock';
 import { SyncQueue } from './syncQueue';
 import { SyncDispatcher } from './syncDispatcher';
 import { DataFetcher } from './dataFetcher';
+import { supabase } from '@/integrations/supabase/client';
+import { encryptedDb } from './encryptedDb';
+import type { Table } from 'dexie';
 
 /** Record with string keys and unknown values, representing a database row */
 type SyncRecord = Record<string, unknown>;
