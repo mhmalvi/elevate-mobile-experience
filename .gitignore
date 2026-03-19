@@ -55,3 +55,6 @@ tmpclaude-*
 # Security: keystores
 *.keystore
 *.jks
+# Security
+credentials.json
+serviceAccountKey.json
