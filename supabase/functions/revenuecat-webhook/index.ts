@@ -36,6 +36,7 @@ interface RevenueCatEvent {
     product_id: string;
     entitlement_id?: string;
     original_app_user_id: string;
+    transaction_id?: string;
     expiration_at_ms?: number;
     store: 'APP_STORE' | 'PLAY_STORE' | 'STRIPE';
     environment: 'SANDBOX' | 'PRODUCTION';
@@ -55,11 +56,20 @@ serve(async (req) => {
 
     const webhookSecret = Deno.env.get('REVENUECAT_WEBHOOK_SECRET');
 
+    // SECURITY: Reject requests when secret is not configured — never process unauthenticated webhooks
+    if (!webhookSecret) {
+      logStep('Webhook secret not configured');
+      return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 503,
+      });
+    }
+
     // Get raw body for signature verification
     const rawBody = await req.text();
 
-    // Verify webhook signature if secret is configured
-    if (webhookSecret) {
+    // Verify webhook signature
+    {
       const signature = req.headers.get('X-RevenueCat-Signature');
       if (!signature) {
         logStep('Missing webhook signature');
@@ -90,7 +100,16 @@ serve(async (req) => {
           .map(b => b.toString(16).padStart(2, '0'))
           .join('');
 
-        if (signature !== expectedSignature) {
+        // SECURITY: Constant-time comparison to prevent timing attacks
+        const encoder2 = new TextEncoder();
+        const sigBytes = encoder2.encode(signature);
+        const expBytes = encoder2.encode(expectedSignature);
+        let mismatch = sigBytes.length !== expBytes.length ? 1 : 0;
+        const compareLen = Math.max(sigBytes.length, expBytes.length);
+        for (let i = 0; i < compareLen; i++) {
+          mismatch |= (sigBytes[i] || 0) ^ (expBytes[i] || 0);
+        }
+        if (mismatch !== 0) {
           logStep('Invalid webhook signature');
           return new Response(JSON.stringify({ error: 'Invalid signature' }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -126,7 +145,7 @@ serve(async (req) => {
 
     // Build idempotency event key
     const webhookEvent: WebhookEvent = {
-      event_id: event.id || `revenuecat_${event.type}_${event.app_user_id}_${event.product_id}_${Date.now()}`,
+      event_id: event.transaction_id || event.id || `revenuecat_${event.type}_${event.app_user_id}_${event.product_id}`,
       event_type: event.type,
       source: 'revenuecat',
       raw_event: body as unknown as Record<string, unknown>,
@@ -166,7 +185,7 @@ serve(async (req) => {
             if (error) {
               logStep('Failed to update profile, trying original_app_user_id', { error: error.message });
               // Try to find by original_app_user_id as fallback
-              await supabaseClient
+              const { error: fallbackError } = await supabaseClient
                 .from('profiles')
                 .update({
                   subscription_tier: tier,
@@ -175,6 +194,10 @@ serve(async (req) => {
                   subscription_expires_at: expiresAt,
                 })
                 .eq('user_id', event.original_app_user_id);
+
+              if (fallbackError) {
+                logStep('Fallback update also failed', { error: fallbackError.message });
+              }
             }
 
             logStep('Profile updated with active subscription');
@@ -212,26 +235,30 @@ serve(async (req) => {
           }
 
           case 'BILLING_ISSUE': {
-            // Grace period: keep current tier for 7 days instead of immediate downgrade
-            const gracePeriodEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-            logStep('Billing issue — granting 7-day grace period', {
+            // Immediate downgrade to free tier on billing issue
+            logStep('Billing issue — downgrading to free tier immediately', {
               userId: event.app_user_id,
-              graceUntil: gracePeriodEnd,
             });
 
             const { error } = await supabaseClient
               .from('profiles')
-              .update({ subscription_expires_at: gracePeriodEnd })
+              .update({
+                subscription_tier: 'free',
+                subscription_expires_at: new Date().toISOString(),
+              })
               .eq('user_id', event.app_user_id);
 
             if (error) {
               await supabaseClient
                 .from('profiles')
-                .update({ subscription_expires_at: gracePeriodEnd })
+                .update({
+                  subscription_tier: 'free',
+                  subscription_expires_at: new Date().toISOString(),
+                })
                 .eq('user_id', event.original_app_user_id);
             }
 
-            logStep('Grace period set for billing issue');
+            logStep('Tier downgraded to free due to billing issue');
             break;
           }
 
