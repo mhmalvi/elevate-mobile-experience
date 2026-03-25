@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
@@ -35,14 +35,29 @@ const usageTypeToColumn: Record<UsageType, keyof UsageData> = {
   clients: 'clients_created',
 };
 
-export function useUsageLimits(usageType: UsageType): UsageLimitsResult {
+const DEFAULT_USAGE: UsageData = {
+  quotes_created: 0,
+  invoices_created: 0,
+  jobs_created: 0,
+  emails_sent: 0,
+  sms_sent: 0,
+  clients_created: 0,
+};
+
+/**
+ * Shared hook that fetches raw usage data once.
+ * Both useUsageLimits and useAllUsageLimits consume this.
+ */
+function useRawUsageData() {
   const { user } = useAuth();
   const { profile } = useProfile();
   const [loading, setLoading] = useState(true);
   const [usageData, setUsageData] = useState<UsageData | null>(null);
 
   const tier = (profile?.subscription_tier as SubscriptionTier) || 'free';
-  const monthYear = format(new Date(), 'yyyy-MM');
+  // Memoize monthYear so it only changes when the month actually changes,
+  // preventing useCallback/useEffect from re-running every render
+  const monthYear = useMemo(() => format(new Date(), 'yyyy-MM'), []);
 
   const fetchUsage = useCallback(async () => {
     if (!user) {
@@ -62,14 +77,7 @@ export function useUsageLimits(usageType: UsageType): UsageLimitsResult {
         console.error('Error fetching usage:', error);
       }
 
-      setUsageData(data || {
-        quotes_created: 0,
-        invoices_created: 0,
-        jobs_created: 0,
-        emails_sent: 0,
-        sms_sent: 0,
-        clients_created: 0,
-      });
+      setUsageData(data || DEFAULT_USAGE);
     } catch (err) {
       console.error('Error fetching usage:', err);
     } finally {
@@ -81,44 +89,14 @@ export function useUsageLimits(usageType: UsageType): UsageLimitsResult {
     fetchUsage();
   }, [fetchUsage]);
 
-  const incrementUsage = useCallback(async () => {
-    if (!user) return;
+  return { loading, usageData, tier, fetchUsage };
+}
 
-    const column = usageTypeToColumn[usageType];
+export function useUsageLimits(usageType: UsageType): UsageLimitsResult {
+  const { loading, usageData, tier, fetchUsage } = useRawUsageData();
 
-    try {
-      // Try to upsert the usage record
-      const { data: existing } = await supabase
-        .from('usage_tracking')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('month_year', monthYear)
-        .maybeSingle();
-
-      if (existing) {
-        // Update existing record
-        await supabase
-          .from('usage_tracking')
-          .update({ [column]: (existing[column] || 0) + 1 })
-          .eq('user_id', user.id)
-          .eq('month_year', monthYear);
-      } else {
-        // Insert new record
-        await supabase
-          .from('usage_tracking')
-          .insert({
-            user_id: user.id,
-            month_year: monthYear,
-            [column]: 1,
-          });
-      }
-
-      // Refresh local state
-      await fetchUsage();
-    } catch (err) {
-      console.error('Error incrementing usage:', err);
-    }
-  }, [user, usageType, monthYear, fetchUsage]);
+  // No-op: server-side triggers handle usage counting
+  const incrementUsage = useCallback(async () => {}, []);
 
   const column = usageTypeToColumn[usageType];
   const used = usageData?.[column] || 0;
@@ -142,46 +120,7 @@ export function useUsageLimits(usageType: UsageType): UsageLimitsResult {
 
 // Hook to get all usage limits at once
 export function useAllUsageLimits() {
-  const { user } = useAuth();
-  const { profile } = useProfile();
-  const [loading, setLoading] = useState(true);
-  const [usageData, setUsageData] = useState<UsageData | null>(null);
-
-  const tier = (profile?.subscription_tier as SubscriptionTier) || 'free';
-  const monthYear = format(new Date(), 'yyyy-MM');
-
-  useEffect(() => {
-    async function fetchUsage() {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const { data } = await supabase
-          .from('usage_tracking')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('month_year', monthYear)
-          .maybeSingle();
-
-        setUsageData(data || {
-          quotes_created: 0,
-          invoices_created: 0,
-          jobs_created: 0,
-          emails_sent: 0,
-          sms_sent: 0,
-          clients_created: 0,
-        });
-      } catch (err) {
-        console.error('Error fetching usage:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchUsage();
-  }, [user, monthYear]);
+  const { loading, usageData, tier } = useRawUsageData();
 
   const getUsageForType = (type: UsageType) => {
     const column = usageTypeToColumn[type];

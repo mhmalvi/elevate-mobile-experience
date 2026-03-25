@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 import { usePaymentPoller } from '@/hooks/usePaymentPoller';
 import { usePrintDocument } from '@/hooks/usePrintDocument';
 import { supabase } from '@/integrations/supabase/client';
@@ -50,6 +52,8 @@ export function useInvoiceDetail(): UseInvoiceDetailReturn {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const { team } = useTeam();
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [client, setClient] = useState<Client | null>(null);
@@ -61,12 +65,13 @@ export function useInvoiceDetail(): UseInvoiceDetailReturn {
   // ---------- Data fetching ----------
 
   const fetchInvoice = useCallback(async () => {
-    if (!id) return;
+    if (!id || !user) return;
 
     const { data: invoiceData, error } = await supabase
       .from('invoices')
       .select('*')
       .eq('id', id)
+      .eq('user_id', user.id)
       .single();
 
     if (error || !invoiceData) {
@@ -78,11 +83,17 @@ export function useInvoiceDetail(): UseInvoiceDetailReturn {
     setInvoice(invoiceData);
 
     if (invoiceData.client_id) {
-      const { data: clientData } = await supabase
+      // Defence-in-depth: scope client query by user/team
+      let clientQuery = supabase
         .from('clients')
         .select('*')
-        .eq('id', invoiceData.client_id)
-        .single();
+        .eq('id', invoiceData.client_id);
+      if (team?.id) {
+        clientQuery = clientQuery.eq('team_id', team.id);
+      } else if (user) {
+        clientQuery = clientQuery.eq('user_id', user.id);
+      }
+      const { data: clientData } = await clientQuery.single();
       setClient(clientData);
     }
 
@@ -90,11 +101,12 @@ export function useInvoiceDetail(): UseInvoiceDetailReturn {
       .from('invoice_line_items')
       .select('*')
       .eq('invoice_id', id)
+      .is('deleted_at', null)
       .order('sort_order');
 
     setLineItems(items || []);
     setLoading(false);
-  }, [id, toast, navigate]);
+  }, [id, user, toast, navigate]);
 
   // ---------- Payment polling ----------
 

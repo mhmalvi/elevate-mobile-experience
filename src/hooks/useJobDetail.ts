@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useProfile } from '@/hooks/useProfile';
 import { useToast } from '@/hooks/use-toast';
 import { useTeam } from '@/hooks/useTeam';
 import { supabase } from '@/integrations/supabase/client';
@@ -73,6 +74,7 @@ export function useJobDetail(): UseJobDetailReturn {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { profile } = useProfile();
   const { toast } = useToast();
   const { team, teamMembers } = useTeam();
 
@@ -87,18 +89,27 @@ export function useJobDetail(): UseJobDetailReturn {
   // ---------- Data fetching ----------
 
   const fetchJob = useCallback(async () => {
-    if (!id) return;
-    const { data } = await supabase
+    if (!id || !user) return;
+
+    // Defence-in-depth: filter by user_id or team_id in addition to RLS
+    let query = supabase
       .from('jobs')
       .select('*, clients(name, email, phone), quotes(quote_number, total, subtotal)')
-      .eq('id', id)
-      .single();
+      .eq('id', id);
+
+    if (team?.id) {
+      query = query.eq('team_id', team.id);
+    } else {
+      query = query.eq('user_id', user.id);
+    }
+
+    const { data } = await query.single();
 
     const jobData = data as unknown as JobWithRelations | null;
     setJob(jobData);
     setMaterialCost(jobData?.material_costs?.toString() || '');
     setLoading(false);
-  }, [id]);
+  }, [id, user, team]);
 
   const fetchPhotos = useCallback(async () => {
     if (!id) return;
@@ -342,7 +353,7 @@ export function useJobDetail(): UseJobDetailReturn {
 
     const quotedTotal = Number(job.quotes.total) || 0;
     const labourHours = job.actual_hours || 0;
-    const hourlyRate = 85;
+    const hourlyRate = profile?.default_hourly_rate || 85;
     const labourCost = labourHours * hourlyRate;
     const materialsCost = Number(job.material_costs) || 0;
     const actualCost = labourCost + materialsCost;
@@ -357,7 +368,7 @@ export function useJobDetail(): UseJobDetailReturn {
       profit,
       profitMargin,
     };
-  }, [job]);
+  }, [job, profile]);
 
   const costing = calculateCosting();
 

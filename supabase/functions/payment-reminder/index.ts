@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface ReminderRequest {
   invoice_id?: string; // Optional: send reminder for specific invoice
@@ -29,9 +30,19 @@ serve(async (req) => {
       );
     }
 
-    // Allow service role key (for cron) or validate user JWT
+    // Allow cron secret or service role key (for cron) or validate user JWT
+    const cronSecret = Deno.env.get("CRON_SECRET");
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    if (authHeader !== `Bearer ${supabaseServiceKey}`) {
+    let isCronCaller = false;
+    let authenticatedUserId: string | null = null;
+
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+      // Authenticated via dedicated cron secret
+      isCronCaller = true;
+    } else if (authHeader === `Bearer ${supabaseServiceKey}`) {
+      // Fallback: service role key (deprecated for cron, migrate to CRON_SECRET)
+      isCronCaller = true;
+    } else {
       const { data: { user }, error: authError } = await supabase.auth.getUser(
         authHeader.replace("Bearer ", "")
       );
@@ -41,7 +52,20 @@ serve(async (req) => {
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      authenticatedUserId = user.id;
     }
+
+    // Rate limiting: 10 requests per 60 seconds per user (skip for cron/service-role)
+    if (!isCronCaller) {
+      const rateLimit = await checkRateLimit(supabase, authenticatedUserId!, "payment-reminder", 10, 60);
+      if (rateLimit.limited) {
+        return new Response(
+          JSON.stringify({ error: "Too many requests. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": String(rateLimit.retryAfterSeconds || 60) } }
+        );
+      }
+    }
+
     const twilioAccountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
     const twilioAuthToken = Deno.env.get("TWILIO_AUTH_TOKEN");
     const twilioPhoneNumber = Deno.env.get("TWILIO_PHONE_NUMBER");
@@ -62,11 +86,15 @@ serve(async (req) => {
 
     if (invoice_id) {
       // Fetch specific invoice
-      const { data, error } = await supabase
+      // SECURITY: Add user_id filter for non-service-role callers
+      let query = supabase
         .from("invoices")
         .select("*, clients(*), profiles:user_id(business_name)")
-        .eq("id", invoice_id)
-        .single();
+        .eq("id", invoice_id);
+      if (authenticatedUserId) {
+        query = query.eq("user_id", authenticatedUserId);
+      }
+      const { data, error } = await query.single();
 
       if (error || !data) {
         console.error("Invoice not found:", error);
@@ -78,13 +106,18 @@ serve(async (req) => {
       invoices = [data];
     } else if (send_all_overdue) {
       // Fetch all overdue invoices
+      // SECURITY: Add user_id filter for non-service-role callers
       const today = new Date().toISOString().split('T')[0];
-      const { data, error } = await supabase
+      let query = supabase
         .from("invoices")
         .select("*, clients(*), profiles:user_id(business_name)")
         .lt("due_date", today)
         .not("status", "eq", "paid")
         .not("status", "eq", "cancelled");
+      if (authenticatedUserId) {
+        query = query.eq("user_id", authenticatedUserId);
+      }
+      const { data, error } = await query;
 
       if (error) {
         console.error("Error fetching overdue invoices:", error);

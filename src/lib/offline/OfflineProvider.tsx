@@ -1,10 +1,12 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { syncManager } from './syncManager';
 import { db } from './db';
 import { useToast } from '@/hooks/use-toast';
 import { WifiOff, RefreshCw } from 'lucide-react';
 import { migrateToEncryptedStorage } from './migrateEncryption';
+import { clearEncryptionKey } from './encryption';
+import { useOnlineStatus } from './offlineHooks';
 
 interface OfflineContextValue {
   isOnline: boolean;
@@ -25,7 +27,9 @@ const OfflineContext = createContext<OfflineContextValue | undefined>(undefined)
 export function OfflineProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const isOnline = useOnlineStatus();
+  const prevOnlineRef = useRef(isOnline);
+  const prevUserIdRef = useRef<string | null>(user?.id ?? null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [prefetched, setPrefetched] = useState(false);
@@ -36,29 +40,30 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     currentEntity: string;
   } | null>(null);
 
-  // Update online status
+  // Show toast on online/offline transitions
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      toast({
-        title: 'Back online',
-        description: 'Syncing your changes...',
-        duration: 2000,
-      });
-    };
+    if (prevOnlineRef.current !== isOnline) {
+      prevOnlineRef.current = isOnline;
+      if (isOnline) {
+        toast({
+          title: 'Back online',
+          description: 'Syncing your changes...',
+          duration: 2000,
+        });
+      } else {
+        toast({
+          title: 'You\'re offline',
+          description: 'Changes will sync when you\'re back online',
+          duration: 3000,
+        });
+      }
+    }
+  }, [isOnline, toast]);
 
-    const handleOffline = () => {
-      setIsOnline(false);
-      toast({
-        title: 'You\'re offline',
-        description: 'Changes will sync when you\'re back online',
-        duration: 3000,
-      });
-    };
-
+  // Handle custom sync events
+  useEffect(() => {
     // ✅ FIX #2: Handle quota exceeded errors
-    const handleQuotaExceeded = (event: Event) => {
-      const customEvent = event as CustomEvent;
+    const handleQuotaExceeded = () => {
       toast({
         title: 'Storage Full',
         description: 'Your device storage is full. Please free up space or clear old data.',
@@ -68,8 +73,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     };
 
     // ✅ FIX #3: Handle auth errors during sync
-    const handleAuthError = (event: Event) => {
-      const customEvent = event as CustomEvent;
+    const handleAuthError = () => {
       toast({
         title: 'Authentication Error',
         description: 'Your session expired. Please log in again to sync your data.',
@@ -92,10 +96,10 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     // ✅ MEDIUM PRIORITY FIX #1: Handle conflict notifications
     const handleConflictDetected = (event: Event) => {
       const customEvent = event as CustomEvent;
-      const { entityType, entityId, conflictingFields } = customEvent.detail;
+      const { entityType, conflictingFields } = customEvent.detail;
 
-      const fieldsList = conflictingFields
-        .map((f: any) => f.field)
+      const fieldsList = (conflictingFields as Array<{ field: string }>)
+        .map((f) => f.field)
         .join(', ');
 
       toast({
@@ -123,8 +127,6 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
     window.addEventListener('indexeddb-quota-exceeded', handleQuotaExceeded);
     window.addEventListener('sync-auth-error', handleAuthError);
     window.addEventListener('sync-queue-corrupted', handleQueueCorrupted);
@@ -132,8 +134,6 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     window.addEventListener('sync-progress', handleSyncProgress);
 
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
       window.removeEventListener('indexeddb-quota-exceeded', handleQuotaExceeded);
       window.removeEventListener('sync-auth-error', handleAuthError);
       window.removeEventListener('sync-queue-corrupted', handleQueueCorrupted);
@@ -142,28 +142,52 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     };
   }, [toast]);
 
-  // SECURITY: Migrate to encrypted storage on first load
+  // SECURITY: Migrate to encrypted storage after user login
   useEffect(() => {
+    if (!user) return;
     const runMigration = async () => {
       try {
         await migrateToEncryptedStorage();
       } catch (error) {
         console.error('[OfflineProvider] Encryption migration failed:', error);
-        // Continue anyway - encryption is best-effort
       }
     };
     runMigration();
-  }, []); // Run once on mount
+  }, [user]);
+
+  const prefetchData = useCallback(async () => {
+    if (!user || !isOnline) return;
+
+    setSyncing(true);
+    try {
+      await syncManager.fetchAndStore(user.id);
+      setPrefetched(true);
+    } catch (error) {
+      console.error('[OfflineProvider] Error prefetching data:', error);
+      toast({
+        title: 'Sync error',
+        description: 'Failed to download data for offline use',
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncing(false);
+    }
+  }, [user, isOnline, toast]);
 
   // Prefetch data when user logs in
   useEffect(() => {
     if (user && isOnline && !prefetched) {
       prefetchData();
     }
-  }, [user, isOnline, prefetched]);
+  }, [user, isOnline, prefetched, prefetchData]);
 
-  // Update pending sync count
+  // Update pending sync count — only poll when user is logged in
   useEffect(() => {
+    if (!user) {
+      setPendingSyncCount(0);
+      return;
+    }
+
     const updatePendingCount = async () => {
       const count = await syncManager.getPendingSyncCount();
       setPendingSyncCount(count);
@@ -184,34 +208,9 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       clearInterval(interval);
       unsubscribe();
     };
-  }, []);
+  }, [user]);
 
-  const prefetchData = async () => {
-    if (!user || !isOnline) return;
-
-    setSyncing(true);
-    try {
-      console.log('[OfflineProvider] Prefetching data for offline use');
-      await syncManager.fetchAndStore(user.id);
-      setPrefetched(true);
-      console.log('[OfflineProvider] Data prefetch complete');
-
-      // Show stats
-      const stats = await db.getStats();
-      console.log('[OfflineProvider] Offline data:', stats);
-    } catch (error) {
-      console.error('[OfflineProvider] Error prefetching data:', error);
-      toast({
-        title: 'Sync error',
-        description: 'Failed to download data for offline use',
-        variant: 'destructive',
-      });
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const processQueue = async () => {
+  const processQueue = useCallback(async () => {
     if (!isOnline) {
       toast({
         title: 'Offline',
@@ -246,27 +245,37 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     } finally {
       setSyncing(false);
     }
-  };
+  }, [isOnline, user, toast]);
 
-  // Clear offline data on logout
+  // Clear offline data and encryption key on logout or user change
   useEffect(() => {
-    if (!user) {
-      db.clearAll();
+    const prevUserId = prevUserIdRef.current;
+    const currentUserId = user?.id ?? null;
+
+    if (prevUserId && prevUserId !== currentUserId) {
+      // User logged out or switched accounts — clear only previous user's data
+      const cleanup = async () => {
+        await db.clearUserData(prevUserId);
+        await clearEncryptionKey();
+      };
+      cleanup().catch((e) => console.error('[OfflineProvider] Logout cleanup failed:', e));
       setPrefetched(false);
     }
+
+    prevUserIdRef.current = currentUserId;
   }, [user]);
 
+  const contextValue = useMemo(() => ({
+    isOnline,
+    pendingSyncCount,
+    syncing,
+    syncProgress,
+    prefetchData,
+    processQueue,
+  }), [isOnline, pendingSyncCount, syncing, syncProgress, prefetchData, processQueue]);
+
   return (
-    <OfflineContext.Provider
-      value={{
-        isOnline,
-        pendingSyncCount,
-        syncing,
-        syncProgress,
-        prefetchData,
-        processQueue,
-      }}
-    >
+    <OfflineContext.Provider value={contextValue}>
       {/* Offline indicator banner */}
       {!isOnline && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-yellow-500 text-yellow-900 px-4 py-2 text-center text-sm font-medium">

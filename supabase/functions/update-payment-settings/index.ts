@@ -64,6 +64,19 @@ serve(async (req) => {
     // Parse request body
     const body: UpdatePaymentSettingsRequest = await req.json();
 
+    // SECURITY: Validate BSB format (must be exactly 6 digits after stripping dashes/spaces)
+    if (body.bank_bsb !== undefined && body.bank_bsb !== null) {
+      const sanitizedBsb = String(body.bank_bsb).replace(/[\s\-]/g, '');
+      if (!/^\d{6}$/.test(sanitizedBsb)) {
+        return new Response(
+          JSON.stringify({ error: 'BSB must be exactly 6 digits' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      // Normalize to stripped form for storage
+      body.bank_bsb = sanitizedBsb;
+    }
+
     // Prepare update object
     const updateData: any = {};
 
@@ -93,9 +106,13 @@ serve(async (req) => {
       logStep('Bank details encrypted successfully');
     }
 
-    // Add payment terms if provided
+    // Add payment terms if provided (validate: integer 0-365)
     if (body.payment_terms !== undefined) {
-      updateData.payment_terms = body.payment_terms;
+      const terms = Number(body.payment_terms);
+      if (!Number.isInteger(terms) || terms < 0 || terms > 365) {
+        return createErrorResponse(req, 'payment_terms must be an integer between 0 and 365', 400);
+      }
+      updateData.payment_terms = terms;
     }
 
     // SECURITY: Update only the authenticated user's profile

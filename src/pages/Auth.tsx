@@ -23,14 +23,16 @@ export default function Auth() {
   const [searchParams] = useSearchParams();
 
   // Get redirect URL from query params (for team invitations, etc.)
-  // Decode because it may be URL-encoded to preserve query params
+  // SECURITY: Validate redirect is a relative path to prevent open redirect attacks
   const redirectParam = searchParams.get('redirect');
-  const redirectTo = redirectParam ? decodeURIComponent(redirectParam) : '/dashboard';
+  const decodedRedirect = redirectParam ? decodeURIComponent(redirectParam) : '/dashboard';
+  const redirectTo = (decodedRedirect.startsWith('/') && !decodedRedirect.startsWith('//'))
+    ? decodedRedirect
+    : '/dashboard';
 
   // Auto-redirect if user is already logged in
   useEffect(() => {
     if (user) {
-      console.log('=== AUTH: User already logged in, redirecting to:', redirectTo);
       navigate(redirectTo, { replace: true });
     }
   }, [user, redirectTo, navigate]);
@@ -99,8 +101,6 @@ export default function Auth() {
         }, 2000);
       } else {
         // Session established - useEffect will handle the redirect
-        console.log('=== AUTH SUCCESS ===');
-        console.log('Login successful, useEffect will redirect to:', redirectTo);
         // Don't call navigate here - let the useEffect handle it
         // to avoid race conditions with auth state changes
       }

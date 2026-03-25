@@ -1,17 +1,17 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
-import { QuickContact } from '@/components/ui/quick-contact';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useOfflineClients } from '@/lib/offline/offlineHooks';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
-import { Users, MapPin, WifiOff, ChevronRight, Plus, Mail, Search } from 'lucide-react';
+import { ClientListItem } from '@/components/list-items';
+import { Users, WifiOff, ChevronRight, Plus, Mail, Search } from 'lucide-react';
 
 export default function Clients() {
   const navigate = useNavigate();
@@ -22,7 +22,7 @@ export default function Clients() {
   // Sync search state when URL params change (e.g. voice command navigation)
   useEffect(() => {
     const urlSearch = searchParams.get('search');
-    if (urlSearch !== null && urlSearch !== search) {
+    if (urlSearch !== null) {
       setSearch(urlSearch);
     }
   }, [searchParams]);
@@ -30,7 +30,7 @@ export default function Clients() {
   // Use offline-first hook
   const { clients, loading, isOnline } = useOfflineClients(user?.id || '');
 
-  const [fuzzyResults, setFuzzyResults] = useState<any[]>([]);
+  const [fuzzyResults, setFuzzyResults] = useState<Array<{ id: string; name: string; email?: string; phone?: string }>>([]);
   const [fuzzyLoading, setFuzzyLoading] = useState(false);
 
   const filteredClients = useMemo(() => {
@@ -44,23 +44,37 @@ export default function Clients() {
     );
   }, [clients, search]);
 
-  // When local filter finds nothing, try fuzzy DB search
+  // When local filter finds nothing, try fuzzy DB search (debounced to prevent race conditions)
+  const fuzzyTimerRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
+    clearTimeout(fuzzyTimerRef.current);
+
     if (filteredClients.length === 0 && search.trim() && clients.length > 0 && isOnline && user?.id) {
+      let cancelled = false;
       setFuzzyLoading(true);
-      supabase.rpc('search_clients_fuzzy', {
-        p_user_id: user.id,
-        p_search_term: search,
-        p_limit: 5
-      }).then(({ data }) => {
-        setFuzzyResults(data || []);
-        setFuzzyLoading(false);
-      }).catch(() => {
-        setFuzzyResults([]);
-        setFuzzyLoading(false);
-      });
+
+      fuzzyTimerRef.current = setTimeout(() => {
+        supabase.rpc('search_clients_fuzzy', {
+          p_user_id: user.id,
+          p_search_term: search,
+          p_limit: 5
+        }).then(({ data }) => {
+          if (!cancelled) {
+            setFuzzyResults(data || []);
+            setFuzzyLoading(false);
+          }
+        }).catch(() => {
+          if (!cancelled) {
+            setFuzzyResults([]);
+            setFuzzyLoading(false);
+          }
+        });
+      }, 300);
+
+      return () => { cancelled = true; clearTimeout(fuzzyTimerRef.current); };
     } else {
       setFuzzyResults([]);
+      setFuzzyLoading(false);
     }
   }, [filteredClients.length, search, clients.length, isOnline, user?.id]);
 
@@ -86,6 +100,7 @@ export default function Clients() {
             <div className="absolute top-8 right-4 flex items-center gap-3">
               <button
                 onClick={() => navigate('/clients/new')}
+                aria-label="Add new client"
                 className="p-2.5 rounded-full bg-primary shadow-premium hover:bg-primary/90 transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 <Plus className="w-6 h-6 text-primary-foreground" />
@@ -184,48 +199,7 @@ export default function Clients() {
           ) : (
             <div className="space-y-3">
               {filteredClients.map((client, index) => (
-                <button
-                  key={client.id}
-                  onClick={() => navigate(`/clients/${client.id}`)}
-                  className={cn(
-                    "w-full p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50",
-                    "hover:bg-card hover:border-primary/20 hover:shadow-lg",
-                    "transition-all duration-300 group animate-fade-in text-left"
-                  )}
-                  style={{ animationDelay: `${index * 0.05}s` }}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {/* Client Avatar */}
-                      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center shrink-0 group-hover:from-primary/30 group-hover:to-primary/10 transition-colors">
-                        <span className="text-base font-bold text-primary">
-                          {(client.name || 'C')[0].toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-foreground">{client.name}</h3>
-                        {(client.suburb || client.state) && (
-                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-0.5">
-                            <MapPin className="w-3.5 h-3.5 shrink-0" />
-                            <span className="truncate">
-                              {[client.suburb, client.state].filter(Boolean).join(', ')}
-                            </span>
-                          </div>
-                        )}
-                        {client.email && (
-                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground mt-0.5">
-                            <Mail className="w-3.5 h-3.5 shrink-0" />
-                            <span className="truncate">{client.email}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <QuickContact phone={client.phone} email={client.email} />
-                      <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </div>
-                </button>
+                <ClientListItem key={client.id} client={client} index={index} />
               ))}
             </div>
           )}

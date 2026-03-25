@@ -13,13 +13,16 @@ export function Timer({ initialSeconds = 0, onTimeUpdate, className }: TimerProp
   const [seconds, setSeconds] = useState(initialSeconds);
   const [isRunning, setIsRunning] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Store callback in ref so interval doesn't restart when parent re-renders
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  onTimeUpdateRef.current = onTimeUpdate;
 
   useEffect(() => {
     if (isRunning) {
       intervalRef.current = setInterval(() => {
         setSeconds(prev => {
           const newSeconds = prev + 1;
-          onTimeUpdate?.(newSeconds);
+          onTimeUpdateRef.current?.(newSeconds);
           return newSeconds;
         });
       }, 1000);
@@ -34,7 +37,7 @@ export function Timer({ initialSeconds = 0, onTimeUpdate, className }: TimerProp
         clearInterval(intervalRef.current);
       }
     };
-  }, [isRunning, onTimeUpdate]);
+  }, [isRunning]);
 
   const formatTime = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);

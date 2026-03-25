@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -15,6 +15,10 @@ import { User, FileText, Send, Receipt, Download, Share2, Loader2, Briefcase, Ar
 import { copyToClipboard } from '@/lib/utils/clipboard';
 import { safeNumber } from '@/lib/utils';
 import { compressImages } from '@/lib/utils/imageCompression';
+import { Tables } from '@/integrations/supabase/types';
+
+type Quote = Tables<'quotes'> & { clients?: { name: string; email: string | null; phone: string | null } | null };
+type QuoteLineItem = Tables<'quote_line_items'>;
 
 const QUOTE_STATUSES = ['draft', 'sent', 'viewed', 'accepted', 'declined'] as const;
 
@@ -24,8 +28,8 @@ export default function QuoteDetail() {
   const { user } = useAuth();
   const { team } = useTeam();
   const { toast } = useToast();
-  const [quote, setQuote] = useState<any>(null);
-  const [lineItems, setLineItems] = useState<any[]>([]);
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [lineItems, setLineItems] = useState<QuoteLineItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -35,14 +39,7 @@ export default function QuoteDetail() {
     documentId: id || '',
   });
 
-  useEffect(() => {
-    if (user && id) {
-      fetchQuote();
-      fetchPhotos();
-    }
-  }, [user, id]);
-
-  const fetchPhotos = async () => {
+  const fetchPhotos = useCallback(async () => {
     const { data } = await supabase.storage
       .from('quote-photos')
       .list(`${id}`, { limit: 20 });
@@ -56,7 +53,7 @@ export default function QuoteDetail() {
       });
       setPhotos(urls);
     }
-  };
+  }, [id]);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -105,15 +102,28 @@ export default function QuoteDetail() {
     }
   };
 
-  const fetchQuote = async () => {
+  const fetchQuote = useCallback(async () => {
+    if (!user) return;
     const [quoteRes, itemsRes] = await Promise.all([
-      supabase.from('quotes').select('*, clients(name, email, phone)').eq('id', id).single(),
-      supabase.from('quote_line_items').select('*').eq('quote_id', id).order('sort_order'),
+      supabase.from('quotes').select('*, clients(name, email, phone)').eq('id', id).eq('user_id', user.id).single(),
+      supabase.from('quote_line_items').select('*').eq('quote_id', id).is('deleted_at', null).order('sort_order'),
     ]);
+    if (quoteRes.error || !quoteRes.data) {
+      toast({ title: 'Quote not found', variant: 'destructive' });
+      navigate('/quotes');
+      return;
+    }
     setQuote(quoteRes.data);
     setLineItems(itemsRes.data || []);
     setLoading(false);
-  };
+  }, [id, user, toast, navigate]);
+
+  useEffect(() => {
+    if (user && id) {
+      fetchQuote();
+      fetchPhotos();
+    }
+  }, [user, id, fetchQuote, fetchPhotos]);
 
   const updateStatus = async (status: string) => {
     const updates: Record<string, string> = { status };
@@ -183,7 +193,7 @@ export default function QuoteDetail() {
       return;
     }
 
-    // Copy line items
+    // Copy line items — rollback orphaned invoice on failure
     const invoiceItems = lineItems.map((item, index) => ({
       invoice_id: invoice.id,
       description: item.description,
@@ -195,7 +205,14 @@ export default function QuoteDetail() {
       sort_order: index,
     }));
 
-    await supabase.from('invoice_line_items').insert(invoiceItems);
+    const { error: lineItemsError } = await supabase.from('invoice_line_items').insert(invoiceItems);
+
+    if (lineItemsError) {
+      // Rollback: delete the orphaned invoice
+      await supabase.from('invoices').delete().eq('id', invoice.id);
+      toast({ title: 'Error', description: 'Failed to create line items. Invoice rolled back.', variant: 'destructive' });
+      return;
+    }
 
     toast({ title: 'Invoice created from quote' });
     navigate(`/invoices/${invoice.id}`);
@@ -388,6 +405,7 @@ export default function QuoteDetail() {
                 <SendNotificationButton
                   type="quote"
                   id={id!}
+                  publicToken={quote?.public_token}
                   recipient={{
                     email: quote.clients.email,
                     phone: quote.clients.phone,

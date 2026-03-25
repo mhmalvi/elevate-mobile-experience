@@ -8,13 +8,74 @@ import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { safeNumber } from '@/lib/utils';
 
+/** Quote data returned by the get_public_quote RPC */
+interface PublicQuoteData {
+  id: string;
+  quote_number: string;
+  title?: string;
+  description?: string;
+  status: string;
+  subtotal: number;
+  gst: number;
+  total: number;
+  valid_until?: string;
+  accepted_at?: string;
+  signature_data?: string;
+  viewed_at?: string;
+  created_at: string;
+  notes?: string;
+  terms?: string;
+  clients?: {
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    suburb?: string;
+    state?: string;
+    postcode?: string;
+  };
+}
+
+/** Quote line item from the RPC payload */
+interface PublicQuoteLineItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unit?: string;
+  unit_price: number;
+  total: number;
+  item_type?: string;
+}
+
+/** Business profile data from the RPC payload */
+interface PublicQuoteBusinessProfile {
+  business_name?: string;
+  abn?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  logo_url?: string;
+  license_number?: string;
+}
+
+/** Branding settings from the RPC payload */
+interface PublicQuoteBranding {
+  primary_color?: string;
+  secondary_color?: string;
+  accent_color?: string;
+  logo_url?: string;
+  show_logo_on_documents?: boolean;
+  document_footer_text?: string;
+  default_quote_terms?: string;
+}
+
 export default function PublicQuote() {
   const { id } = useParams();
   const { toast } = useToast();
-  const [quote, setQuote] = useState<any>(null);
-  const [lineItems, setLineItems] = useState<any[]>([]);
-  const [profile, setProfile] = useState<any>(null);
-  const [branding, setBranding] = useState<any>(null);
+  const [quote, setQuote] = useState<PublicQuoteData | null>(null);
+  const [lineItems, setLineItems] = useState<PublicQuoteLineItem[]>([]);
+  const [profile, setProfile] = useState<PublicQuoteBusinessProfile | null>(null);
+  const [branding, setBranding] = useState<PublicQuoteBranding | null>(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,21 +87,31 @@ export default function PublicQuote() {
 
   const fetchQuote = async () => {
     try {
-      const { data: quoteData, error: quoteError } = await supabase
-        .from('quotes')
-        .select('*, clients(*)')
-        .eq('id', id)
-        .single();
+      // Fetch quote data via SECURITY DEFINER RPC — anon cannot query the
+      // quotes table directly (RLS USING(false)). The function enforces the
+      // token match server-side and returns only the matching row's data.
+      const { data: payload, error: rpcError } = await supabase
+        .rpc('get_public_quote', { p_token: id });
 
-      if (quoteError || !quoteData) {
+      if (rpcError || !payload) {
+        setError('Quote not found');
+        setLoading(false);
+        return;
+      }
+
+      const quoteData = payload.quote as PublicQuoteData | undefined;
+      if (!quoteData) {
         setError('Quote not found');
         setLoading(false);
         return;
       }
 
       setQuote(quoteData);
+      setLineItems(payload.line_items || []);
+      setProfile(payload.profile || null);
+      setBranding(payload.branding || null);
 
-      // Mark as viewed via Edge Function to bypass RLS
+      // Mark as viewed via Edge Function to bypass RLS (pass public_token, not internal id)
       if (!quoteData.viewed_at && quoteData.status !== 'accepted' && quoteData.status !== 'declined') {
         try {
           await supabase.functions.invoke('accept-quote', {
@@ -54,30 +125,6 @@ export default function PublicQuote() {
         }
       }
 
-      // Fetch line items
-      const { data: items } = await supabase
-        .from('quote_line_items')
-        .select('*')
-        .eq('quote_id', id)
-        .order('sort_order');
-      setLineItems(items || []);
-
-      // Fetch profile for business details
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', quoteData.user_id)
-        .single();
-      setProfile(profileData);
-
-      // Fetch branding settings
-      const { data: brandingData } = await supabase
-        .from('branding_settings')
-        .select('*')
-        .eq('user_id', quoteData.user_id)
-        .maybeSingle();
-      setBranding(brandingData);
-
       setLoading(false);
     } catch (err) {
       setError('Failed to load quote');
@@ -89,7 +136,8 @@ export default function PublicQuote() {
     if (!quote) return;
     setAccepting(true);
 
-    const { error } = await supabase.functions.invoke('accept-quote', {
+    // Pass public_token (URL param) to the edge function — not internal id
+    const { error: acceptError } = await supabase.functions.invoke('accept-quote', {
       body: {
         quote_id: id,
         signature_data: signatureData,
@@ -97,7 +145,7 @@ export default function PublicQuote() {
       }
     });
 
-    if (error) {
+    if (acceptError) {
       toast({ title: 'Error', description: 'Failed to accept quote', variant: 'destructive' });
     } else {
       toast({ title: 'Quote accepted!', description: 'Thanks for your business!' });
@@ -382,8 +430,8 @@ export default function PublicQuote() {
                         transition: 'transform 0.15s, box-shadow 0.15s',
                         opacity: accepting ? 0.7 : 1,
                       }}
-                      onMouseEnter={e => { if (!accepting) { (e.target as any).style.transform = 'translateY(-1px)'; (e.target as any).style.boxShadow = `0 6px 20px ${primaryColor}50`; } }}
-                      onMouseLeave={e => { (e.target as any).style.transform = 'translateY(0)'; (e.target as any).style.boxShadow = `0 4px 14px ${primaryColor}40`; }}
+                      onMouseEnter={e => { if (!accepting) { const el = e.target as HTMLButtonElement; el.style.transform = 'translateY(-1px)'; el.style.boxShadow = `0 6px 20px ${primaryColor}50`; } }}
+                      onMouseLeave={e => { const el = e.target as HTMLButtonElement; el.style.transform = 'translateY(0)'; el.style.boxShadow = `0 4px 14px ${primaryColor}40`; }}
                     >
                       <Check style={{ width: 20, height: 20 }} />
                       Accept Quote with Signature
@@ -399,8 +447,8 @@ export default function PublicQuote() {
                         transition: 'background-color 0.15s',
                         opacity: accepting ? 0.7 : 1,
                       }}
-                      onMouseEnter={e => { (e.target as any).style.backgroundColor = '#f9fafb'; }}
-                      onMouseLeave={e => { (e.target as any).style.backgroundColor = '#ffffff'; }}
+                      onMouseEnter={e => { (e.target as HTMLButtonElement).style.backgroundColor = '#f9fafb'; }}
+                      onMouseLeave={e => { (e.target as HTMLButtonElement).style.backgroundColor = '#ffffff'; }}
                     >
                       {accepting ? (
                         <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
@@ -482,7 +530,7 @@ export default function PublicQuote() {
               </div>
               <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.9 }}>
                 {profile?.abn && <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>ABN:</strong> {profile.abn}</p>}
-                {(profile as any)?.license_number && <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>License:</strong> {(profile as any).license_number}</p>}
+                {profile?.license_number && <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>License:</strong> {profile.license_number}</p>}
                 {profile?.phone && <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>Phone:</strong> {profile.phone}</p>}
                 {profile?.email && <p style={{ margin: 0 }}><strong style={{ color: '#374151' }}>Email:</strong> {profile.email}</p>}
               </div>

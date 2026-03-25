@@ -1,9 +1,45 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { decryptBankDetails, EncryptedBankAccountDetails } from "../_shared/encryption.ts";
 import { generateProfessionalPDFHTML } from "./improved-template.ts";
 import { generatePDFBinary } from "./pdf-generator.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
+
+/**
+ * Mask a bank account number for display, showing only the last 4 digits.
+ * BSB is intentionally NOT masked as it identifies the branch, not the account.
+ */
+function maskAccountNumber(num: string): string {
+  if (!num) return '';
+  if (num.length <= 4) return num;
+  return '\u2022\u2022\u2022\u2022' + num.slice(-4);
+}
+
+/**
+ * Decrypt encrypted bank details from a profile and assign them as display-ready fields.
+ * Account numbers are masked to show only the last 4 digits.
+ */
+async function decryptProfileBankDetails(profile: any): Promise<void> {
+  const hasEncryptedDetails = profile.bank_name_encrypted ||
+    profile.bank_bsb_encrypted ||
+    profile.bank_account_number_encrypted ||
+    profile.bank_account_name_encrypted;
+
+  if (hasEncryptedDetails) {
+    const encryptedDetails: EncryptedBankAccountDetails = {
+      bank_name_encrypted: profile.bank_name_encrypted,
+      bank_bsb_encrypted: profile.bank_bsb_encrypted,
+      bank_account_number_encrypted: profile.bank_account_number_encrypted,
+      bank_account_name_encrypted: profile.bank_account_name_encrypted,
+    };
+    const decrypted = await decryptBankDetails(encryptedDetails);
+    profile.bank_name = decrypted.bank_name || '';
+    profile.bank_bsb = decrypted.bank_bsb || '';
+    profile.bank_account_number = maskAccountNumber(decrypted.bank_account_number || '');
+    profile.bank_account_name = decrypted.bank_account_name || '';
+  }
+}
 
 interface PDFRequest {
   type: "quote" | "invoice";
@@ -56,6 +92,12 @@ serve(async (req) => {
     }
 
     const { type, id, format = "html" }: PDFRequest = await req.json();
+
+    // Validate type field
+    if (type !== 'quote' && type !== 'invoice') {
+      return createErrorResponse(req, 'type must be "quote" or "invoice"', 400);
+    }
+
     console.log(`[generate-pdf] Generating ${format.toUpperCase()} for ${type}: ${id} (user: ${user.id})`);
 
     // Rate limiting: 30 PDF generations per minute per user
@@ -109,6 +151,15 @@ serve(async (req) => {
         .single();
       profile = profileData;
 
+      // Decrypt bank details for PDF display
+      if (profile) {
+        try {
+          await decryptProfileBankDetails(profile);
+        } catch (decryptError) {
+          console.error("[generate-pdf] Bank detail decryption failed:", decryptError);
+        }
+      }
+
       // Fetch branding settings
       const { data: brandingData } = await supabase
         .from("branding_settings")
@@ -152,6 +203,15 @@ serve(async (req) => {
         .eq("user_id", invoice.user_id)
         .single();
       profile = profileData;
+
+      // Decrypt bank details for PDF display
+      if (profile) {
+        try {
+          await decryptProfileBankDetails(profile);
+        } catch (decryptError) {
+          console.error("[generate-pdf] Bank detail decryption failed:", decryptError);
+        }
+      }
 
       // Fetch branding settings
       const { data: brandingData } = await supabase

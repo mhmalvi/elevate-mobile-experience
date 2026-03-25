@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, createCorsResponse } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
@@ -62,6 +62,25 @@ serve(async (req) => {
     }
 
     const { email, role }: InvitationRequest = await req.json();
+
+    // SECURITY: Validate email format
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !EMAIL_RE.test(email)) {
+      return new Response(JSON.stringify({ error: 'Invalid email address' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // SECURITY: Validate role against whitelist
+    const VALID_ROLES = ['admin', 'member', 'viewer'];
+    if (!role || !VALID_ROLES.includes(role)) {
+      return new Response(JSON.stringify({ error: 'Invalid role' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     console.log(`Processing invitation for ${email} with role ${role} from user ${user.id}`);
 
     // Get user's team membership
@@ -213,7 +232,7 @@ serve(async (req) => {
     console.log('Invitation ready:', invitation?.id);
 
     // Build invitation URL
-    const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
+    const baseUrl = Deno.env.get('APP_URL') || 'https://app.tradiemate.com.au';
     const invitationUrl = `${baseUrl}/join-team?token=${inviteToken}`;
 
     console.log(`Invitation URL: ${invitationUrl}`);
@@ -233,10 +252,16 @@ serve(async (req) => {
       console.error('Email sending failed (non-fatal):', emailErr);
     }
 
+    // SECURITY: Strip raw token from response to prevent client-side exposure
     return new Response(JSON.stringify({
       success: true,
       invitation_url: invitationUrl,
-      invitation,
+      invitation: {
+        id: invitation.id,
+        email: invitation.email,
+        role: invitation.role,
+        expires_at: invitation.expires_at,
+      },
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

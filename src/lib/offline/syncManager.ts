@@ -21,491 +21,166 @@
  *   dataFetcher.ts      — paginated Supabase reads into IndexedDB
  */
 
-import { db, SyncQueueItem } from './db';
-import { type SyncRecord } from './syncTypes';
-import { SyncListenerSet, emitSyncProgress, notifyAuthError } from './syncEvents';
+import { type SyncQueueItem } from './db';
+import { db } from './db';
+import { type SyncRecord, type SyncProgress } from './syncTypes';
 import { SyncLock } from './syncLock';
 import { SyncQueue } from './syncQueue';
 import { SyncDispatcher } from './syncDispatcher';
 import { DataFetcher } from './dataFetcher';
-import { supabase } from '@/integrations/supabase/client';
-import { encryptedDb } from './encryptedDb';
-import type { Table } from 'dexie';
+import { SyncListenerSet, emitSyncProgress, notifyAuthError } from './syncEvents';
 
-/** Record with string keys and unknown values, representing a database row */
-type SyncRecord = Record<string, unknown>;
+// ---------------------------------------------------------------------------
+// Schema migration
+// ---------------------------------------------------------------------------
 
-/** Conflict field comparison */
-interface ConflictField {
-  field: string;
-  localValue: unknown;
-  serverValue: unknown;
-}
+/** Schema version for the sync subsystem's own metadata. */
+const SCHEMA_VERSION = 2;
 
-/** Conflict notification details */
-interface ConflictDetails {
-  entityType: string;
-  entityId: string;
-  conflictingFields: ConflictField[];
-  localData: SyncRecord;
-  serverData: SyncRecord;
-}
+async function checkAndMigrateSchema(): Promise<void> {
+  try {
+    const currentVersion = await db.getMeta('schema_version');
 
-/**
- * Sanitize data for IndexedDB storage
- * Converts Date objects to ISO strings and removes undefined values
- */
-function sanitizeDataForIndexedDB(data: unknown): JsonValue {
-  if (data === null || data === undefined) {
-    return null;
-  }
-
-  if (data instanceof Date) {
-    return data.toISOString();
-  }
-
-  if (Array.isArray(data)) {
-    return data.map(item => sanitizeDataForIndexedDB(item));
-  }
-
-  if (typeof data === 'object') {
-    const sanitized: Record<string, JsonValue> = {};
-    for (const [key, value] of Object.entries(data)) {
-      // Skip undefined values
-      if (value !== undefined) {
-        sanitized[key] = sanitizeDataForIndexedDB(value);
-      }
+    if (currentVersion === null) {
+      await db.setMeta('schema_version', SCHEMA_VERSION);
+      return;
     }
-    return sanitized;
-  }
 
-  // Primitives: string, number, boolean
-  return data as JsonPrimitive;
+    if (currentVersion < SCHEMA_VERSION) {
+      console.warn(
+        `[SyncManager] Schema migration needed: v${currentVersion} → v${SCHEMA_VERSION}`
+      );
+      // Run each migration sequentially
+      for (let v = currentVersion; v < SCHEMA_VERSION; v++) {
+        if (v === 1) {
+          // Migration to v2: ensure every sync-queue item has updated_at
+          await db.transaction('rw', db.syncQueue, async () => {
+            const items = await db.syncQueue.toArray();
+            const updates = items
+              .filter(item => !item.updated_at)
+              .map(item => db.syncQueue.update(item.id!, { updated_at: item.created_at }));
+            await Promise.all(updates);
+          });
+        }
+      }
+      await db.setMeta('schema_version', SCHEMA_VERSION);
+    }
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[SyncManager] Schema migration failed:', msg);
+  }
 }
 
-/**
- * Entity type to table name mapping
- * Prevents fragile pluralization issues
- */
-const ENTITY_TABLE_MAP: Record<string, string> = {
-  job: 'jobs',
-  quote: 'quotes',
-  invoice: 'invoices',
-  client: 'clients',
-  quote_line_item: 'quote_line_items',
-  invoice_line_item: 'invoice_line_items',
-};
+// ---------------------------------------------------------------------------
+// SyncManager
+// ---------------------------------------------------------------------------
 
-/**
- * Entity dependency order for sync
- * Parents must be synced before children to prevent FK violations
- * clients -> jobs -> quotes -> quote_line_items -> invoices -> invoice_line_items
- */
-const ENTITY_DEPENDENCY_ORDER = ['client', 'job', 'quote', 'quote_line_item', 'invoice', 'invoice_line_item'];
-
-/**
- * SyncManager handles synchronization between IndexedDB and Supabase
- * Manages the sync queue and processes pending changes when online
- */
 export class SyncManager {
   private syncInProgress = false;
-  private syncListeners: Set<() => void> = new Set();
 
-  // ✅ FIX #1: Cross-tab sync coordination
-  private syncLockChannel: BroadcastChannel | null = null;
-  private hasSyncLock = false;
+  // Sub-modules
+  private readonly lock: SyncLock;
+  private readonly queue: SyncQueue;
+  private readonly dispatcher: SyncDispatcher;
+  private readonly fetcher: DataFetcher;
+  private readonly listeners: SyncListenerSet;
 
-  // ✅ HIGH PRIORITY FIX #3: Queue debouncing to prevent flooding
-  private queueDebounceTimer: NodeJS.Timeout | null = null;
-  private queueDebounceDelay = 1000; // Wait 1 second before syncing
-  private pendingQueueUpdates = new Map<string, SyncQueueItem>();
-
-  // ✅ HIGH PRIORITY FIX #4: Track failed parent entities for soft dependency handling
-  private failedParentEntities = new Set<string>(); // Format: "entityType:entityId"
-
-  // ✅ HIGH PRIORITY FIX #5: Schema versioning for migration safety
-  private static readonly SCHEMA_VERSION = 2; // Increment when schema changes
-  private schemaMigrationComplete = false;
-
-  // Deduplication: prevent concurrent fetchAndStore calls for the same userId
-  private fetchInFlight: Map<string, Promise<void>> = new Map();
-
-  // Promise that resolves when schema migration is complete
-  private schemaReady: Promise<void>;
-
-  // ✅ MEDIUM PRIORITY FIX #2: Sync progress tracking
-  private syncProgress = {
+  // Progress tracking
+  private syncProgress: SyncProgress = {
     total: 0,
     completed: 0,
     failed: 0,
     currentEntity: '',
-    phase: '' as 'idle' | 'syncing' | 'fetching',
+    phase: 'idle',
   };
 
+  // Schema migration promise
+  private readonly schemaReady: Promise<void>;
+
   constructor() {
-    // Initialize cross-tab sync lock
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      this.syncLockChannel = new BroadcastChannel('tradiemate-sync-lock');
-      this.syncLockChannel.onmessage = (event) => {
-        if (event.data.type === 'sync-started') {
-          // Another tab started syncing - release our lock and stop sync
-          this.hasSyncLock = false;
-          this.syncInProgress = false;
-          console.warn('[SyncManager] Another tab is syncing, releasing lock and stopping this tab\'s sync');
-        } else if (event.data.type === 'sync-completed') {
-          // Another tab completed sync
-          this.notifyListeners();
-        }
-      };
-    }
+    this.listeners = new SyncListenerSet();
 
-    // Initialize schema migration check and store the promise
-    this.schemaReady = this.checkAndMigrateSchema();
-  }
-
-  /**
-   * ✅ HIGH PRIORITY FIX #5: Check schema version and run migrations if needed
-   */
-  private async checkAndMigrateSchema() {
-    try {
-      const currentVersion = await db.getMeta('schema_version');
-
-      if (currentVersion === null) {
-        // First time - set initial version
-        await db.setMeta('schema_version', SyncManager.SCHEMA_VERSION);
-        this.schemaMigrationComplete = true;
-        return;
-      }
-
-      if (currentVersion < SyncManager.SCHEMA_VERSION) {
-        console.warn(`[SyncManager] Schema migration needed: v${currentVersion} → v${SyncManager.SCHEMA_VERSION}`);
-        await this.runSchemaMigrations(currentVersion, SyncManager.SCHEMA_VERSION);
-        await db.setMeta('schema_version', SyncManager.SCHEMA_VERSION);
-      }
-
-      this.schemaMigrationComplete = true;
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[SyncManager] Schema migration failed:', errorMessage);
-      // Don't throw - allow app to continue
-    }
-  }
-
-  /**
-   * ✅ HIGH PRIORITY FIX #5: Run schema migrations
-   */
-  private async runSchemaMigrations(fromVersion: number, toVersion: number) {
-    // Run each migration sequentially
-    for (let version = fromVersion; version < toVersion; version++) {
-
-      switch (version) {
-        case 1:
-          await this.migrateToV2();
-          break;
-        // Add more migrations here as schema evolves
-        // case 2:
-        //   await this.migrateToV3();
-        //   break;
-        default:
-          console.warn(`[SyncManager] No migration defined for v${version} → v${version + 1}`);
-      }
-    }
-  }
-
-  /**
-   * ✅ HIGH PRIORITY FIX #5: Migration to schema version 2
-   * Example: Add `updated_at` field to sync queue items
-   */
-  private async migrateToV2() {
-    await db.transaction('rw', db.syncQueue, async () => {
-      const items = await db.syncQueue.toArray();
-      const updates = items
-        .filter(item => !item.updated_at)
-        .map(item => db.syncQueue.update(item.id!, { updated_at: item.created_at }));
-      await Promise.all(updates);
+    this.lock = new SyncLock({
+      onLockStolen: () => {
+        this.syncInProgress = false;
+      },
+      onRemoteSyncComplete: () => {
+        this.listeners.notify();
+      },
     });
+
+    this.queue = new SyncQueue();
+    this.queue.onFlush = () => {
+      if (navigator.onLine) {
+        this.processQueue();
+      }
+    };
+
+    this.dispatcher = new SyncDispatcher();
+    this.fetcher = new DataFetcher();
+
+    // Initialize schema migration and wire the promise into the data fetcher
+    this.schemaReady = checkAndMigrateSchema();
+    this.fetcher.schemaReady = this.schemaReady;
   }
 
-  /**
-   * Acquire sync lock to prevent cross-tab conflicts
-   */
-  private async acquireSyncLock(): Promise<boolean> {
-    if (!this.syncLockChannel) return true; // No BroadcastChannel support
-
-    // Try to acquire lock
-    this.hasSyncLock = true;
-    this.syncLockChannel.postMessage({ type: 'sync-started', timestamp: Date.now() });
-
-    // Wait a bit to see if another tab claims priority
-    await new Promise(resolve => setTimeout(resolve, 200));
-
-    return this.hasSyncLock;
-  }
+  // -------------------------------------------------------------------------
+  // Public API
+  // -------------------------------------------------------------------------
 
   /**
-   * Release sync lock
-   */
-  private releaseSyncLock() {
-    if (this.syncLockChannel && this.hasSyncLock) {
-      this.syncLockChannel.postMessage({ type: 'sync-completed', timestamp: Date.now() });
-      this.hasSyncLock = false;
-    }
-  }
-
-  /**
-   * Add item to sync queue with optimistic UI update
-   * Called when user makes changes offline
-   * ✅ HIGH PRIORITY FIX #3: Debounced to prevent queue flooding
+   * Add item to sync queue with optimistic UI update.
+   * Debounced and coalesced: rapid updates to the same entity are merged.
    */
   async queueSync(
     entityType: 'job' | 'quote' | 'invoice' | 'client' | 'quote_line_item' | 'invoice_line_item',
     entityId: string,
     action: 'create' | 'update' | 'delete',
     data: SyncRecord
-  ) {
-    // Validate inputs to prevent corrupt queue entries
-    const validation = validateSyncQueueItem({
-      entity_type: entityType,
-      entity_id: entityId,
-      action,
-      data,
-    });
-
-    if (!validation.valid) {
-      console.warn('[SyncManager] Invalid queue item, skipping:', validation.errors);
-      return;
-    }
-
-    try {
-      // Sanitize data to prevent IndexedDB errors
-      const sanitizedData = sanitizeDataForIndexedDB(data);
-
-      // Get the local table for optimistic updates
-      const localTable = this.getLocalTable(entityType);
-      if (!localTable) {
-        console.error('[SyncManager] Invalid entity type:', entityType);
-        return;
-      }
-
-      // ✅ HIGH PRIORITY FIX #3: Coalesce rapid updates to the same entity
-      const pendingKey = `${entityType}:${entityId}`;
-      const existingPending = this.pendingQueueUpdates.get(pendingKey);
-
-      // If there's a pending update for this entity, merge it
-      if (existingPending && existingPending.action === action) {
-        this.pendingQueueUpdates.set(pendingKey, {
-          entity_type: entityType,
-          entity_id: String(entityId), // Ensure it's a string
-          action,
-          data: sanitizedData,
-          created_at: existingPending.created_at, // Keep original timestamp
-          synced: false, // Must be boolean
-          retry_count: 0, // Must be number
-        });
-
-        // Optimistic UI update
-        if (action === 'create' || action === 'update') {
-          await localTable.put(sanitizedData);
-        } else if (action === 'delete') {
-          const existing = await localTable.get(entityId);
-          if (existing) {
-            await localTable.put({
-              ...existing,
-              deleted_at: new Date().toISOString(),
-            });
-          }
-        }
-
-        // Debounce the queue flush
-        this.debouncedFlushQueue();
-        return;
-      }
-
-      // Use transaction for atomic operations
-      await db.transaction('rw', [db.syncQueue, localTable], async () => {
-        // ✅ CRITICAL: Validate all indexed fields to prevent corruption
-        const queueItem: SyncQueueItem = {
-          entity_type: entityType,
-          entity_id: String(entityId), // Ensure it's a string
-          action,
-          data: sanitizedData,
-          created_at: new Date().toISOString(),
-          synced: false, // Must be boolean
-          retry_count: 0, // Must be number
-        };
-
-        // Add to sync queue
-        await db.syncQueue.add(queueItem);
-
-        // Optimistic UI update - immediately apply to local database
-        if (action === 'create' || action === 'update') {
-          await localTable.put(sanitizedData);
-        } else if (action === 'delete') {
-          // For soft delete, update the deleted_at field
-          const existing = await localTable.get(entityId);
-          if (existing) {
-            await localTable.put({
-              ...existing,
-              deleted_at: new Date().toISOString(),
-            });
-          }
-        }
-      });
-
-      // Track pending update for coalescing
-      this.pendingQueueUpdates.set(pendingKey, {
-        entity_type: entityType,
-        entity_id: String(entityId), // Ensure it's a string
-        action,
-        data: sanitizedData,
-        created_at: new Date().toISOString(),
-        synced: false, // Must be boolean
-        retry_count: 0, // Must be number
-      });
-
-      // ✅ HIGH PRIORITY FIX #3: Debounce sync to prevent rapid-fire syncing
-      this.debouncedFlushQueue();
-    } catch (error: unknown) {
-      // ✅ FIX #2: Handle quota exceeded errors
-      if (error instanceof Error && error.name === 'QuotaExceededError') {
-        console.error('[SyncManager] IndexedDB quota exceeded!');
-        this.notifyQuotaExceeded();
-        throw new Error('Storage quota exceeded. Please free up space or clear old data.');
-      }
-
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[SyncManager] Error adding to sync queue:', errorMessage);
-      // Don't throw - we don't want to break the app if queue fails
-    }
+  ): Promise<void> {
+    return this.queue.queueSync(entityType, entityId, action, data);
   }
 
   /**
-   * ✅ HIGH PRIORITY FIX #3: Debounced queue flush to prevent flooding
-   */
-  private debouncedFlushQueue() {
-    // Clear existing timer
-    if (this.queueDebounceTimer) {
-      clearTimeout(this.queueDebounceTimer);
-    }
-
-    // Set new timer
-    this.queueDebounceTimer = setTimeout(() => {
-      if (navigator.onLine) {
-        this.flushPendingUpdates();
-        this.processQueue();
-      }
-    }, this.queueDebounceDelay);
-  }
-
-  /**
-   * ✅ HIGH PRIORITY FIX #3: Flush pending coalesced updates to queue
-   */
-  private async flushPendingUpdates() {
-    if (this.pendingQueueUpdates.size === 0) return;
-
-    for (const [key, item] of this.pendingQueueUpdates.entries()) {
-      try {
-        // Check if item already in queue
-        const existing = await db.syncQueue
-          .where('entity_id')
-          .equals(item.entity_id)
-          .and(q => q.entity_type === item.entity_type && !q.synced)
-          .first();
-
-        if (existing) {
-          // Update existing queue item with latest data
-          await db.syncQueue.update(existing.id!, {
-            data: item.data,
-            updated_at: new Date().toISOString(),
-          });
-        }
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error(`[SyncManager] Error flushing pending update:`, errorMessage);
-      }
-    }
-
-    // Clear pending updates
-    this.pendingQueueUpdates.clear();
-  }
-
-  /**
-   * Notify listeners about quota exceeded error
-   */
-  private notifyQuotaExceeded() {
-    // Emit custom event for OfflineProvider to handle
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('indexeddb-quota-exceeded', {
-        detail: { message: 'Storage quota exceeded' }
-      }));
-    }
-  }
-
-  /**
-   * Get local IndexedDB table for entity type
-   * SECURITY: Uses encrypted tables for sensitive data (clients, invoices, quotes)
-   */
-  private getLocalTable(entityType: string) {
-    const tableMap: Record<string, any> = {
-      job: encryptedDb.jobs,
-      quote: encryptedDb.quotes,
-      invoice: encryptedDb.invoices,
-      client: encryptedDb.clients,
-      quote_line_item: db.quote_line_items,
-      invoice_line_item: db.invoice_line_items,
-    };
-    return tableMap[entityType];
-  }
-
-  /**
-   * Process sync queue when back online
-   * Syncs all pending changes to Supabase
-   * ✅ HIGH PRIORITY FIX #5: Wait for schema migration before syncing
+   * Process sync queue: push all pending changes to Supabase.
+   * Acquires a cross-tab lock first to prevent concurrent syncs.
    */
   async processQueue(): Promise<{ success: number; failed: number }> {
-    if (this.syncInProgress) {
-      return { success: 0, failed: 0 };
-    }
-
-    if (!navigator.onLine) {
-      return { success: 0, failed: 0 };
-    }
-
-    // Wait for schema migration to complete
-    await this.schemaReady;
-
-    // ✅ FIX H11: Clear failed parent entities from previous runs
-    this.failedParentEntities.clear();
-
-    // ✅ FIX #1: Acquire cross-tab sync lock
-    const hasLock = await this.acquireSyncLock();
-    if (!hasLock) {
+    if (this.syncInProgress || !navigator.onLine) {
       return { success: 0, failed: 0 };
     }
 
     this.syncInProgress = true;
+    await this.schemaReady;
+
+    this.dispatcher.resetFailedParents();
+
+    const hasLock = await this.lock.acquire();
+    if (!hasLock) {
+      this.syncInProgress = false;
+      return { success: 0, failed: 0 };
+    }
+
     let successCount = 0;
     let failCount = 0;
 
     try {
-      // ✅ FIX #3: Ensure valid auth token before sync
-      await this.ensureValidToken();
+      await this.dispatcher.ensureValidToken();
 
-      // Order by dependency to prevent referential integrity errors
-      const allItems = await this.getSyncQueueOrdered();
+      const allItems = await this.queue.getSyncQueueOrdered();
 
-      // Exponential backoff: skip items whose backoff period hasn't elapsed yet (max 5 min)
+      // Exponential backoff: skip items whose backoff period hasn't elapsed
       const items = allItems.filter(item => {
         if (item.retry_count && item.retry_count > 0 && item.updated_at) {
-          const backoffMs = Math.min(1000 * Math.pow(2, item.retry_count), 300000);
+          const backoffMs = Math.min(1000 * Math.pow(2, item.retry_count), 300_000);
           if (Date.now() - new Date(item.updated_at).getTime() < backoffMs) {
-            return false; // Skip this item, backoff not elapsed
+            return false;
           }
         }
         return true;
       });
 
-      // ✅ MEDIUM PRIORITY FIX #2: Initialize progress tracking
+      // Initialize progress
       this.syncProgress = {
         total: items.length,
         completed: 0,
@@ -513,979 +188,87 @@ export class SyncManager {
         currentEntity: '',
         phase: 'syncing',
       };
-      this.emitSyncProgress();
+      emitSyncProgress(this.syncProgress);
 
-      // ✅ HIGH PRIORITY FIX #2: Batch operations by entity type and action
-      const batches = this.groupIntoBatches(items);
+      // Process in batches
+      const batches = this.queue.groupIntoBatches(items);
 
-      // ✅ HIGH PRIORITY FIX #4: Don't halt on parent failures - track and defer instead
       for (const batch of batches) {
-        // Update current entity being synced
         this.syncProgress.currentEntity = `${batch[0].entity_type}s`;
-        this.emitSyncProgress();
+        emitSyncProgress(this.syncProgress);
 
-        const batchResults = await this.processBatch(batch);
+        const result = await this.dispatcher.processBatch(batch);
+        successCount += result.success;
+        failCount += result.failed;
 
-        successCount += batchResults.success;
-        failCount += batchResults.failed;
+        this.syncProgress.completed += result.success;
+        this.syncProgress.failed += result.failed;
+        emitSyncProgress(this.syncProgress);
 
-        // ✅ MEDIUM PRIORITY FIX #2: Update progress
-        this.syncProgress.completed += batchResults.success;
-        this.syncProgress.failed += batchResults.failed;
-        this.emitSyncProgress();
-
-        // Track failed parent entities
-        if (batchResults.failedParents) {
-          batchResults.failedParents.forEach(id => this.failedParentEntities.add(id));
+        if (result.failedParents) {
+          this.dispatcher.recordFailedParents(result.failedParents);
         }
-
-        // Note: We no longer halt sync on parent failures
-        // Dependent items will be deferred if their parent failed
       }
-
     } catch (error: unknown) {
-      // ✅ FIX #3: Handle token refresh failures
       if (error instanceof Error && error.message.includes('token')) {
         console.error('[SyncManager] Auth token error during sync:', error.message);
-        this.notifyAuthError();
+        notifyAuthError();
       }
       throw error;
     } finally {
       this.syncInProgress = false;
-      this.releaseSyncLock(); // ✅ FIX #1: Release lock
-
-      // ✅ MEDIUM PRIORITY FIX #2: Reset progress
+      this.lock.release();
       this.syncProgress.phase = 'idle';
-      this.emitSyncProgress();
-
-      // Remaining items will be picked up by the next regular polling cycle or online event.
-      // No recursive re-invocation to avoid race conditions with syncInProgress.
-
-      this.notifyListeners();
+      emitSyncProgress(this.syncProgress);
+      this.listeners.notify();
     }
 
     return { success: successCount, failed: failCount };
   }
 
   /**
-   * ✅ MEDIUM PRIORITY FIX #2: Emit sync progress event
+   * Fetch data from Supabase and store in IndexedDB.
+   * Used for initial data prefetch and periodic syncs.
    */
-  private emitSyncProgress() {
-    if (typeof window !== 'undefined') {
-      const progress = {
-        ...this.syncProgress,
-        percentage: this.syncProgress.total > 0
-          ? Math.round((this.syncProgress.completed / this.syncProgress.total) * 100)
-          : 0,
-      };
-
-      window.dispatchEvent(new CustomEvent('sync-progress', {
-        detail: progress
-      }));
-    }
-  }
-
-  /**
-   * ✅ FIX #3: Ensure valid auth token before sync operations
-   */
-  private async ensureValidToken() {
-    try {
-      const { data: { session }, error } = await supabase.auth.getSession();
-
-      if (error) {
-        throw new Error(`Failed to get session: ${error.message}`);
-      }
-
-      if (!session) {
-        throw new Error('No active session');
-      }
-
-      // Check if token expires soon (within 5 minutes)
-      const expiresAt = session.expires_at;
-      if (expiresAt) {
-        const expiresInMs = (expiresAt * 1000) - Date.now();
-        const fiveMinutes = 5 * 60 * 1000;
-
-        if (expiresInMs < fiveMinutes) {
-          const { error: refreshError } = await supabase.auth.refreshSession();
-
-          if (refreshError) {
-            throw new Error(`Token refresh failed: ${refreshError.message}`);
-          }
-
-        }
-      }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[SyncManager] Auth token validation failed:', errorMessage);
-      throw error;
-    }
-  }
-
-  /**
-   * ✅ FIX #4: Rollback optimistic update when sync fails permanently
-   */
-  private async rollbackOptimisticUpdate(item: SyncQueueItem) {
-    try {
-      const localTable = this.getLocalTable(item.entity_type);
-      if (!localTable) return;
-
-      if (item.action === 'create') {
-        // Remove the optimistically created item
-        await localTable.delete(item.entity_id);
-      } else if (item.action === 'delete') {
-        // Restore the soft-deleted item
-        const existing = await localTable.get(item.entity_id);
-        if (existing && existing.deleted_at) {
-          await localTable.put({
-            ...existing,
-            deleted_at: undefined,
-          });
-        }
-      }
-      // Note: For 'update', we can't easily rollback without storing original data
-      // This would require enhancing the queue structure to store original state
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[SyncManager] Failed to rollback optimistic update:', errorMessage);
-    }
-  }
-
-  /**
-   * Notify listeners about auth error
-   */
-  private notifyAuthError() {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('sync-auth-error', {
-        detail: { message: 'Authentication error during sync' }
-      }));
-    }
-  }
-
-  /**
-   * ✅ HIGH PRIORITY FIX #5: Wait for schema migration to complete
-   */
-  private async waitForMigration(maxWaitMs: number = 10000): Promise<void> {
-    const startTime = Date.now();
-
-    while (!this.schemaMigrationComplete) {
-      if (Date.now() - startTime > maxWaitMs) {
-        console.error('[SyncManager] Schema migration timeout');
-        throw new Error('Schema migration timeout');
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  }
-
-  /**
-   * ✅ MEDIUM PRIORITY FIX #1: Get conflicting fields between local and server data
-   */
-  private getConflictingFields(localData: SyncRecord, serverData: SyncRecord): ConflictField[] {
-    const conflicts: ConflictField[] = [];
-    const ignoreFields = ['updated_at', 'deleted_at', 'created_at'];
-
-    for (const key in localData) {
-      if (ignoreFields.includes(key)) continue;
-
-      const localValue = localData[key];
-      const serverValue = serverData[key];
-
-      if (JSON.stringify(localValue) !== JSON.stringify(serverValue)) {
-        conflicts.push({
-          field: key,
-          localValue,
-          serverValue,
-        });
-      }
-    }
-
-    return conflicts;
-  }
-
-  /**
-   * ✅ MEDIUM PRIORITY FIX #1: Notify user about conflict with details
-   */
-  private notifyConflict(conflictDetails: ConflictDetails) {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('sync-conflict-detected', {
-        detail: conflictDetails
-      }));
-    }
-  }
-
-  /**
-   * Get sync queue items ordered by dependency
-   * Parents (clients) sync before children (jobs, quotes, invoices)
-   */
-  private async getSyncQueueOrdered(): Promise<SyncQueueItem[]> {
-    // ✅ FIX: Don't use .where('synced') index - fetch all and filter in memory.
-    // The 'synced' field is intentionally NOT indexed in the Dexie schema because
-    // boolean indexing causes IDBKeyRange errors (see db.ts version history).
-    // Adding a Dexie index for 'synced' would require a schema version bump and
-    // risks triggering the same IDBKeyRange issues. The sync queue is small enough
-    // that in-memory filtering is acceptable.
-    const allItems = await db.syncQueue.toArray();
-    const items = allItems.filter(item => !item.synced);
-
-    // Sort by dependency order, then by creation time
-    return items.sort((a, b) => {
-      const aOrder = ENTITY_DEPENDENCY_ORDER.indexOf(a.entity_type);
-      const bOrder = ENTITY_DEPENDENCY_ORDER.indexOf(b.entity_type);
-
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder;
-      }
-
-      // Same entity type - sort by creation time
-      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-    });
-  }
-
-  /**
-   * ✅ HIGH PRIORITY FIX #2: Group queue items into batches for efficient processing
-   */
-  private groupIntoBatches(items: SyncQueueItem[]): SyncQueueItem[][] {
-    const batchSize = 10; // Process 10 items per batch
-    const batches: SyncQueueItem[][] = [];
-
-    // Group by entity type and action for batching
-    const groups = new Map<string, SyncQueueItem[]>();
-
-    for (const item of items) {
-      const key = `${item.entity_type}:${item.action}`;
-      if (!groups.has(key)) {
-        groups.set(key, []);
-      }
-      groups.get(key)!.push(item);
-    }
-
-    // Convert groups to batches
-    for (const group of groups.values()) {
-      for (let i = 0; i < group.length; i += batchSize) {
-        batches.push(group.slice(i, i + batchSize));
-      }
-    }
-
-    return batches;
-  }
-
-  /**
-   * ✅ HIGH PRIORITY FIX #2: Process a batch of sync items
-   * ✅ HIGH PRIORITY FIX #4: Soft dependency handling instead of hard halt
-   */
-  private async processBatch(batch: SyncQueueItem[]): Promise<{
-    success: number;
-    failed: number;
-    failedParents?: string[];
-  }> {
-    if (batch.length === 0) {
-      return { success: 0, failed: 0, failedParents: [] };
-    }
-
-    const entityType = batch[0].entity_type;
-    const action = batch[0].action;
-    const table = this.getTableName(entityType);
-
-    let successCount = 0;
-    let failCount = 0;
-    const failedParents: string[] = [];
-
-    // ✅ HIGH PRIORITY FIX #4: Filter out items with failed parent dependencies
-    const validBatch: SyncQueueItem[] = [];
-    const deferredBatch: SyncQueueItem[] = [];
-
-    for (const item of batch) {
-      // Check if this item depends on a failed parent
-      if (this.hasDependencyOnFailedParent(item)) {
-        console.warn(`[SyncManager] Deferring ${item.entity_type} ${item.entity_id} - parent entity failed`);
-        deferredBatch.push(item);
-      } else {
-        validBatch.push(item);
-      }
-    }
-
-    // Mark deferred items (don't count as failures)
-    for (const item of deferredBatch) {
-      await db.syncQueue.update(item.id!, {
-        sync_error: 'Deferred: Parent entity sync failed. Will retry after parent succeeds.',
-        retry_count: (item.retry_count || 0), // Don't increment retry count
-      });
-    }
-
-    if (validBatch.length === 0) {
-      return { success: 0, failed: 0, failedParents };
-    }
-
-    try {
-      if (action === 'create') {
-        // Batch upsert to handle duplicate queue items safely
-        const dataToInsert = validBatch.map(item => item.data);
-        const { error } = await supabase.from(table).upsert(dataToInsert, { onConflict: 'id' });
-
-        if (error) {
-          throw error;
-        }
-
-        // Delete synced items from queue to prevent unbounded growth
-        for (const item of validBatch) {
-          await db.syncQueue.delete(item.id!);
-          successCount++;
-        }
-
-      } else if (action === 'update') {
-        // Updates need individual processing for conflict resolution
-        for (const item of validBatch) {
-          try {
-            await this.syncItem(item);
-
-            await db.syncQueue.delete(item.id!);
-
-            successCount++;
-          } catch (error: unknown) {
-            await this.handleSyncItemError(item, error);
-            failCount++;
-
-            // Track failed parent entities (clients, quotes, invoices can be parents)
-            if (['client', 'quote', 'invoice'].includes(item.entity_type)) {
-              failedParents.push(`${item.entity_type}:${item.entity_id}`);
-            }
-          }
-        }
-      } else if (action === 'delete') {
-        // Batch soft delete
-        const idsToDelete = validBatch.map(item => item.entity_id);
-        const { error } = await supabase
-          .from(table)
-          .update({ deleted_at: new Date().toISOString() })
-          .in('id', idsToDelete);
-
-        if (error) {
-          throw error;
-        }
-
-        // Delete synced items from queue to prevent unbounded growth
-        for (const item of validBatch) {
-          await db.syncQueue.delete(item.id!);
-          successCount++;
-        }
-
-      }
-    } catch (error: unknown) {
-      // Batch operation failed - process individually
-      console.warn(`[SyncManager] Batch operation failed, processing individually:`, error);
-
-      for (const item of validBatch) {
-        try {
-          await this.syncItem(item);
-
-          await db.syncQueue.delete(item.id!);
-
-          successCount++;
-        } catch (itemError: unknown) {
-          await this.handleSyncItemError(item, itemError);
-          failCount++;
-
-          // ✅ HIGH PRIORITY FIX #4: Track failed parent entities instead of halting
-          if (['client', 'quote', 'invoice'].includes(item.entity_type) && item.action === 'create') {
-            failedParents.push(`${item.entity_type}:${item.entity_id}`);
-          }
-        }
-      }
-    }
-
-    return { success: successCount, failed: failCount, failedParents };
-  }
-
-  /**
-   * ✅ HIGH PRIORITY FIX #4: Check if item depends on a failed parent
-   */
-  private hasDependencyOnFailedParent(item: SyncQueueItem): boolean {
-    // Only check for entities that have parent dependencies
-    if (item.entity_type === 'client') {
-      return false; // Clients have no parents
-    }
-
-    // Check if the parent client failed
-    const clientId = item.data?.client_id;
-    if (clientId && this.failedParentEntities.has(`client:${clientId}`)) {
-      return true;
-    }
-
-    // Check if quote line item's parent quote failed
-    if (item.entity_type === 'quote_line_item') {
-      const quoteId = item.data?.quote_id;
-      if (quoteId && this.failedParentEntities.has(`quote:${quoteId}`)) {
-        return true;
-      }
-    }
-
-    // Check if invoice line item's parent invoice failed
-    if (item.entity_type === 'invoice_line_item') {
-      const invoiceId = item.data?.invoice_id;
-      if (invoiceId && this.failedParentEntities.has(`invoice:${invoiceId}`)) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Handle sync item error with retry logic and rollback
-   */
-  private async handleSyncItemError(item: SyncQueueItem, error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[SyncManager] Error syncing ${item.entity_type} ${item.entity_id}:`, errorMessage);
-
-    const newRetryCount = (item.retry_count || 0) + 1;
-    await db.syncQueue.update(item.id!, {
-      sync_error: errorMessage,
-      retry_count: newRetryCount,
-    });
-
-    // Rollback optimistic update if max retries exceeded
-    if (newRetryCount >= 3) {
-      console.error(`[SyncManager] Max retries exceeded for ${item.entity_type} ${item.entity_id}`);
-
-      await this.rollbackOptimisticUpdate(item);
-
-      // Delete permanently failed item from queue after rollback
-      await db.syncQueue.delete(item.id!);
-    }
-  }
-
-  /**
-   * Sync individual item to Supabase with conflict resolution
-   */
-  private async syncItem(item: SyncQueueItem) {
-    const table = this.getTableName(item.entity_type);
-
-    switch (item.action) {
-      case 'create':
-        const { error: createError } = await supabase
-          .from(table)
-          .insert(item.data);
-
-        if (createError) throw createError;
-        break;
-
-      case 'update':
-        // ✅ FIX #7: Integrate conflict resolution
-        // Fetch current server data to check for conflicts
-        const { data: serverData, error: fetchError } = await supabase
-          .from(table)
-          .select('*')
-          .eq('id', item.entity_id)
-          .single();
-
-        if (fetchError && fetchError.code !== 'PGRST116') {
-          // PGRST116 = not found, which is OK (record deleted on server)
-          throw fetchError;
-        }
-
-        if (serverData && hasConflict(item.data, serverData)) {
-          console.warn(`[SyncManager] Conflict detected for ${item.entity_type} ${item.entity_id}`);
-
-          // ✅ MEDIUM PRIORITY FIX #1: Notify user about conflict
-          const conflictingFields = this.getConflictingFields(item.data, serverData);
-          this.notifyConflict({
-            entityType: item.entity_type,
-            entityId: item.entity_id,
-            conflictingFields,
-            localData: item.data,
-            serverData,
-          });
-
-          // Resolve conflict using last-write-wins strategy
-          const { resolved, message } = resolveConflict(
-            item.data,
-            serverData,
-            'last-write-wins'
-          );
-
-          // Update with resolved data
-          const { error: updateError } = await supabase
-            .from(table)
-            .update(resolved)
-            .eq('id', item.entity_id);
-
-          if (updateError) throw updateError;
-
-          // Update local DB with resolved data
-          const localTable = this.getLocalTable(item.entity_type);
-          if (localTable) {
-            await localTable.put(resolved);
-          }
-        } else {
-          // No conflict - proceed with normal update
-          const { error: updateError } = await supabase
-            .from(table)
-            .update(item.data)
-            .eq('id', item.entity_id);
-
-          if (updateError) throw updateError;
-        }
-        break;
-
-      case 'delete':
-        // Soft delete - set deleted_at
-        const { error: deleteError } = await supabase
-          .from(table)
-          .update({ deleted_at: new Date().toISOString() })
-          .eq('id', item.entity_id);
-
-        if (deleteError) throw deleteError;
-        break;
-    }
-  }
-
-  /**
-   * Get Supabase table name from entity type
-   */
-  private getTableName(entityType: string): string {
-    // ✅ FIX #8: Use proper mapping instead of fragile string concatenation
-    return ENTITY_TABLE_MAP[entityType] || entityType + 's';
-  }
-
-  /**
-   * Fetch data from Supabase and store in IndexedDB
-   * Used for initial data prefetch and periodic syncs
-   * ✅ HIGH PRIORITY FIX #1: Pagination to prevent memory bloat
-   * ✅ HIGH PRIORITY FIX #5: Wait for schema migration before fetching
-   */
-  async fetchAndStore(userId: string, options?: { pageSize?: number; onProgress?: (progress: number) => void }) {
-    if (!navigator.onLine) {
-      return;
-    }
-
-    // Deduplicate: if a fetch is already in-flight for this userId, reuse it
-    const existing = this.fetchInFlight.get(userId);
-    if (existing) {
-      return existing;
-    }
-
-    const fetchPromise = this._fetchAndStoreImpl(userId, options).finally(() => {
-      this.fetchInFlight.delete(userId);
-    });
-    this.fetchInFlight.set(userId, fetchPromise);
-    return fetchPromise;
-  }
-
-  private async _fetchAndStoreImpl(userId: string, options?: { pageSize?: number; onProgress?: (progress: number) => void }) {
-    // Wait for schema migration to complete
-    await this.schemaReady;
-
-    const pageSize = options?.pageSize || 100; // Default: 100 records per page
-    try {
-      // Get IDs of entities with pending sync operations
-      const pendingIds = await this.getPendingSyncIds();
-
-      // Fetch each entity type with pagination
-      let totalFetched = 0;
-      let totalExpected = 6; // 6 entity types (4 main + 2 line item tables)
-
-      // Jobs
-      const jobsCount = await this.fetchAndStoreEntity(
-        'jobs',
-        userId,
-        pendingIds.job,
-        pageSize,
-        db.jobs
-      );
-      totalFetched++;
-      options?.onProgress?.(totalFetched / totalExpected);
-
-      // Quotes
-      const quotesCount = await this.fetchAndStoreEntity(
-        'quotes',
-        userId,
-        pendingIds.quote,
-        pageSize,
-        encryptedDb.quotes
-      );
-      totalFetched++;
-      options?.onProgress?.(totalFetched / totalExpected);
-
-      // Quote Line Items - fetch based on synced quote IDs
-      const quoteLineItemsCount = await this.fetchAndStoreLineItems(
-        'quote_line_items',
-        'quote_id',
-        db.quotes,
-        pendingIds.quote_line_item,
-        pageSize,
-        db.quote_line_items
-      );
-      totalFetched++;
-      options?.onProgress?.(totalFetched / totalExpected);
-
-      // Invoices
-      const invoicesCount = await this.fetchAndStoreEntity(
-        'invoices',
-        userId,
-        pendingIds.invoice,
-        pageSize,
-        encryptedDb.invoices
-      );
-      totalFetched++;
-      options?.onProgress?.(totalFetched / totalExpected);
-
-      // Invoice Line Items - fetch based on synced invoice IDs
-      const invoiceLineItemsCount = await this.fetchAndStoreLineItems(
-        'invoice_line_items',
-        'invoice_id',
-        db.invoices,
-        pendingIds.invoice_line_item,
-        pageSize,
-        db.invoice_line_items
-      );
-      totalFetched++;
-      options?.onProgress?.(totalFetched / totalExpected);
-
-      // Clients
-      const clientsCount = await this.fetchAndStoreEntity(
-        'clients',
-        userId,
-        pendingIds.client,
-        pageSize,
-        encryptedDb.clients
-      );
-      totalFetched++;
-      options?.onProgress?.(totalFetched / totalExpected);
-
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[SyncManager] Error fetching data:', errorMessage);
-      throw error;
-    }
-  }
-
-  /**
-   * ✅ HIGH PRIORITY FIX #1: Fetch and store entity with pagination
-   */
-  private async fetchAndStoreEntity(
-    tableName: string,
+  async fetchAndStore(
     userId: string,
-    pendingIds: Set<string>,
-    pageSize: number,
-    localTable: Table
-  ): Promise<number> {
-    let totalStored = 0;
-    let offset = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      // ✅ Ensure offset and pageSize are valid positive numbers
-      if (!Number.isFinite(offset) || offset < 0) {
-        console.error('[SyncManager] Invalid offset, aborting fetch:', offset);
-        break;
-      }
-      if (!Number.isFinite(pageSize) || pageSize <= 0) {
-        console.error('[SyncManager] Invalid pageSize, aborting fetch:', pageSize);
-        break;
-      }
-
-      // Fetch one page
-      const { data, error, count } = await supabase
-        .from(tableName)
-        .select('*', { count: 'exact' })
-        .eq('user_id', userId)
-        .is('deleted_at', null)
-        .order('updated_at', { ascending: false })
-        .range(offset, offset + pageSize - 1);
-
-      if (error) {
-        console.error(`[SyncManager] ${tableName} fetch error:`, error);
-        break;
-      }
-
-      if (!data || data.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      // Filter out invalid IDs and pending syncs
-      const validRecords = data.filter((record: { id?: unknown }) =>
-        record.id &&
-        typeof record.id === 'string' &&
-        !pendingIds.has(record.id)
-      );
-
-      const skipped = data.length - validRecords.length;
-      if (skipped > 0) {
-        console.warn(`[SyncManager] Skipped ${skipped} ${tableName} (invalid IDs or pending sync)`);
-      }
-
-      // Store in IndexedDB
-      if (validRecords.length > 0) {
-        await localTable.bulkPut(validRecords);
-        totalStored += validRecords.length;
-      }
-
-      // Check if there are more pages
-      offset += pageSize;
-      if (count !== null && offset >= count) {
-        hasMore = false;
-      } else if (data.length < pageSize) {
-        hasMore = false;
-      }
-
-      // Yield to event loop to prevent blocking UI
-      await new Promise(resolve => setTimeout(resolve, 0));
-    }
-
-    await db.setLastSyncTime(tableName);
-
-    return totalStored;
+    options?: { pageSize?: number; onProgress?: (progress: number) => void }
+  ): Promise<void> {
+    return this.fetcher.fetchAndStore(userId, options);
   }
 
-  /**
-   * Fetch and store line items based on parent entity IDs already in IndexedDB
-   * Line items don't have user_id; they are fetched via their parent FK (quote_id or invoice_id)
-   */
-  private async fetchAndStoreLineItems(
-    tableName: string,
-    parentFkField: string,
-    parentLocalTable: Table,
-    pendingIds: Set<string>,
-    pageSize: number,
-    localTable: Table
-  ): Promise<number> {
-    let totalStored = 0;
-
-    try {
-      // Get all parent IDs from local IndexedDB
-      const parentRecords = await parentLocalTable.toArray();
-      const parentIds: string[] = parentRecords
-        .map((r: { id?: unknown }) => r.id)
-        .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
-
-      if (parentIds.length === 0) {
-        return 0;
-      }
-
-      // Fetch line items in batches of parent IDs to avoid overly large queries
-      const parentIdBatchSize = 50;
-      for (let i = 0; i < parentIds.length; i += parentIdBatchSize) {
-        const parentIdBatch = parentIds.slice(i, i + parentIdBatchSize);
-
-        let offset = 0;
-        let hasMore = true;
-
-        while (hasMore) {
-          if (!Number.isFinite(offset) || offset < 0) break;
-
-          const { data, error, count } = await supabase
-            .from(tableName)
-            .select('*', { count: 'exact' })
-            .in(parentFkField, parentIdBatch)
-            .order('created_at', { ascending: false })
-            .range(offset, offset + pageSize - 1);
-
-          if (error) {
-            console.error(`[SyncManager] ${tableName} fetch error:`, error);
-            break;
-          }
-
-          if (!data || data.length === 0) {
-            hasMore = false;
-            break;
-          }
-
-          // Filter out invalid IDs and pending syncs
-          const validRecords = data.filter((record: { id?: unknown }) =>
-            record.id &&
-            typeof record.id === 'string' &&
-            !pendingIds.has(record.id)
-          );
-
-          if (validRecords.length > 0) {
-            await localTable.bulkPut(validRecords);
-            totalStored += validRecords.length;
-          }
-
-          offset += pageSize;
-          if (count !== null && offset >= count) {
-            hasMore = false;
-          } else if (data.length < pageSize) {
-            hasMore = false;
-          }
-
-          // Yield to event loop to prevent blocking UI
-          await new Promise(resolve => setTimeout(resolve, 0));
-        }
-      }
-
-      await db.setLastSyncTime(tableName);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[SyncManager] Error fetching ${tableName}:`, errorMessage);
-    }
-
-    return totalStored;
+  /** Clear the sync queue (e.g. on logout). */
+  async clearQueue(): Promise<void> {
+    return this.queue.clearQueue();
   }
 
-  /**
-   * Get IDs of entities with pending sync operations
-   * Used to prevent fetchAndStore from overwriting local changes
-   */
-  private async getPendingSyncIds(): Promise<{
-    job: Set<string>;
-    quote: Set<string>;
-    invoice: Set<string>;
-    client: Set<string>;
-    quote_line_item: Set<string>;
-    invoice_line_item: Set<string>;
-  }> {
-    const result: Record<string, Set<string>> = {
-      job: new Set<string>(),
-      quote: new Set<string>(),
-      invoice: new Set<string>(),
-      client: new Set<string>(),
-      quote_line_item: new Set<string>(),
-      invoice_line_item: new Set<string>(),
-    };
-
-    try {
-      // ✅ FIX: Don't use .where('synced') index - fetch all and filter
-      const allItems = await db.syncQueue.toArray();
-      const pending = allItems.filter(item => !item.synced);
-
-      for (const item of pending) {
-        // ✅ Validate entity_id is a valid string before adding to Set
-        if (item.entity_id && typeof item.entity_id === 'string' && item.entity_type in result) {
-          result[item.entity_type].add(item.entity_id);
-        } else {
-          console.warn('[SyncManager] Skipping invalid sync queue item:', item);
-        }
-      }
-    } catch (error) {
-      console.error('[SyncManager] Error getting pending sync IDs (returning empty):', error);
-      // Return empty sets on error - better than crashing
-    }
-
-    return result;
-  }
-
-  /**
-   * Clear sync queue (useful for testing or after logout)
-   */
-  async clearQueue() {
-    await db.syncQueue.clear();
-  }
-
-  private lastQueueClearTime = 0;
-  private queueErrorCount = 0;
-  private queueClearInProgress = false;
-
-  /**
-   * Get pending sync count
-   */
+  /** Count of items awaiting sync. */
   async getPendingSyncCount(): Promise<number> {
-    try {
-      // ✅ FIX: Don't use .where('synced') index - fetch all and filter
-      const allItems = await db.syncQueue.toArray();
-      return allItems.filter(item => !item.synced).length;
-    } catch (error: unknown) {
-      // ✅ FIX #5: Don't silently clear corrupted queue
-      if (!this.queueClearInProgress) {
-        this.queueClearInProgress = true;
-        this.queueErrorCount++;
-
-        const now = Date.now();
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-        console.error(`[SyncManager] Sync queue corrupted (attempt ${this.queueErrorCount}):`, errorMessage);
-
-        // Notify user instead of silently clearing
-        this.notifyQueueCorruption();
-
-        // Only clear after user notification
-        if (now - this.lastQueueClearTime > 30000) {
-          console.warn('[SyncManager] Clearing corrupted queue after user notification');
-          this.lastQueueClearTime = now;
-
-          try {
-            await db.syncQueue.clear();
-            this.queueErrorCount = 0;
-          } catch (clearError: unknown) {
-            const clearErrorMessage = clearError instanceof Error ? clearError.message : 'Unknown error';
-            console.error('[SyncManager] Failed to clear corrupt queue:', clearErrorMessage);
-          }
-        }
-
-        this.queueClearInProgress = false;
-      }
-
-      return 0;
-    }
+    return this.queue.getPendingSyncCount();
   }
 
-  /**
-   * ✅ FIX #5: Notify user about queue corruption instead of silent clearing
-   */
-  private notifyQueueCorruption() {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('sync-queue-corrupted', {
-        detail: {
-          message: 'Sync queue data corrupted. Pending changes may be lost.',
-          errorCount: this.queueErrorCount
-        }
-      }));
-    }
-  }
-
-  /**
-   * Get sync queue items
-   */
+  /** Read the raw sync queue (unsynced items). */
   async getSyncQueue(): Promise<SyncQueueItem[]> {
-    try {
-      // ✅ FIX: Don't use .where('synced') index - fetch all and filter
-      const allItems = await db.syncQueue.toArray();
-      return allItems.filter(item => !item.synced);
-    } catch (error: unknown) {
-      // ✅ FIX #5: Notify user instead of silently clearing
-      console.error('[SyncManager] Error reading sync queue');
-      this.notifyQueueCorruption();
-
-      // Clear corrupt queue after notification
-      try {
-        await db.syncQueue.clear();
-      } catch (clearError: unknown) {
-        const errorMessage = clearError instanceof Error ? clearError.message : 'Unknown error';
-        console.error('[SyncManager] Failed to clear corrupt queue:', errorMessage);
-      }
-      return [];
-    }
+    return this.queue.getSyncQueue();
   }
 
-  /**
-   * Subscribe to sync events
-   */
-  onSyncComplete(callback: () => void) {
-    this.syncListeners.add(callback);
-    return () => this.syncListeners.delete(callback);
+  /** Subscribe to sync-complete notifications. Returns unsubscribe function. */
+  onSyncComplete(callback: () => void): () => void {
+    return this.listeners.add(callback);
   }
 
-  /**
-   * Notify all listeners that sync completed
-   */
-  private notifyListeners() {
-    this.syncListeners.forEach(callback => callback());
-  }
-
-  /**
-   * Check if sync is in progress
-   */
+  /** Check if sync is in progress. */
   isSyncing(): boolean {
     return this.syncInProgress;
   }
 }
 
-// Create and export singleton instance
+// ---------------------------------------------------------------------------
+// Singleton + auto-reconnect
+// ---------------------------------------------------------------------------
+
 export const syncManager = new SyncManager();
 
-// Auto-sync when coming back online
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
     syncManager.processQueue();

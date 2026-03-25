@@ -4,6 +4,12 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 
+// SECURITY: Escape HTML to prevent XSS in email content
+function escapeHtml(str: string): string {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
 interface EmailRequest {
   type: "quote" | "invoice" | "team_invitation";
   id?: string;
@@ -21,49 +27,42 @@ const EMAIL_LIMITS: Record<string, number> = {
   pro: -1,
 };
 
-// Check and increment usage for rate limiting
+// Atomic usage check and increment via database RPC to prevent race conditions
 async function checkAndIncrementUsage(
   supabase: any,
   userId: string,
   tier: string
 ): Promise<{ allowed: boolean; used: number; limit: number }> {
-  const monthYear = new Date().toISOString().slice(0, 7);
   const limit = EMAIL_LIMITS[tier] ?? EMAIL_LIMITS.free;
 
   if (limit === -1) {
     return { allowed: true, used: 0, limit: -1 };
   }
 
-  const { data: existing } = await supabase
+  // Ensure a usage_tracking row exists for this month
+  const monthYear = new Date().toISOString().slice(0, 7);
+  await supabase
     .from('usage_tracking')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('month_year', monthYear)
-    .maybeSingle();
+    .upsert({ user_id: userId, month_year: monthYear }, { onConflict: 'user_id,month_year', ignoreDuplicates: true });
 
-  const currentUsage = existing?.emails_sent || 0;
+  // Atomic increment-if-under-limit at the database level
+  const { data: allowed, error } = await supabase.rpc('increment_usage_if_under_limit', {
+    p_user_id: userId,
+    p_field: 'emails_sent',
+    p_limit: limit,
+  });
 
-  if (currentUsage >= limit) {
-    return { allowed: false, used: currentUsage, limit };
+  if (error) {
+    console.error('Usage tracking RPC error:', error.message);
+    // Fail closed: deny if we cannot verify usage
+    return { allowed: false, used: limit, limit };
   }
 
-  if (existing) {
-    await supabase
-      .from('usage_tracking')
-      .update({ emails_sent: currentUsage + 1 })
-      .eq('user_id', userId)
-      .eq('month_year', monthYear);
-  } else {
-    await supabase
-      .from('usage_tracking')
-      .insert({
-        user_id: userId,
-        month_year: monthYear,
-        emails_sent: 1,
-      });
+  if (!allowed) {
+    return { allowed: false, used: limit, limit };
   }
 
-  return { allowed: true, used: currentUsage + 1, limit };
+  return { allowed: true, used: 0, limit };
 }
 
 serve(async (req) => {
@@ -141,12 +140,14 @@ serve(async (req) => {
     let documentNumber: string;
     let documentTitle: string;
     let lineItems: any[] = [];
+    let publicToken: string;
 
     if (type === "quote") {
       const { data, error } = await supabase
         .from("quotes")
         .select("*, clients(*)")
         .eq("id", id)
+        .eq("user_id", user.id)
         .single();
 
       if (error || !data) {
@@ -183,11 +184,24 @@ serve(async (req) => {
         .order("sort_order");
       lineItems = items || [];
 
+      // Resolve public_token for client-facing URL; generate and persist if absent
+      if (data.public_token) {
+        publicToken = data.public_token;
+      } else {
+        publicToken = crypto.randomUUID();
+        await supabase
+          .from('quotes')
+          .update({ public_token: publicToken })
+          .eq('id', id);
+        console.log(`Generated and saved public_token for quote ${id}`);
+      }
+
     } else if (type === "invoice") {
       const { data, error } = await supabase
         .from("invoices")
         .select("*, clients(*)")
         .eq("id", id)
+        .eq("user_id", user.id)
         .single();
 
       if (error || !data) {
@@ -224,10 +238,45 @@ serve(async (req) => {
         .order("sort_order");
       lineItems = items || [];
 
+      // Resolve public_token for client-facing URL; generate and persist if absent
+      if (data.public_token) {
+        publicToken = data.public_token;
+      } else {
+        publicToken = crypto.randomUUID();
+        await supabase
+          .from('invoices')
+          .update({ public_token: publicToken })
+          .eq('id', id);
+        console.log(`Generated and saved public_token for invoice ${id}`);
+      }
+
     } else if (type === "team_invitation") {
-      // Simple handling for team invitations
-      const invitationSender = "Team Invitation";
-      const fromEmail = `${invitationSender} <onboarding@resend.dev>`;
+      // SEC-M2: Enforce usage limits for team invitation emails the same way as
+      // quote/invoice emails. Fetch the sender's profile to get their subscription
+      // tier, then run the atomic checkAndIncrementUsage RPC before sending.
+      const { data: inviterProfile } = await supabase
+        .from("profiles")
+        .select("subscription_tier")
+        .eq("user_id", user.id)
+        .single();
+
+      const inviterTier = inviterProfile?.subscription_tier || 'free';
+      const inviteUsageCheck = await checkAndIncrementUsage(supabase, user.id, inviterTier);
+
+      if (!inviteUsageCheck.allowed) {
+        console.log(`Invitation email blocked by usage limit: ${inviteUsageCheck.used}/${inviteUsageCheck.limit}`);
+        return new Response(
+          JSON.stringify({
+            error: `Monthly email limit reached (${inviteUsageCheck.used}/${inviteUsageCheck.limit}). Upgrade your plan for more.`,
+            limitReached: true,
+            used: inviteUsageCheck.used,
+            limit: inviteUsageCheck.limit,
+          }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const fromEmail = `Team Invitation <onboarding@resend.dev>`;
 
       console.log(`Sending invitation email to ${recipient_email}`);
 
@@ -238,7 +287,7 @@ serve(async (req) => {
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
             <h2>Team Invitation</h2>
-            <p>${message}</p>
+            <p>${escapeHtml(message || '')}</p>
             <p>If you didn't expect this invitation, you can ignore this email.</p>
           </div>
         `,
@@ -277,19 +326,36 @@ serve(async (req) => {
       );
     }
 
-    const businessName = profile?.business_name || "Your Business";
-    const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
-    const viewUrl = `${baseUrl}/${type === 'quote' ? 'q' : 'i'}/${id}`;
+    // SEC-M3: Strip CR/LF to prevent header injection when businessName is used in From: header
+    const businessName = (profile?.business_name || "Your Business").replace(/[
+]/g, '');
+    const baseUrl = Deno.env.get('APP_URL') || 'https://app.tradiemate.com.au';
+    // Use public_token in client-facing URLs so internal UUIDs are never exposed
+    const viewUrl = type === 'quote'
+      ? `${baseUrl}/public/quote/${publicToken!}`
+      : `${baseUrl}/public/invoice/${publicToken!}`;
 
-    // Extract branding values with fallbacks
-    const primaryColor = branding?.primary_color || '#3b82f6';
-    const secondaryColor = branding?.secondary_color || '#1d4ed8';
-    const emailHeaderColor = branding?.email_header_color || primaryColor;
+    // SECURITY: Sanitize color values to prevent CSS injection
+    const sanitizeColor = (color: string | undefined | null, fallback: string): string => {
+      if (!color) return fallback;
+      return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(color) ? color : fallback;
+    };
+    const primaryColor = sanitizeColor(branding?.primary_color, '#3b82f6');
+    const secondaryColor = sanitizeColor(branding?.secondary_color, '#1d4ed8');
+    const emailHeaderColor = sanitizeColor(branding?.email_header_color, primaryColor);
     const logoUrl = branding?.logo_url || profile?.logo_url;
     const emailSignature = branding?.email_signature;
     const footerText = branding?.email_footer_text || 'Thank you for your business!';
 
     const emailSubject = subject || `${type === 'quote' ? 'Quote' : 'Invoice'} ${documentNumber} from ${businessName}`;
+
+    // SECURITY: Escape all user-controlled fields before interpolating into HTML
+    const safeBusinessName = escapeHtml(businessName);
+    const safeRecipientName = escapeHtml(recipient_name || 'there');
+    const safeMessage = message ? escapeHtml(message) : '';
+    const safeDocumentTitle = escapeHtml(documentTitle);
+    const safeEmailSignature = emailSignature ? escapeHtml(emailSignature) : '';
+    const safeFooterText = escapeHtml(footerText);
 
     const emailHtml = `
 <!DOCTYPE html>
@@ -307,8 +373,8 @@ serve(async (req) => {
           <!-- Header -->
           <tr>
             <td style="background: ${emailHeaderColor}; padding: 32px; text-align: center;">
-              ${logoUrl ? `<img src="${logoUrl}" alt="${businessName}" style="max-width: 180px; max-height: 60px; margin-bottom: 12px;" />` : ''}
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">${businessName}</h1>
+              ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${safeBusinessName}" style="max-width: 180px; max-height: 60px; margin-bottom: 12px;" />` : ''}
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">${safeBusinessName}</h1>
             </td>
           </tr>
           
@@ -316,15 +382,15 @@ serve(async (req) => {
           <tr>
             <td style="padding: 40px 32px;">
               <p style="margin: 0 0 16px; color: #374151; font-size: 16px; line-height: 1.6;">
-                Hi ${recipient_name || 'there'},
+                Hi ${safeRecipientName},
               </p>
               
-              ${message ? `<p style="margin: 0 0 24px; color: #374151; font-size: 16px; line-height: 1.6;">${message}</p>` : ''}
+              ${safeMessage ? `<p style="margin: 0 0 24px; color: #374151; font-size: 16px; line-height: 1.6;">${safeMessage}</p>` : ''}
               
               <p style="margin: 0 0 24px; color: #374151; font-size: 16px; line-height: 1.6;">
                 ${type === 'quote'
-        ? `We've prepared this quote for "${documentTitle}". Please review the details below and let us know if you have any questions.`
-        : `Thank you for your business! Please find your invoice below for "${documentTitle}". We appreciate your prompt payment.`
+        ? `We've prepared this quote for "${safeDocumentTitle}". Please review the details below and let us know if you have any questions.`
+        : `Thank you for your business! Please find your invoice below for "${safeDocumentTitle}". We appreciate your prompt payment.`
       }
               </p>
               
@@ -378,8 +444,8 @@ serve(async (req) => {
                 ${lineItems.map((item: any, index: number) => `
                 <tr style="border-bottom: ${index < lineItems.length - 1 ? '1px solid #e5e7eb' : 'none'};">
                   <td style="padding: 16px;">
-                    <p style="margin: 0 0 4px; color: #1f2937; font-size: 14px; font-weight: 500;">${item.description || item.name || 'Item'}</p>
-                    ${item.notes ? `<p style="margin: 0; color: #6b7280; font-size: 12px;">${item.notes}</p>` : ''}
+                    <p style="margin: 0 0 4px; color: #1f2937; font-size: 14px; font-weight: 500;">${escapeHtml(item.description || item.name || 'Item')}</p>
+                    ${item.notes ? `<p style="margin: 0; color: #6b7280; font-size: 12px;">${escapeHtml(item.notes)}</p>` : ''}
                   </td>
                   <td align="center" style="padding: 16px;">
                     <p style="margin: 0; color: #1f2937; font-size: 14px;">${item.quantity || 1}</p>
@@ -435,11 +501,11 @@ serve(async (req) => {
                 </tr>
               </table>
 
-              ${emailSignature ? `
+              ${safeEmailSignature ? `
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
                 <tr>
                   <td>
-                    <p style="margin: 0; color: #374151; font-size: 14px; line-height: 1.6; white-space: pre-line;">${emailSignature}</p>
+                    <p style="margin: 0; color: #374151; font-size: 14px; line-height: 1.6; white-space: pre-line;">${safeEmailSignature}</p>
                   </td>
                 </tr>
               </table>
@@ -455,10 +521,10 @@ serve(async (req) => {
           <tr>
             <td style="background-color: #f9fafb; padding: 24px 32px; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0 0 8px; color: #6b7280; font-size: 14px; text-align: center;">
-                ${footerText}
+                ${safeFooterText}
               </p>
-              ${profile?.phone ? `<p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">${profile.phone}</p>` : ''}
-              ${profile?.email ? `<p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">${profile.email}</p>` : ''}
+              ${profile?.phone ? `<p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">${escapeHtml(profile.phone)}</p>` : ''}
+              ${profile?.email ? `<p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">${escapeHtml(profile.email)}</p>` : ''}
               <p style="margin: 16px 0 0; color: #9ca3af; font-size: 11px; text-align: center;">
 
               </p>

@@ -11,11 +11,30 @@ export function generateProfessionalPDFHTML(data: {
 }): string {
   const { type, document, lineItems, profile, client, branding } = data;
 
-  // Extract branding values with fallbacks
-  const primaryColor = branding?.primary_color || '#2563eb'; // Professional blue
-  const secondaryColor = branding?.secondary_color || '#1e40af';
-  const accentColor = branding?.accent_color || '#10b981'; // Green for success states
-  const textColor = branding?.text_color || '#111827';
+  // Escape user-supplied text to prevent HTML injection in generated PDFs
+  function escapeHtml(str: string | undefined | null): string {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Sanitize color values to prevent CSS injection via branding settings.
+  // Only allow valid hex color codes; fall back to defaults for anything else.
+  function sanitizeColor(color: string | undefined | null, fallback: string): string {
+    if (!color) return fallback;
+    const hexPattern = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
+    return hexPattern.test(color) ? color : fallback;
+  }
+
+  // Extract branding values with fallbacks (sanitized against CSS injection)
+  const primaryColor = sanitizeColor(branding?.primary_color, '#2563eb'); // Professional blue
+  const secondaryColor = sanitizeColor(branding?.secondary_color, '#1e40af');
+  const accentColor = sanitizeColor(branding?.accent_color, '#10b981'); // Green for success states
+  const textColor = sanitizeColor(branding?.text_color, '#111827');
   const mutedColor = '#6b7280';
   const logoUrl = branding?.logo_url || profile?.logo_url;
   const showLogo = branding?.show_logo_on_documents ?? true;
@@ -42,7 +61,7 @@ export function generateProfessionalPDFHTML(data: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${docTitle} ${docNumber}</title>
+  <title>${escapeHtml(docTitle)} ${escapeHtml(docNumber)}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -504,21 +523,21 @@ export function generateProfessionalPDFHTML(data: {
       <div class="business-info">
         ${showLogo && logoUrl ? `
         <div class="business-logo">
-          <img src="${logoUrl}" alt="${profile?.business_name || 'Business'} Logo" />
+          <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(profile?.business_name || 'Business')} Logo" />
         </div>
         ` : ''}
-        <h1 class="business-name">${profile?.business_name || 'Your Business'}</h1>
+        <h1 class="business-name">${escapeHtml(profile?.business_name || 'Your Business')}</h1>
         <div class="business-details">
-          ${profile?.address ? `<p>${profile.address}</p>` : ''}
-          ${profile?.phone ? `<p>📞 ${profile.phone}</p>` : ''}
-          ${profile?.email ? `<p>✉️ ${profile.email}</p>` : ''}
-          ${profile?.website ? `<p>🌐 ${profile.website}</p>` : ''}
+          ${profile?.address ? `<p>${escapeHtml(profile.address)}</p>` : ''}
+          ${profile?.phone ? `<p>📞 ${escapeHtml(profile.phone)}</p>` : ''}
+          ${profile?.email ? `<p>✉️ ${escapeHtml(profile.email)}</p>` : ''}
+          ${profile?.website ? `<p>🌐 ${escapeHtml(profile.website)}</p>` : ''}
         </div>
       </div>
 
       <div class="document-info">
         <div class="document-type">${docTitle}</div>
-        <div class="document-number">#${docNumber}</div>
+        <div class="document-number">#${escapeHtml(docNumber)}</div>
         <div class="document-meta">
           <p><strong>Date:</strong> ${formatDate(document.created_at)}</p>
           ${isQuote && document.valid_until ? `<p><strong>Valid Until:</strong> ${formatDate(document.valid_until)}</p>` : ''}
@@ -530,14 +549,14 @@ export function generateProfessionalPDFHTML(data: {
     <!-- Title -->
     ${document.title ? `
     <div style="margin-bottom: 25px;">
-      <h2 style="font-size: 18px; font-weight: 600; color: ${textColor}; margin-bottom: 5px;">${document.title}</h2>
+      <h2 style="font-size: 18px; font-weight: 600; color: ${textColor}; margin-bottom: 5px;">${escapeHtml(document.title)}</h2>
     </div>
     ` : ''}
 
     <!-- Description -->
     ${document.description ? `
     <div class="description">
-      ${document.description}
+      ${escapeHtml(document.description)}
     </div>
     ` : ''}
 
@@ -545,20 +564,20 @@ export function generateProfessionalPDFHTML(data: {
     <div class="details-grid">
       <div class="detail-card">
         <div class="detail-card-title">${isQuote ? 'Quote For' : 'Bill To'}</div>
-        <div class="client-name">${client?.name || 'No client'}</div>
-        ${client?.address ? `<p>${client.address}</p>` : ''}
-        ${client?.suburb || client?.state || client?.postcode ? `<p>${[client.suburb, client.state, client.postcode].filter(Boolean).join(', ')}</p>` : ''}
-        ${client?.phone ? `<p>📞 ${client.phone}</p>` : ''}
-        ${client?.email ? `<p>✉️ ${client.email}</p>` : ''}
+        <div class="client-name">${escapeHtml(client?.name || 'No client')}</div>
+        ${client?.address ? `<p>${escapeHtml(client.address)}</p>` : ''}
+        ${client?.suburb || client?.state || client?.postcode ? `<p>${[client.suburb, client.state, client.postcode].filter(Boolean).map((v: string) => escapeHtml(v)).join(', ')}</p>` : ''}
+        ${client?.phone ? `<p>📞 ${escapeHtml(client.phone)}</p>` : ''}
+        ${client?.email ? `<p>✉️ ${escapeHtml(client.email)}</p>` : ''}
       </div>
 
       <div class="detail-card">
         <div class="detail-card-title">Document Details</div>
-        <p><strong>Number:</strong> ${docNumber}</p>
+        <p><strong>Number:</strong> ${escapeHtml(docNumber)}</p>
         <p><strong>Date:</strong> ${formatDate(document.created_at)}</p>
         ${isQuote && document.valid_until ? `<p><strong>Valid Until:</strong> ${formatDate(document.valid_until)}</p>` : ''}
         ${!isQuote && document.due_date ? `<p><strong>Due Date:</strong> ${formatDate(document.due_date)}</p>` : ''}
-        ${profile?.abn ? `<p><strong>ABN:</strong> ${profile.abn}</p>` : ''}
+        ${profile?.abn ? `<p><strong>ABN:</strong> ${escapeHtml(profile.abn)}</p>` : ''}
       </div>
     </div>
 
@@ -577,7 +596,7 @@ export function generateProfessionalPDFHTML(data: {
           ${lineItems.map(item => `
             <tr>
               <td>
-                <div class="item-description">${item.description || 'Item'}</div>
+                <div class="item-description">${escapeHtml(item.description) || 'Item'}</div>
                 ${item.item_type ? `<div class="item-type">${item.item_type}</div>` : ''}
               </td>
               <td style="text-align: center;">
@@ -627,30 +646,30 @@ export function generateProfessionalPDFHTML(data: {
         ${profile.bank_name ? `
           <div class="bank-item">
             <span class="bank-label">Bank</span>
-            <span class="bank-value">${profile.bank_name}</span>
+            <span class="bank-value">${escapeHtml(profile.bank_name)}</span>
           </div>
         ` : ''}
         ${profile.bank_account_name ? `
           <div class="bank-item">
             <span class="bank-label">Account Name</span>
-            <span class="bank-value">${profile.bank_account_name}</span>
+            <span class="bank-value">${escapeHtml(profile.bank_account_name)}</span>
           </div>
         ` : ''}
         ${profile.bank_bsb ? `
           <div class="bank-item">
             <span class="bank-label">BSB</span>
-            <span class="bank-value">${profile.bank_bsb}</span>
+            <span class="bank-value">${escapeHtml(profile.bank_bsb)}</span>
           </div>
         ` : ''}
         ${profile.bank_account_number ? `
           <div class="bank-item">
             <span class="bank-label">Account Number</span>
-            <span class="bank-value">${profile.bank_account_number}</span>
+            <span class="bank-value">${escapeHtml(profile.bank_account_number)}</span>
           </div>
         ` : ''}
       </div>
       <div class="payment-note">
-        💡 Please use invoice number ${docNumber} as your payment reference
+        💡 Please use invoice number ${escapeHtml(docNumber)} as your payment reference
       </div>
     </div>
     ` : ''}
@@ -659,7 +678,7 @@ export function generateProfessionalPDFHTML(data: {
     ${document.notes ? `
     <div class="notes-section">
       <div class="notes-title">Notes</div>
-      <div class="notes-content">${document.notes}</div>
+      <div class="notes-content">${escapeHtml(document.notes)}</div>
     </div>
     ` : ''}
 
@@ -667,18 +686,18 @@ export function generateProfessionalPDFHTML(data: {
     ${termsText ? `
     <div class="terms-section">
       <div class="terms-title">Terms & Conditions</div>
-      <div class="terms-content">${termsText}</div>
+      <div class="terms-content">${escapeHtml(termsText)}</div>
     </div>
     ` : ''}
 
     <!-- Footer -->
     <div class="footer">
-      <div class="footer-message">${footerText}</div>
+      <div class="footer-message">${escapeHtml(footerText)}</div>
       <div class="footer-details">
-        ${profile?.abn ? `<p><strong>ABN:</strong> ${profile.abn}</p>` : ''}
+        ${profile?.abn ? `<p><strong>ABN:</strong> ${escapeHtml(profile.abn)}</p>` : ''}
         ${(profile as any)?.license_number ? `<p><strong>License:</strong> ${(profile as any).license_number}</p>` : ''}
-        ${profile?.phone ? `<p><strong>Phone:</strong> ${profile.phone}</p>` : ''}
-        ${profile?.email ? `<p><strong>Email:</strong> ${profile.email}</p>` : ''}
+        ${profile?.phone ? `<p><strong>Phone:</strong> ${escapeHtml(profile.phone)}</p>` : ''}
+        ${profile?.email ? `<p><strong>Email:</strong> ${escapeHtml(profile.email)}</p>` : ''}
       </div>
       <div class="footer-branding">
         Professional ${isQuote ? 'Quote' : 'Invoice'} Management

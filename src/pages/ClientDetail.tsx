@@ -17,53 +17,96 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Phone, Mail, MapPin, Edit, ArrowLeft, Users, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { formatCurrency } from '@/lib/utils';
+import { Tables } from '@/integrations/supabase/types';
 
 export default function ClientDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { team } = useTeam();
   const { toast } = useToast();
-  const [client, setClient] = useState<any>(null);
-  const [jobs, setJobs] = useState<any[]>([]);
-  const [quotes, setQuotes] = useState<any[]>([]);
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [client, setClient] = useState<Tables<'clients'> | null>(null);
+  const [jobs, setJobs] = useState<Tables<'jobs'>[]>([]);
+  const [quotes, setQuotes] = useState<Tables<'quotes'>[]>([]);
+  const [invoices, setInvoices] = useState<Tables<'invoices'>[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user && id) {
-      fetchClient();
-      fetchClientHistory();
-    }
-  }, [user, id]);
+    if (!user || !id) return;
 
-  const fetchClient = async () => {
-    const { data } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', id)
-      .single();
-    setClient(data);
-    setLoading(false);
-  };
+    const fetchClient = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('id', id)
+          .eq('user_id', user.id)
+          .is('deleted_at', null)
+          .single();
+        if (error) {
+          toast({ title: 'Error loading client', description: error.message, variant: 'destructive' });
+          return;
+        }
+        setClient(data);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        toast({ title: 'Error', description: message, variant: 'destructive' });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const fetchClientHistory = async () => {
-    const [jobsRes, quotesRes, invoicesRes] = await Promise.all([
-      supabase.from('jobs').select('*').eq('client_id', id).order('created_at', { ascending: false }),
-      supabase.from('quotes').select('*').eq('client_id', id).order('created_at', { ascending: false }),
-      supabase.from('invoices').select('*').eq('client_id', id).order('created_at', { ascending: false }),
-    ]);
-    setJobs(jobsRes.data || []);
-    setQuotes(quotesRes.data || []);
-    setInvoices(invoicesRes.data || []);
-  };
+    const fetchClientHistory = async () => {
+      // Defence-in-depth: scope history queries by user_id/team_id
+      const scopeFilter = (query: ReturnType<typeof supabase.from>) => {
+        if (team?.id) return query.eq('team_id', team.id);
+        return query.eq('user_id', user!.id);
+      };
+
+      const [jobsRes, quotesRes, invoicesRes] = await Promise.all([
+        scopeFilter(supabase.from('jobs').select('*').eq('client_id', id).is('deleted_at', null)).order('created_at', { ascending: false }),
+        scopeFilter(supabase.from('quotes').select('*').eq('client_id', id).is('deleted_at', null)).order('created_at', { ascending: false }),
+        scopeFilter(supabase.from('invoices').select('*').eq('client_id', id).is('deleted_at', null)).order('created_at', { ascending: false }),
+      ]);
+
+      const errors = [
+        jobsRes.error ? 'jobs' : null,
+        quotesRes.error ? 'quotes' : null,
+        invoicesRes.error ? 'invoices' : null,
+      ].filter(Boolean);
+
+      if (errors.length > 0) {
+        toast({
+          title: 'Error loading history',
+          description: `Failed to load ${errors.join(', ')}. Please try again.`,
+          variant: 'destructive',
+        });
+      }
+
+      setJobs(jobsRes.data || []);
+      setQuotes(quotesRes.data || []);
+      setInvoices(invoicesRes.data || []);
+    };
+
+    fetchClient();
+    fetchClientHistory();
+  }, [user, id, toast]);
 
   const handleDelete = async () => {
-    const { error } = await supabase.from('clients').delete().eq('id', id);
+    // Defence-in-depth: scope delete by user ownership
+    let query = supabase.from('clients').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    if (team?.id) {
+      query = query.eq('team_id', team.id);
+    } else if (user) {
+      query = query.eq('user_id', user.id);
+    }
+    const { error } = await query;
     if (error) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } else {
@@ -80,7 +123,7 @@ export default function ClientDetail() {
     .filter(inv => ['sent', 'viewed', 'partially_paid', 'overdue'].includes(inv.status))
     .reduce((sum, inv) => sum + (Number(inv.total) - Number(inv.amount_paid || 0)), 0);
 
-  if (loading || !client) {
+  if (loading) {
     return (
       <MobileLayout showNav={false}>
         <div className="min-h-screen scrollbar-hide">
@@ -108,6 +151,19 @@ export default function ClientDetail() {
           <div className="p-4 flex items-center justify-center">
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
+        </div>
+      </MobileLayout>
+    );
+  }
+
+  if (!client) {
+    return (
+      <MobileLayout showNav={false}>
+        <div className="min-h-screen flex flex-col items-center justify-center p-4">
+          <Users className="w-12 h-12 text-muted-foreground mb-4" />
+          <h2 className="text-xl font-bold mb-2">Client Not Found</h2>
+          <p className="text-muted-foreground mb-4">This client may have been deleted or you don't have access.</p>
+          <Button onClick={() => navigate('/clients')}>Back to Clients</Button>
         </div>
       </MobileLayout>
     );

@@ -2,20 +2,14 @@
 // Powered by OpenRouter (GPT-4o-mini)
 // SECURITY: Requires authenticated user to prevent API abuse
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCorsHeaders, createCorsResponse } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
 
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
 // Validate API key is set
 if (!OPENROUTER_API_KEY) {
@@ -279,9 +273,12 @@ Current timestamp: ${new Date().toISOString()}
 `;
 
 serve(async (req) => {
+    // SECURITY: Get secure CORS headers
+    const corsHeaders = getCorsHeaders(req);
+
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
+        return createCorsResponse(req);
     }
 
     try {
@@ -355,9 +352,10 @@ serve(async (req) => {
             { role: 'system', content: SYSTEM_PROMPT }
         ];
 
-        // Add conversation history if present
-        if (conversationHistory && Array.isArray(conversationHistory)) {
-            for (const msg of conversationHistory) {
+        // Add conversation history if present (limit to last 10 messages to prevent abuse)
+        const limitedHistory = (conversationHistory || []).slice(-10);
+        if (Array.isArray(limitedHistory)) {
+            for (const msg of limitedHistory) {
                 if (msg.role && msg.content) {
                     messages.push({ role: msg.role, content: msg.content });
                 }
@@ -411,7 +409,8 @@ serve(async (req) => {
         // Parse AI response
         let aiResponse;
         try {
-            console.log("Raw AI content:", data.choices[0].message.content);
+            // Log metadata only — raw content may contain user PII (names, phones, amounts)
+            console.log("AI response received, length:", data.choices[0].message.content?.length);
             aiResponse = JSON.parse(data.choices[0].message.content);
         } catch (e) {
             console.error("JSON Parse Error:", e);
@@ -428,12 +427,13 @@ serve(async (req) => {
         if (!aiResponse.action) aiResponse.action = "general_reply";
         if (!aiResponse.data) aiResponse.data = {};
 
-        // Merge accumulated data with new data from AI
-        if (accumulatedData) {
-            aiResponse.data = { ...accumulatedData, ...aiResponse.data };
-        }
+        // SECURITY: Do NOT merge client-supplied accumulatedData into the AI response.
+        // The AI already receives accumulatedData as context and will include relevant
+        // fields in its own response. Merging client data could allow injection of
+        // arbitrary keys (e.g., overriding client_name, total, or adding extra fields).
 
-        console.log("Sending response to client:", JSON.stringify(aiResponse));
+        // Log action only — full response may contain user PII
+        console.log("AI response: action=", aiResponse.action, "hasData=", !!aiResponse.data);
         return new Response(JSON.stringify(aiResponse), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
@@ -445,7 +445,7 @@ serve(async (req) => {
             speak: "Sorry, I'm having a bit of trouble. Let's try that again.",
             action: "ask_details",
             data: {},
-            error: String(error)
+            error: 'Internal error'
         }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });

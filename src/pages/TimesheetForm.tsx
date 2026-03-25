@@ -22,11 +22,9 @@ import {
   Clock,
   ArrowLeft,
   Calendar,
-  Briefcase,
   Loader2,
   ChevronLeft,
   ChevronRight,
-  Coffee,
   Save,
 } from 'lucide-react';
 import {
@@ -157,7 +155,6 @@ export default function TimesheetForm() {
           description: tsError.message,
           variant: 'destructive',
         });
-        setSaving(false);
         return;
       }
 
@@ -181,12 +178,14 @@ export default function TimesheetForm() {
           .insert(entriesToInsert);
 
         if (entryError) {
-          console.error('Error inserting entries:', entryError);
+          // Rollback: delete the orphaned timesheet
+          await supabase.from('timesheets').delete().eq('id', timesheet.id);
           toast({
-            title: 'Timesheet created but entries failed',
+            title: 'Error creating timesheet entries',
             description: entryError.message,
             variant: 'destructive',
           });
+          return;
         }
       }
 
@@ -198,9 +197,9 @@ export default function TimesheetForm() {
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
   };
 
   const navigateWeek = (direction: 'prev' | 'next') => {

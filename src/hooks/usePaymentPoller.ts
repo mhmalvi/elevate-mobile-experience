@@ -42,6 +42,13 @@ export function usePaymentPoller({
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Store callbacks in refs so polling always uses the latest version
+  // without restarting the effect when the parent re-renders
+  const fetchStatusRef = useRef(fetchStatus);
+  fetchStatusRef.current = fetchStatus;
+  const onConfirmedRef = useRef(onConfirmed);
+  onConfirmedRef.current = onConfirmed;
+
   useEffect(() => {
     if (!enabled) return;
 
@@ -71,12 +78,12 @@ export function usePaymentPoller({
         pollAttempts++;
 
         try {
-          const status = await fetchStatus();
+          const status = await fetchStatusRef.current();
 
           if (status && isPaidStatus(status)) {
             setPaymentProcessing(false);
             setPaymentSuccess(true);
-            onConfirmed();
+            onConfirmedRef.current();
             toast({
               title: 'Invoice Updated',
               description:
@@ -94,7 +101,7 @@ export function usePaymentPoller({
             // Exhausted retries — optimistically mark success
             setPaymentProcessing(false);
             setPaymentSuccess(true);
-            onConfirmed();
+            onConfirmedRef.current();
             toast({
               title: 'Status Update Pending',
               description:
@@ -120,7 +127,7 @@ export function usePaymentPoller({
         }
       };
     }
-  }, [searchParams, enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, enabled, toast]);
 
   const resetPaymentSuccess = () => {
     setPaymentSuccess(false);
