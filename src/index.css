@@ -288,7 +288,7 @@
   }
 
   .nav-safe-area {
-    padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .safe-top {

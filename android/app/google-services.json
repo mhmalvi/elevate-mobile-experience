@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "409664849460",
+    "project_id": "tradiemate-4f290",
+    "storage_bucket": "tradiemate-4f290.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:409664849460:android:a80c6326d3dbe5aa6c6c61",
+        "android_client_info": {
+          "package_name": "com.tradiemate.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBN18qhJ7N8C3qrSjeGvfSXGRZrNOupPx0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

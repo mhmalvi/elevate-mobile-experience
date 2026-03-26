@@ -34,7 +34,7 @@ export function BottomNav() {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up nav-safe-area pb-3">
+    <div className="shrink-0 z-50 nav-safe-area pb-1">
       <div className="relative w-full max-w-lg mx-auto">
 
         {/* Glassmorphism Background Container */}

@@ -8,11 +8,11 @@ interface MobileLayoutProps {
 
 export function MobileLayout({ children, showNav = true }: MobileLayoutProps) {
   return (
-    <div className="min-h-screen bg-background flex flex-col relative">
+    <div className="h-dvh h-[100vh] bg-background flex flex-col relative overflow-hidden">
       {/* Subtle gradient glow at the top */}
-      <div className="fixed inset-x-0 top-0 h-32 gradient-glow pointer-events-none z-0" />
+      <div className="absolute inset-x-0 top-0 h-32 gradient-glow pointer-events-none z-0" />
 
-      <main className="flex-1 overflow-auto pb-24 relative z-10 scrollbar-hide">
+      <main className="flex-1 overflow-auto relative z-10 scrollbar-hide">
         {children}
       </main>
 
