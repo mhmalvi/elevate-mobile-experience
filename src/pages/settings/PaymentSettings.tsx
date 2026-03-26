@@ -32,7 +32,7 @@ interface StripeAccountStatus {
 
 export default function PaymentSettings() {
   const navigate = useNavigate();
-  const { profile, updateProfile, loading: profileLoading } = useProfile();
+  const { profile, loading: profileLoading, refetch: refetchProfile } = useProfile();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [stripeLoading, setStripeLoading] = useState(false);
@@ -142,7 +142,7 @@ export default function PaymentSettings() {
 
     try {
       // SECURITY: Use encrypted edge function to save bank details
-      const { data, error } = await supabase.functions.invoke('update-payment-settings', {
+      const { error } = await supabase.functions.invoke('update-payment-settings', {
         body: form
       });
 
@@ -159,7 +159,7 @@ export default function PaymentSettings() {
         });
 
         // Refresh profile to get latest data
-        window.location.reload();
+        await refetchProfile();
       }
     } catch (error) {
       toast({

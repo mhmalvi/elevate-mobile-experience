@@ -1,15 +1,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { MobileLayout } from '@/components/layout/MobileLayout';
-import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
-import { CheckCircle2, XCircle, Loader2, RefreshCw, ExternalLink, AlertCircle, ArrowLeft, Link2, Zap } from 'lucide-react';
+import { CheckCircle2, Loader2, RefreshCw, AlertCircle, ArrowLeft, Link2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 
 interface IntegrationStatus {
@@ -31,7 +29,6 @@ interface SyncHistory {
 
 export default function IntegrationsSettings() {
   const navigate = useNavigate();
-  const { profile } = useProfile();
   const { toast } = useToast();
 
   // Xero State
@@ -54,10 +51,10 @@ export default function IntegrationsSettings() {
 
   const [syncingClients, setSyncingClients] = useState(false);
   const [syncingInvoices, setSyncingInvoices] = useState(false);
-  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [_loadingHistory, setLoadingHistory] = useState(true);
 
   const [syncHistory, setSyncHistory] = useState<SyncHistory[]>([]);
-  const [processingCallback, setProcessingCallback] = useState(false);
+  const [_processingCallback, setProcessingCallback] = useState(false);
 
   const hasProcessedCallback = useRef(false);
 
@@ -74,8 +71,6 @@ export default function IntegrationsSettings() {
       if (code && state) {
         hasProcessedCallback.current = true;
         setProcessingCallback(true);
-        console.log('[OAuth] Processing callback...');
-
         try {
           // Determine provider from state
           // State format: base64(base64(JSON) + "." + signature)
@@ -85,12 +80,9 @@ export default function IntegrationsSettings() {
             const stateB64 = outer.split('.')[0];
             const decoded = JSON.parse(atob(stateB64));
             if (decoded.provider === 'quickbooks') provider = 'quickbooks';
-          } catch (e) {
+          } catch {
             // If parse fails, assume Xero (legacy)
-            console.log('State parse failed, assuming Xero');
           }
-
-          console.log(`[OAuth] Detected provider: ${provider}`);
 
           // QuickBooks also passes realmId in the callback URL
           const qbRealmId = urlParams.get('realmId');
@@ -98,7 +90,7 @@ export default function IntegrationsSettings() {
           const functionName = provider === 'quickbooks' ? 'quickbooks-oauth' : 'xero-oauth';
 
           // Exchange the code for tokens via Edge Function
-          const callbackBody: any = { action: 'callback', code, state };
+          const callbackBody: { action: string; code: string; state: string; realmId?: string } = { action: 'callback', code, state };
           if (qbRealmId) callbackBody.realmId = qbRealmId;
 
           const { data, error } = await supabase.functions.invoke(functionName, {
@@ -120,11 +112,11 @@ export default function IntegrationsSettings() {
             });
             await checkStatus();
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error('Callback exception:', err);
           toast({
             title: 'Error',
-            description: err.message || 'Failed to process authorization',
+            description: err instanceof Error ? err.message : 'Failed to process authorization',
             variant: 'destructive',
           });
         } finally {
@@ -203,8 +195,8 @@ export default function IntegrationsSettings() {
 
       if (error) throw error;
 
-      if (data?.url || data?.authorization_url) { // Xero uses authorization_url, standardizing on url? check function
-        const authUrl = data.url || data.authorization_url;
+      if (data?.authorization_url) {
+        const authUrl = data.authorization_url;
         window.location.href = authUrl;
 
         toast({
@@ -212,10 +204,10 @@ export default function IntegrationsSettings() {
           description: 'Please complete the authorization in the new window',
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Connection Error',
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
       setLoading(false);
@@ -243,10 +235,10 @@ export default function IntegrationsSettings() {
       });
 
       await checkStatus();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
     } finally {
@@ -256,7 +248,7 @@ export default function IntegrationsSettings() {
 
   const toggleSync = async (service: 'xero' | 'quickbooks', enabled: boolean) => {
     try {
-      const updates: any = {};
+      const updates: { xero_sync_enabled?: boolean; qb_sync_enabled?: boolean } = {};
       if (service === 'xero') updates.xero_sync_enabled = enabled;
       if (service === 'quickbooks') updates.qb_sync_enabled = enabled;
 
@@ -269,8 +261,8 @@ export default function IntegrationsSettings() {
 
       await checkStatus();
       toast({ title: 'Settings Updated', description: 'Sync settings saved.' });
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message, variant: 'destructive' });
+    } catch (e: unknown) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Unknown error', variant: 'destructive' });
     }
   };
 
@@ -290,8 +282,6 @@ export default function IntegrationsSettings() {
         console.error(`[${displayName}] Sync ${type} error:`, error);
         throw error;
       }
-
-      console.log(`[${displayName}] Sync ${type} result:`, data);
 
       if (data?.failed > 0 && data?.synced === 0) {
         // All records failed
@@ -316,15 +306,16 @@ export default function IntegrationsSettings() {
       }
 
       await loadSyncHistory();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`Sync ${type} exception:`, error);
       // supabase.functions.invoke wraps errors - try to parse the actual message
       let errorMsg = `Failed to sync ${type}`;
+      const rawMessage = error instanceof Error ? error.message : '';
       try {
-        const parsed = JSON.parse(error.message);
+        const parsed = JSON.parse(rawMessage);
         errorMsg = parsed.error || errorMsg;
       } catch {
-        errorMsg = error.message || errorMsg;
+        errorMsg = rawMessage || errorMsg;
       }
       toast({
         title: 'Sync Failed',

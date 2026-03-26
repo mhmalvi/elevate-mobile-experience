@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-type StatusType =
+export type StatusType =
   | 'draft' | 'sent' | 'viewed' | 'accepted' | 'declined' | 'expired'
   | 'quoted' | 'approved' | 'scheduled' | 'in_progress' | 'completed' | 'invoiced'
   | 'paid' | 'partially_paid' | 'overdue' | 'cancelled' | 'active'

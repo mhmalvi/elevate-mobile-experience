@@ -54,6 +54,15 @@ export default defineConfig({
       },
     },
 
+    // Desktop Firefox
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        viewport: { width: 1280, height: 720 },
+      },
+    },
+
     // Mobile Safari - iPhone 13
     {
       name: 'mobile-safari',

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, OfflineJob, OfflineQuote, OfflineInvoice, OfflineClient } from './db';
+import { db, OfflineJob, OfflineQuote, OfflineInvoice, OfflineClient, OfflineQuoteLineItem, OfflineInvoiceLineItem } from './db';
 import { syncManager } from './syncManager';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -230,13 +230,13 @@ export function useOfflineQuotes(userId: string) {
       id: generateUUID(),
       user_id: userId,
       quote_number: `Q-${Date.now()}`,
+      title: '',
       status: 'draft',
       total: 0,
-      line_items: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       ...quoteData,
-    } as OfflineQuote;
+    };
 
     // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('quote', newQuote.id, 'create', newQuote);
@@ -336,14 +336,14 @@ export function useOfflineInvoices(userId: string) {
       id: generateUUID(),
       user_id: userId,
       invoice_number: `INV-${Date.now()}`,
+      title: '',
       status: 'draft',
       total: 0,
       amount_paid: 0,
-      line_items: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       ...invoiceData,
-    } as OfflineInvoice;
+    };
 
     // Queue for sync (queueSync now handles optimistic UI update automatically)
     await syncManager.queueSync('invoice', newInvoice.id, 'create', newInvoice);
@@ -468,6 +468,218 @@ export function useOfflineClients(userId: string) {
     createClient,
     updateClient,
     deleteClient,
+  };
+}
+
+/**
+ * Hook to work with offline quote line items
+ */
+export function useOfflineQuoteLineItems(quoteId: string) {
+  const isOnline = useOnlineStatus();
+
+  // Use Dexie's live query for reactive updates filtered by quote_id
+  const lineItems = useLiveQuery(
+    async () => {
+      const items = await db.quote_line_items.where('quote_id').equals(quoteId).toArray();
+      return items.filter(item => !item.deleted_at).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    },
+    [quoteId]
+  );
+
+  // Fetch fresh data from Supabase when online
+  useEffect(() => {
+    if (quoteId && isOnline) {
+      const fetchLineItems = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('quote_line_items')
+            .select('*')
+            .eq('quote_id', quoteId);
+
+          if (error) {
+            console.error('[useOfflineQuoteLineItems] Fetch error:', error);
+            return;
+          }
+
+          if (data && data.length > 0) {
+            // Check for pending syncs before overwriting
+            const allQueueItems = await db.syncQueue.toArray();
+            const pendingIds = new Set(
+              allQueueItems
+                .filter(item => !item.synced && item.entity_type === 'quote_line_item')
+                .map(item => item.entity_id)
+            );
+
+            const safeRecords = data.filter(record => !pendingIds.has(record.id));
+            if (safeRecords.length > 0) {
+              await db.quote_line_items.bulkPut(safeRecords);
+            }
+          }
+        } catch (error) {
+          console.error('[useOfflineQuoteLineItems] Error:', error);
+        }
+      };
+      fetchLineItems();
+    }
+  }, [quoteId, isOnline]);
+
+  const createLineItem = useCallback(async (itemData: Partial<OfflineQuoteLineItem>) => {
+    const newItem: OfflineQuoteLineItem = {
+      id: generateUUID(),
+      quote_id: quoteId,
+      description: '',
+      quantity: 1,
+      unit_price: 0,
+      total: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...itemData,
+    };
+
+    await syncManager.queueSync('quote_line_item', newItem.id, 'create', newItem);
+    return newItem;
+  }, [quoteId]);
+
+  const updateLineItem = useCallback(async (itemId: string, updates: Partial<OfflineQuoteLineItem>) => {
+    const existing = await db.quote_line_items.get(itemId);
+    if (!existing) throw new Error('Quote line item not found');
+
+    const updatedItem = {
+      ...existing,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+
+    await syncManager.queueSync('quote_line_item', itemId, 'update', updatedItem);
+    return updatedItem;
+  }, []);
+
+  const deleteLineItem = useCallback(async (itemId: string) => {
+    const item = await db.quote_line_items.get(itemId);
+    if (!item) throw new Error('Quote line item not found');
+
+    const deletedItem = {
+      ...item,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    await syncManager.queueSync('quote_line_item', itemId, 'delete', deletedItem);
+  }, []);
+
+  return {
+    lineItems: lineItems || [],
+    loading: lineItems === undefined,
+    isOnline,
+    createLineItem,
+    updateLineItem,
+    deleteLineItem,
+  };
+}
+
+/**
+ * Hook to work with offline invoice line items
+ */
+export function useOfflineInvoiceLineItems(invoiceId: string) {
+  const isOnline = useOnlineStatus();
+
+  // Use Dexie's live query for reactive updates filtered by invoice_id
+  const lineItems = useLiveQuery(
+    async () => {
+      const items = await db.invoice_line_items.where('invoice_id').equals(invoiceId).toArray();
+      return items.filter(item => !item.deleted_at).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    },
+    [invoiceId]
+  );
+
+  // Fetch fresh data from Supabase when online
+  useEffect(() => {
+    if (invoiceId && isOnline) {
+      const fetchLineItems = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('invoice_line_items')
+            .select('*')
+            .eq('invoice_id', invoiceId);
+
+          if (error) {
+            console.error('[useOfflineInvoiceLineItems] Fetch error:', error);
+            return;
+          }
+
+          if (data && data.length > 0) {
+            // Check for pending syncs before overwriting
+            const allQueueItems = await db.syncQueue.toArray();
+            const pendingIds = new Set(
+              allQueueItems
+                .filter(item => !item.synced && item.entity_type === 'invoice_line_item')
+                .map(item => item.entity_id)
+            );
+
+            const safeRecords = data.filter(record => !pendingIds.has(record.id));
+            if (safeRecords.length > 0) {
+              await db.invoice_line_items.bulkPut(safeRecords);
+            }
+          }
+        } catch (error) {
+          console.error('[useOfflineInvoiceLineItems] Error:', error);
+        }
+      };
+      fetchLineItems();
+    }
+  }, [invoiceId, isOnline]);
+
+  const createLineItem = useCallback(async (itemData: Partial<OfflineInvoiceLineItem>) => {
+    const newItem: OfflineInvoiceLineItem = {
+      id: generateUUID(),
+      invoice_id: invoiceId,
+      description: '',
+      quantity: 1,
+      unit_price: 0,
+      total: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...itemData,
+    };
+
+    await syncManager.queueSync('invoice_line_item', newItem.id, 'create', newItem);
+    return newItem;
+  }, [invoiceId]);
+
+  const updateLineItem = useCallback(async (itemId: string, updates: Partial<OfflineInvoiceLineItem>) => {
+    const existing = await db.invoice_line_items.get(itemId);
+    if (!existing) throw new Error('Invoice line item not found');
+
+    const updatedItem = {
+      ...existing,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+
+    await syncManager.queueSync('invoice_line_item', itemId, 'update', updatedItem);
+    return updatedItem;
+  }, []);
+
+  const deleteLineItem = useCallback(async (itemId: string) => {
+    const item = await db.invoice_line_items.get(itemId);
+    if (!item) throw new Error('Invoice line item not found');
+
+    const deletedItem = {
+      ...item,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    await syncManager.queueSync('invoice_line_item', itemId, 'delete', deletedItem);
+  }, []);
+
+  return {
+    lineItems: lineItems || [],
+    loading: lineItems === undefined,
+    isOnline,
+    createLineItem,
+    updateLineItem,
+    deleteLineItem,
   };
 }
 

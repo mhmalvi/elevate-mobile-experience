@@ -186,7 +186,7 @@ export function PDFPreviewModal({ type, id, documentNumber }: PDFPreviewModalPro
               </DrawerDescription>
             </div>
             <DrawerClose asChild>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" aria-label="Close preview">
                 <X className="w-4 h-4" />
               </Button>
             </DrawerClose>

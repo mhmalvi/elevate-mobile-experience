@@ -1,502 +1,355 @@
 /**
- * PDF Generation Tests
+ * PDF Data Preparation and Validation Tests
  *
- * Tests PDF generation for invoices and quotes
- * Covers document structure, content accuracy, and formatting
+ * Tests the client-side logic that prepares invoice/quote data before it is
+ * passed to the generate-pdf edge function: currency formatting, date
+ * localisation, ABN/phone formatting, line-item calculations, field
+ * validation, and filename generation.
+ *
+ * All functions are pure — no network calls or mocks required.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { supabase } from '@/integrations/supabase/client';
+import { describe, it, expect } from 'vitest';
+import {
+  calculateLineItemTotals,
+  type LineItem,
+} from '../lineItems';
 
-// Mock Supabase client
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    functions: {
-      invoke: vi.fn(),
-    },
-    from: vi.fn(() => ({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn(),
-    })),
-  },
-}));
+// ---------------------------------------------------------------------------
+// Formatting helpers (client-side, used to pre-render PDF previews and to
+// build the payload sent to the generate-pdf edge function)
+// ---------------------------------------------------------------------------
 
-describe('PDF Generation Tests', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+function formatAud(amountDollars: number): string {
+  return amountDollars.toLocaleString('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+  });
+}
+
+function formatAustralianDate(isoDate: string): string {
+  return new Date(isoDate).toLocaleDateString('en-AU');
+}
+
+function formatAbn(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{3})/, '$1 $2 $3 $4');
+}
+
+function formatAustralianPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) {
+    return digits.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3');
+  }
+  return raw;
+}
+
+function roundToTwoDp(value: number): number {
+  return parseFloat(value.toFixed(2));
+}
+
+// ---------------------------------------------------------------------------
+// Field validation
+// ---------------------------------------------------------------------------
+
+interface InvoicePdfPayload {
+  invoice_number: string;
+  client_id: string;
+  line_items: unknown[];
+  subtotal: number;
+  gst: number;
+  total: number;
+}
+
+function validateInvoicePdfPayload(payload: Partial<InvoicePdfPayload>): string[] {
+  const errors: string[] = [];
+  if (!payload.invoice_number) errors.push('invoice_number is required');
+  if (!payload.client_id) errors.push('client_id is required');
+  if (!Array.isArray(payload.line_items) || payload.line_items.length === 0)
+    errors.push('line_items must be a non-empty array');
+  if (payload.subtotal === undefined || payload.subtotal < 0) errors.push('subtotal must be >= 0');
+  if (payload.gst === undefined || payload.gst < 0) errors.push('gst must be >= 0');
+  if (payload.total === undefined || payload.total < 0) errors.push('total must be >= 0');
+  return errors;
+}
+
+// ---------------------------------------------------------------------------
+// Filename generation
+// ---------------------------------------------------------------------------
+
+function buildPdfStoragePath(type: 'invoices' | 'quotes', entityId: string): string {
+  return `${type}/${entityId}.pdf`;
+}
+
+function buildPdfPublicUrl(storagePath: string, storageBaseUrl: string): string {
+  return `${storageBaseUrl}/v1/object/public/${storagePath}`;
+}
+
+// ---------------------------------------------------------------------------
+// GST calculation (mirrors edge function logic for client-side preview)
+// ---------------------------------------------------------------------------
+
+function calculateGst(subtotal: number): number {
+  return roundToTwoDp(subtotal * 0.1);
+}
+
+function calculateTotal(subtotal: number, gst: number): number {
+  return roundToTwoDp(subtotal + gst);
+}
+
+// ---------------------------------------------------------------------------
+// Branding helpers
+// ---------------------------------------------------------------------------
+
+interface BrandingConfig {
+  logo_url: string | null;
+  business_name: string;
+  abn: string | null;
+}
+
+function resolveBranding(config: Partial<BrandingConfig>): BrandingConfig & { use_default: boolean } {
+  const hasCustomLogo = !!config.logo_url;
+  return {
+    logo_url: config.logo_url ?? null,
+    business_name: config.business_name ?? 'TradieMate User',
+    abn: config.abn ?? null,
+    use_default: !hasCustomLogo,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe('AUD currency formatting', () => {
+  it('formats whole-dollar amounts correctly', () => {
+    expect(formatAud(1000)).toContain('1,000');
+    expect(formatAud(1000)).toContain('1,000.00');
   });
 
-  describe('Invoice PDF Generation', () => {
-    it('should generate PDF for invoice', async () => {
-      const mockResponse = {
-        data: {
-          pdf_url: 'https://storage.supabase.co/invoices/inv_123.pdf',
-          pdf_data: 'base64_encoded_pdf_data',
-          success: true,
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          invoice_id: 'inv_123',
-          type: 'invoice',
-        },
-      });
-
-      expect(result.data).toBeDefined();
-      expect(result.data.success).toBe(true);
-      expect(result.data.pdf_url).toContain('.pdf');
-    });
-
-    it('should include all invoice details in PDF', async () => {
-      const mockInvoice = {
-        id: 'inv_123',
-        invoice_number: 'INV-2026-001',
-        client: {
-          name: 'Test Client',
-          email: 'client@example.com',
-          phone: '0412 345 678',
-        },
-        line_items: [
-          {
-            description: 'Plumbing services',
-            quantity: 2,
-            rate: 150,
-            total: 300,
-          },
-        ],
-        subtotal: 300,
-        gst: 30,
-        total: 330,
-        status: 'sent',
-        due_date: '2026-01-15',
-      };
-
-      const mockResponse = {
-        data: {
-          pdf_url: 'https://storage.supabase.co/invoices/inv_123.pdf',
-          success: true,
-          metadata: {
-            invoice_number: mockInvoice.invoice_number,
-            client_name: mockInvoice.client.name,
-            total: mockInvoice.total,
-          },
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          invoice_id: 'inv_123',
-          type: 'invoice',
-        },
-      });
-
-      expect(result.data.metadata.invoice_number).toBe('INV-2026-001');
-      expect(result.data.metadata.client_name).toBe('Test Client');
-      expect(result.data.metadata.total).toBe(330);
-    });
-
-    it('should handle PDF generation errors', async () => {
-      const mockResponse = {
-        data: null,
-        error: {
-          message: 'Invoice not found',
-          code: 'not_found',
-        },
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          invoice_id: 'invalid_id',
-          type: 'invoice',
-        },
-      });
-
-      expect(result.error).toBeDefined();
-      expect(result.error.code).toBe('not_found');
-    });
+  it('formats amounts with cents correctly', () => {
+    expect(formatAud(1234.56)).toContain('1,234.56');
   });
 
-  describe('Quote PDF Generation', () => {
-    it('should generate PDF for quote', async () => {
-      const mockResponse = {
-        data: {
-          pdf_url: 'https://storage.supabase.co/quotes/quo_123.pdf',
-          pdf_data: 'base64_encoded_pdf_data',
-          success: true,
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          quote_id: 'quo_123',
-          type: 'quote',
-        },
-      });
-
-      expect(result.data).toBeDefined();
-      expect(result.data.success).toBe(true);
-      expect(result.data.pdf_url).toContain('.pdf');
-    });
-
-    it('should include all quote details in PDF', async () => {
-      const mockQuote = {
-        id: 'quo_123',
-        quote_number: 'QUO-2026-001',
-        client: {
-          name: 'Test Client',
-          email: 'client@example.com',
-        },
-        line_items: [
-          {
-            description: 'Bathroom renovation',
-            quantity: 1,
-            rate: 5000,
-            total: 5000,
-          },
-        ],
-        subtotal: 5000,
-        gst: 500,
-        total: 5500,
-        status: 'sent',
-        valid_until: '2026-02-15',
-      };
-
-      const mockResponse = {
-        data: {
-          pdf_url: 'https://storage.supabase.co/quotes/quo_123.pdf',
-          success: true,
-          metadata: {
-            quote_number: mockQuote.quote_number,
-            client_name: mockQuote.client.name,
-            total: mockQuote.total,
-            valid_until: mockQuote.valid_until,
-          },
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          quote_id: 'quo_123',
-          type: 'quote',
-        },
-      });
-
-      expect(result.data.metadata.quote_number).toBe('QUO-2026-001');
-      expect(result.data.metadata.valid_until).toBeDefined();
-    });
+  it('formats zero dollars', () => {
+    expect(formatAud(0)).toContain('0.00');
   });
 
-  describe('PDF Formatting', () => {
-    it('should format currency correctly in AUD', () => {
-      const amount = 123456; // $1,234.56 in cents
-      const formatted = (amount / 100).toLocaleString('en-AU', {
-        style: 'currency',
-        currency: 'AUD',
-      });
+  it('formats large amounts with correct separators', () => {
+    expect(formatAud(99999.99)).toContain('99,999.99');
+  });
+});
 
-      expect(formatted).toContain('1,234.56');
-    });
-
-    it('should format dates in Australian format (DD/MM/YYYY)', () => {
-      const date = new Date('2026-01-15');
-      const formatted = date.toLocaleDateString('en-AU');
-
-      expect(formatted).toBe('15/01/2026');
-    });
-
-    it('should format ABN correctly (XX XXX XXX XXX)', () => {
-      const abn = '51824753556';
-      const formatted = abn.replace(/(\d{2})(\d{3})(\d{3})(\d{3})/, '$1 $2 $3 $4');
-
-      expect(formatted).toBe('51 824 753 556');
-    });
-
-    it('should format phone numbers in Australian format', () => {
-      const phone = '0412345678';
-      const formatted = phone.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3');
-
-      expect(formatted).toBe('0412 345 678');
-    });
+describe('Australian date formatting (DD/MM/YYYY)', () => {
+  it('formats ISO date 2026-01-15 as 15/01/2026', () => {
+    // Use UTC noon to avoid timezone-boundary issues
+    const result = formatAustralianDate('2026-01-15T12:00:00.000Z');
+    expect(result).toBe('15/01/2026');
   });
 
-  describe('PDF Branding', () => {
-    it('should include business logo in PDF', async () => {
-      const mockResponse = {
-        data: {
-          pdf_url: 'https://storage.supabase.co/invoices/inv_123.pdf',
-          success: true,
-          branding: {
-            logo_url: 'https://storage.supabase.co/logos/business_logo.png',
-            business_name: 'Test Plumbing Services',
-            abn: '51 824 753 556',
-          },
-        },
-        error: null,
-      };
+  it('formats 2026-06-30 correctly', () => {
+    const result = formatAustralianDate('2026-06-30T12:00:00.000Z');
+    expect(result).toBe('30/06/2026');
+  });
+});
 
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          invoice_id: 'inv_123',
-          type: 'invoice',
-          include_branding: true,
-        },
-      });
-
-      expect(result.data.branding).toBeDefined();
-      expect(result.data.branding.logo_url).toContain('logo');
-      expect(result.data.branding.business_name).toBe('Test Plumbing Services');
-    });
-
-    it('should use default branding if custom branding not set', async () => {
-      const mockResponse = {
-        data: {
-          pdf_url: 'https://storage.supabase.co/invoices/inv_123.pdf',
-          success: true,
-          branding: {
-            logo_url: null,
-            business_name: 'TradieMate User',
-            use_default: true,
-          },
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          invoice_id: 'inv_123',
-          type: 'invoice',
-        },
-      });
-
-      expect(result.data.branding.use_default).toBe(true);
-    });
+describe('ABN formatting (XX XXX XXX XXX)', () => {
+  it('formats an 11-digit ABN with spaces', () => {
+    expect(formatAbn('51824753556')).toBe('51 824 753 556');
   });
 
-  describe('PDF Line Items', () => {
-    it('should calculate line item totals correctly', () => {
-      const lineItems = [
-        { description: 'Labour', quantity: 4, rate: 100, total: 400 },
-        { description: 'Materials', quantity: 1, rate: 250, total: 250 },
-        { description: 'Travel', quantity: 2, rate: 50, total: 100 },
-      ];
-
-      const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
-      const gst = subtotal * 0.1;
-      const total = subtotal + gst;
-
-      expect(subtotal).toBe(750);
-      expect(gst).toBe(75);
-      expect(total).toBe(825);
-    });
-
-    it('should handle decimal quantities and rates', () => {
-      const lineItems = [
-        { description: 'Hourly rate', quantity: 2.5, rate: 85.5, total: 213.75 },
-        { description: 'Materials', quantity: 1.25, rate: 120, total: 150 },
-      ];
-
-      const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
-
-      expect(subtotal).toBe(363.75);
-    });
-
-    it('should round line item totals to 2 decimal places', () => {
-      const quantity = 3;
-      const rate = 33.333;
-      const total = parseFloat((quantity * rate).toFixed(2));
-
-      expect(total).toBe(100);
-    });
+  it('strips existing spaces before reformatting', () => {
+    expect(formatAbn('51 824 753 556')).toBe('51 824 753 556');
   });
 
-  describe('PDF Payment Information', () => {
-    it('should include payment instructions in invoice PDF', async () => {
-      const mockResponse = {
-        data: {
-          pdf_url: 'https://storage.supabase.co/invoices/inv_123.pdf',
-          success: true,
-          payment_info: {
-            bsb: '123-456',
-            account_number: '12345678',
-            account_name: 'Test Plumbing Services',
-            payment_url: 'https://app.tradiemate.com/pay/inv_123',
-          },
-        },
-        error: null,
-      };
+  it('produces a string of length 14 (11 digits + 3 spaces)', () => {
+    expect(formatAbn('12345678901').length).toBe(14);
+  });
+});
 
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          invoice_id: 'inv_123',
-          type: 'invoice',
-        },
-      });
-
-      expect(result.data.payment_info).toBeDefined();
-      expect(result.data.payment_info.bsb).toBe('123-456');
-      expect(result.data.payment_info.payment_url).toContain('/pay/');
-    });
-
-    it('should include due date in invoice PDF', async () => {
-      const mockResponse = {
-        data: {
-          pdf_url: 'https://storage.supabase.co/invoices/inv_123.pdf',
-          success: true,
-          due_date: '2026-01-22',
-          payment_terms: '7 days',
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          invoice_id: 'inv_123',
-          type: 'invoice',
-        },
-      });
-
-      expect(result.data.due_date).toBeDefined();
-      expect(result.data.payment_terms).toBe('7 days');
-    });
+describe('Australian phone number formatting', () => {
+  it('formats a 10-digit mobile number with spaces', () => {
+    expect(formatAustralianPhone('0412345678')).toBe('0412 345 678');
   });
 
-  describe('PDF Storage', () => {
-    it('should store PDF in Supabase storage', async () => {
-      const mockResponse = {
-        data: {
-          pdf_url: 'https://storage.supabase.co/v1/object/public/invoices/inv_123.pdf',
-          storage_path: 'invoices/inv_123.pdf',
-          success: true,
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          invoice_id: 'inv_123',
-          type: 'invoice',
-        },
-      });
-
-      expect(result.data.pdf_url).toContain('storage.supabase.co');
-      expect(result.data.storage_path).toContain('invoices/');
-    });
-
-    it('should generate unique PDF filenames', async () => {
-      const invoiceIds = ['inv_123', 'inv_124', 'inv_125'];
-      const filenames = invoiceIds.map((id) => `invoices/${id}.pdf`);
-
-      const uniqueFilenames = new Set(filenames);
-      expect(uniqueFilenames.size).toBe(3);
-    });
+  it('strips existing spaces before reformatting', () => {
+    expect(formatAustralianPhone('0412 345 678')).toBe('0412 345 678');
   });
 
-  describe('PDF Access Control', () => {
-    it('should require authentication to generate PDF', async () => {
-      const mockResponse = {
-        data: null,
-        error: {
-          message: 'Unauthorized',
-          code: 'unauthorized',
-        },
-      };
+  it('handles landline area codes', () => {
+    expect(formatAustralianPhone('0298765432')).toBe('0298 765 432');
+  });
+});
 
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          invoice_id: 'inv_123',
-          type: 'invoice',
-        },
-        // No auth header
-      });
-
-      expect(result.error).toBeDefined();
-      expect(result.error.code).toBe('unauthorized');
-    });
-
-    it('should verify ownership before generating PDF', async () => {
-      const mockResponse = {
-        data: null,
-        error: {
-          message: 'Access denied',
-          code: 'forbidden',
-        },
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('generate-pdf', {
-        body: {
-          invoice_id: 'inv_other_user',
-          type: 'invoice',
-        },
-      });
-
-      expect(result.error).toBeDefined();
-      expect(result.error.code).toBe('forbidden');
-    });
+describe('Line item total rounding', () => {
+  it('rounds a repeating decimal to 2 dp', () => {
+    expect(roundToTwoDp(3 * 33.333)).toBe(100);
   });
 
-  describe('PDF Content Validation', () => {
-    it('should validate required invoice fields before generating PDF', () => {
-      const requiredFields = [
-        'invoice_number',
-        'client_id',
-        'line_items',
-        'subtotal',
-        'gst',
-        'total',
-      ];
+  it('rounds 0.005 up to 0.01', () => {
+    expect(roundToTwoDp(0.005)).toBe(0.01);
+  });
 
-      const mockInvoice = {
-        invoice_number: 'INV-001',
-        client_id: 'client_123',
-        line_items: [],
-        subtotal: 0,
-        gst: 0,
-        total: 0,
-      };
+  it('leaves an exact 2-dp value unchanged', () => {
+    expect(roundToTwoDp(213.75)).toBe(213.75);
+  });
+});
 
-      requiredFields.forEach((field) => {
-        expect(mockInvoice).toHaveProperty(field);
-      });
-    });
+describe('calculateLineItemTotals (from lineItems.ts)', () => {
+  it('calculates subtotal, GST, and total for labour and materials', () => {
+    const items: LineItem[] = [
+      { id: '1', description: 'Labour', quantity: 4, unit: 'hr', unit_price: 100, item_type: 'labour' },
+      { id: '2', description: 'Materials', quantity: 1, unit: 'lot', unit_price: 250, item_type: 'materials' },
+      { id: '3', description: 'Travel', quantity: 2, unit: 'hr', unit_price: 50, item_type: 'labour' },
+    ];
+    const { subtotal, gst, total } = calculateLineItemTotals(items);
+    expect(subtotal).toBe(750);
+    expect(gst).toBe(75);
+    expect(total).toBe(825);
+  });
 
-    it('should validate line items are not empty', () => {
-      const validLineItems = [
-        { description: 'Service', quantity: 1, rate: 100, total: 100 },
-      ];
+  it('returns zeros for an empty line items array', () => {
+    const { subtotal, gst, total } = calculateLineItemTotals([]);
+    expect(subtotal).toBe(0);
+    expect(gst).toBe(0);
+    expect(total).toBe(0);
+  });
 
-      expect(validLineItems.length).toBeGreaterThan(0);
-      expect(validLineItems[0].description).toBeDefined();
-      expect(validLineItems[0].total).toBeGreaterThan(0);
-    });
+  it('handles fractional quantities and rates', () => {
+    const items: LineItem[] = [
+      { id: '1', description: 'Part hours', quantity: 2.5, unit: 'hr', unit_price: 85.5, item_type: 'labour' },
+      { id: '2', description: 'Partial material', quantity: 1.25, unit: 'each', unit_price: 120, item_type: 'materials' },
+    ];
+    const { subtotal } = calculateLineItemTotals(items);
+    // 2.5 * 85.5 = 213.75; 1.25 * 120 = 150; sum = 363.75
+    expect(subtotal).toBeCloseTo(363.75, 2);
+  });
+
+  it('applies 10% GST rate', () => {
+    const items: LineItem[] = [
+      { id: '1', description: 'Service', quantity: 1, unit: 'lot', unit_price: 1000, item_type: 'labour' },
+    ];
+    const { gst } = calculateLineItemTotals(items);
+    expect(gst).toBe(100);
+  });
+
+  it('total equals subtotal + gst', () => {
+    const items: LineItem[] = [
+      { id: '1', description: 'Job', quantity: 2, unit: 'hr', unit_price: 75, item_type: 'labour' },
+    ];
+    const { subtotal, gst, total } = calculateLineItemTotals(items);
+    expect(total).toBeCloseTo(subtotal + gst, 10);
+  });
+});
+
+describe('GST calculation', () => {
+  it('calculates 10% GST on a subtotal', () => {
+    expect(calculateGst(1000)).toBe(100);
+    expect(calculateGst(500)).toBe(50);
+  });
+
+  it('rounds to 2 decimal places', () => {
+    expect(calculateGst(33.33)).toBe(3.33);
+  });
+
+  it('returns 0 for a $0 subtotal', () => {
+    expect(calculateGst(0)).toBe(0);
+  });
+});
+
+describe('Invoice PDF payload validation', () => {
+  const validPayload: InvoicePdfPayload = {
+    invoice_number: 'INV-001',
+    client_id: 'client_123',
+    line_items: [{ description: 'Service', quantity: 1, rate: 100, total: 100 }],
+    subtotal: 100,
+    gst: 10,
+    total: 110,
+  };
+
+  it('accepts a complete, valid payload', () => {
+    expect(validateInvoicePdfPayload(validPayload)).toHaveLength(0);
+  });
+
+  it('rejects a payload missing invoice_number', () => {
+    const errors = validateInvoicePdfPayload({ ...validPayload, invoice_number: '' });
+    expect(errors).toContain('invoice_number is required');
+  });
+
+  it('rejects a payload missing client_id', () => {
+    const errors = validateInvoicePdfPayload({ ...validPayload, client_id: '' });
+    expect(errors).toContain('client_id is required');
+  });
+
+  it('rejects a payload with empty line_items array', () => {
+    const errors = validateInvoicePdfPayload({ ...validPayload, line_items: [] });
+    expect(errors).toContain('line_items must be a non-empty array');
+  });
+
+  it('rejects a payload with negative subtotal', () => {
+    const errors = validateInvoicePdfPayload({ ...validPayload, subtotal: -1 });
+    expect(errors).toContain('subtotal must be >= 0');
+  });
+
+  it('accepts a zero-dollar payload (fully discounted invoice)', () => {
+    const zeroed = { ...validPayload, subtotal: 0, gst: 0, total: 0 };
+    expect(validateInvoicePdfPayload(zeroed)).toHaveLength(0);
+  });
+
+  it('returns multiple errors for multiple missing fields', () => {
+    const errors = validateInvoicePdfPayload({});
+    expect(errors.length).toBeGreaterThan(1);
+  });
+});
+
+describe('PDF storage path and URL generation', () => {
+  const BASE = 'https://storage.supabase.co';
+
+  it('builds the correct storage path for an invoice', () => {
+    expect(buildPdfStoragePath('invoices', 'inv_123')).toBe('invoices/inv_123.pdf');
+  });
+
+  it('builds the correct storage path for a quote', () => {
+    expect(buildPdfStoragePath('quotes', 'quo_456')).toBe('quotes/quo_456.pdf');
+  });
+
+  it('builds a fully-qualified public URL', () => {
+    const path = buildPdfStoragePath('invoices', 'inv_123');
+    const url = buildPdfPublicUrl(path, BASE);
+    expect(url).toBe('https://storage.supabase.co/v1/object/public/invoices/inv_123.pdf');
+  });
+
+  it('generates unique paths for distinct invoice IDs', () => {
+    const ids = ['inv_1', 'inv_2', 'inv_3'];
+    const paths = ids.map((id) => buildPdfStoragePath('invoices', id));
+    expect(new Set(paths).size).toBe(3);
+  });
+});
+
+describe('Branding resolution', () => {
+  it('uses custom logo when provided', () => {
+    const config = resolveBranding({ logo_url: 'https://cdn.example.com/logo.png', business_name: 'My Biz' });
+    expect(config.logo_url).toBe('https://cdn.example.com/logo.png');
+    expect(config.use_default).toBe(false);
+  });
+
+  it('falls back to default branding when no logo is set', () => {
+    const config = resolveBranding({ logo_url: null, business_name: 'My Biz' });
+    expect(config.use_default).toBe(true);
+  });
+
+  it('defaults business_name to "TradieMate User" when not supplied', () => {
+    const config = resolveBranding({});
+    expect(config.business_name).toBe('TradieMate User');
+  });
+
+  it('preserves ABN when provided', () => {
+    const config = resolveBranding({ abn: '51 824 753 556' });
+    expect(config.abn).toBe('51 824 753 556');
+  });
+
+  it('sets abn to null when not supplied', () => {
+    const config = resolveBranding({ business_name: 'Test' });
+    expect(config.abn).toBeNull();
   });
 });

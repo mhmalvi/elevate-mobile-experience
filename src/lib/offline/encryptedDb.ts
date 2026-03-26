@@ -7,6 +7,7 @@
 
 import { db } from './db';
 import type { OfflineClient, OfflineInvoice, OfflineQuote, OfflineJob } from './db';
+import type { Json } from '@/integrations/supabase/types';
 import {
   encryptClientFields,
   decryptClientFields,
@@ -39,9 +40,9 @@ export const encryptedClients = {
   /**
    * Bulk put clients with encrypted sensitive fields
    */
-  async bulkPut(clients: OfflineClient[]): Promise<string> {
+  async bulkPut(clients: OfflineClient[]): Promise<string[]> {
     const encrypted = await Promise.all(clients.map(c => encryptClientFields(c)));
-    return await db.clients.bulkPut(encrypted);
+    return await db.clients.bulkPut(encrypted, { allKeys: true }) as unknown as string[];
   },
 
   /**
@@ -67,7 +68,7 @@ export const encryptedClients = {
   where(field: string) {
     const query = db.clients.where(field);
     return {
-      equals: (value: any) => ({
+      equals: (value: string | number) => ({
         toArray: async () => {
           const clients = await query.equals(value).toArray();
           return await Promise.all(clients.map(c => decryptClientFields(c)));
@@ -114,9 +115,9 @@ export const encryptedInvoices = {
     return await db.invoices.put(encrypted);
   },
 
-  async bulkPut(invoices: OfflineInvoice[]): Promise<string> {
+  async bulkPut(invoices: OfflineInvoice[]): Promise<string[]> {
     const encrypted = await Promise.all(invoices.map(i => encryptInvoiceFields(i)));
-    return await db.invoices.bulkPut(encrypted);
+    return await db.invoices.bulkPut(encrypted, { allKeys: true }) as unknown as string[];
   },
 
   async get(id: string): Promise<OfflineInvoice | undefined> {
@@ -133,7 +134,7 @@ export const encryptedInvoices = {
   where(field: string) {
     const query = db.invoices.where(field);
     return {
-      equals: (value: any) => ({
+      equals: (value: string | number) => ({
         toArray: async () => {
           const invoices = await query.equals(value).toArray();
           return await Promise.all(invoices.map(i => decryptInvoiceFields(i)));
@@ -171,9 +172,9 @@ export const encryptedQuotes = {
     return await db.quotes.put(encrypted);
   },
 
-  async bulkPut(quotes: OfflineQuote[]): Promise<string> {
+  async bulkPut(quotes: OfflineQuote[]): Promise<string[]> {
     const encrypted = await Promise.all(quotes.map(q => encryptQuoteFields(q)));
-    return await db.quotes.bulkPut(encrypted);
+    return await db.quotes.bulkPut(encrypted, { allKeys: true }) as unknown as string[];
   },
 
   async get(id: string): Promise<OfflineQuote | undefined> {
@@ -190,7 +191,7 @@ export const encryptedQuotes = {
   where(field: string) {
     const query = db.quotes.where(field);
     return {
-      equals: (value: any) => ({
+      equals: (value: string | number) => ({
         toArray: async () => {
           const quotes = await query.equals(value).toArray();
           return await Promise.all(quotes.map(q => decryptQuoteFields(q)));
@@ -246,7 +247,7 @@ export const encryptedDb = {
   clearAll: () => db.clearAll(),
   clearUserData: (userId: string) => db.clearUserData(userId),
   getMeta: (key: string) => db.getMeta(key),
-  setMeta: (key: string, value: any) => db.setMeta(key, value),
+  setMeta: (key: string, value: Json) => db.setMeta(key, value),
   getLastSyncTime: (entityType: string) => db.getLastSyncTime(entityType),
   setLastSyncTime: (entityType: string) => db.setLastSyncTime(entityType),
   getStats: () => db.getStats(),

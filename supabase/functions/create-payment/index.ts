@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.21.0";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
@@ -30,7 +30,7 @@ serve(async (req) => {
     }
 
     const stripe = new Stripe(stripeSecretKey, {
-      apiVersion: "2023-10-16",
+      apiVersion: "2025-08-27.basil",
       httpClient: Stripe.createFetchHttpClient(),
     });
 
@@ -38,19 +38,30 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Rate limit: max 10 payment sessions per minute per user
+    // SECURITY: Auth is MANDATORY
     const authHeader = req.headers.get("Authorization");
-    if (authHeader) {
-      const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-      if (user) {
-        const rl = await checkRateLimit(supabase, user.id, "create-payment", 10, 60);
-        if (rl.limited) {
-          return new Response(
-            JSON.stringify({ error: "Too many requests. Please try again later." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } }
-          );
-        }
-      }
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized - invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Rate limit: max 10 payment sessions per minute per user
+    const rl = await checkRateLimit(supabase, user.id, "create-payment", 10, 60);
+    if (rl.limited) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } }
+      );
     }
 
     const { invoice_id, success_url, cancel_url }: PaymentRequest = await req.json();
@@ -64,11 +75,15 @@ serve(async (req) => {
       );
     }
 
-    // Fetch invoice with client info
+    // Fetch invoice with client info — only allow payment on active, payable invoices
+    // SECURITY: Enforce ownership via user_id filter
     const { data: invoice, error: invoiceError } = await supabase
       .from("invoices")
       .select("*, clients(*)")
       .eq("id", invoice_id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
+      .in("status", ["sent", "overdue", "partially_paid"])
       .single();
 
     if (invoiceError || !invoice) {
@@ -97,7 +112,7 @@ serve(async (req) => {
       .single();
 
     const businessName = profile?.business_name || "Your Business";
-    const baseUrl = success_url?.split('/i/')[0] || Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
+    const baseUrl = success_url?.split('/i/')[0] || Deno.env.get('APP_URL') || 'https://app.tradiemate.com.au';
 
     console.log(`Creating Checkout session for platform account, invoice: ${invoice.invoice_number}, balance: $${balance}`);
 
@@ -132,6 +147,8 @@ serve(async (req) => {
       },
       // ✅ No application_fee_amount, no stripeAccount
       // Payment goes directly to platform's Stripe account
+    }, {
+      idempotencyKey: `checkout_${invoice_id}_${Math.floor(Date.now() / 60000)}`,
     });
 
     console.log(`Stripe session created: ${session.id}`);

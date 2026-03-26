@@ -1,14 +1,22 @@
 import { describe, it, expect } from 'vitest';
+import {
+  calculateGST,
+  calculateTotal,
+  calculateLineTotal,
+  calculateBalance,
+  applyDiscount,
+  calculateHourlyTotal,
+  calculateDeposit,
+  addDaysToDate,
+} from './calculations';
 
 /**
- * Tests for financial calculations used in quotes and invoices
+ * Tests for financial calculations used in quotes and invoices.
+ * All functions are imported from src/lib/calculations.ts — no inline
+ * re-implementations exist here.
  */
 
 describe('GST Calculations', () => {
-  const calculateGST = (amount: number): number => {
-    return Math.round(amount * 0.1 * 100) / 100;
-  };
-
   it('should calculate 10% GST correctly', () => {
     expect(calculateGST(100)).toBe(10);
     expect(calculateGST(1000)).toBe(100);
@@ -36,10 +44,6 @@ describe('GST Calculations', () => {
 });
 
 describe('Total Calculations', () => {
-  const calculateTotal = (subtotal: number, gst: number): number => {
-    return Math.round((subtotal + gst) * 100) / 100;
-  };
-
   it('should add subtotal and GST correctly', () => {
     expect(calculateTotal(100, 10)).toBe(110);
     expect(calculateTotal(1000, 100)).toBe(1100);
@@ -56,10 +60,6 @@ describe('Total Calculations', () => {
 });
 
 describe('Line Item Calculations', () => {
-  const calculateLineTotal = (quantity: number, rate: number): number => {
-    return Math.round(quantity * rate * 100) / 100;
-  };
-
   it('should calculate line item total correctly', () => {
     expect(calculateLineTotal(10, 85)).toBe(850);
     expect(calculateLineTotal(2.5, 100)).toBe(250);
@@ -82,10 +82,6 @@ describe('Line Item Calculations', () => {
 });
 
 describe('Invoice Balance Calculations', () => {
-  const calculateBalance = (total: number, amountPaid: number): number => {
-    return Math.round((total - amountPaid) * 100) / 100;
-  };
-
   it('should calculate remaining balance', () => {
     expect(calculateBalance(1100, 0)).toBe(1100);
     expect(calculateBalance(1100, 500)).toBe(600);
@@ -103,11 +99,6 @@ describe('Invoice Balance Calculations', () => {
 });
 
 describe('Discount Calculations', () => {
-  const applyDiscount = (amount: number, discountPercent: number): number => {
-    const discount = (amount * discountPercent) / 100;
-    return Math.round((amount - discount) * 100) / 100;
-  };
-
   it('should apply percentage discount correctly', () => {
     expect(applyDiscount(100, 10)).toBe(90);
     expect(applyDiscount(1000, 15)).toBe(850);
@@ -129,10 +120,6 @@ describe('Discount Calculations', () => {
 });
 
 describe('Hourly Rate Calculations', () => {
-  const calculateHourlyTotal = (hours: number, rate: number): number => {
-    return Math.round(hours * rate * 100) / 100;
-  };
-
   it('should calculate hourly total correctly', () => {
     expect(calculateHourlyTotal(8, 85)).toBe(680);
     expect(calculateHourlyTotal(40, 85)).toBe(3400);
@@ -149,10 +136,6 @@ describe('Hourly Rate Calculations', () => {
 });
 
 describe('Deposit Calculations', () => {
-  const calculateDeposit = (total: number, depositPercent: number): number => {
-    return Math.round((total * depositPercent) / 100 * 100) / 100;
-  };
-
   it('should calculate deposit correctly', () => {
     expect(calculateDeposit(1000, 50)).toBe(500);
     expect(calculateDeposit(2000, 25)).toBe(500);
@@ -167,12 +150,6 @@ describe('Deposit Calculations', () => {
 });
 
 describe('Payment Due Date Calculations', () => {
-  const addDaysToDate = (date: Date, days: number): Date => {
-    const result = new Date(date);
-    result.setDate(result.getDate() + days);
-    return result;
-  };
-
   it('should add payment terms to invoice date', () => {
     const invoiceDate = new Date('2026-01-06');
 

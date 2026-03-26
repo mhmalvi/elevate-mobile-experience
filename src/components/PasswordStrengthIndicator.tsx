@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { checkPasswordStrength, getPasswordStrengthLabel, getPasswordStrengthColor } from '@/lib/passwordSecurity';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
@@ -14,15 +14,7 @@ export function PasswordStrengthIndicator({
   showFeedback = true,
   className
 }: PasswordStrengthIndicatorProps) {
-  const [strength, setStrength] = useState(checkPasswordStrength(''));
-
-  useEffect(() => {
-    if (password) {
-      setStrength(checkPasswordStrength(password));
-    } else {
-      setStrength(checkPasswordStrength(''));
-    }
-  }, [password]);
+  const strength = useMemo(() => checkPasswordStrength(password || ''), [password]);
 
   if (!password) {
     return null;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { z } from 'zod';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,36 +8,38 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 import { useProfile } from '@/hooks/useProfile';
 import { useUsageLimits } from '@/hooks/useUsageLimits';
+import { useAllClients } from '@/hooks/queries/useClients';
 import { UsageLimitBanner, UsageLimitBlocker } from '@/components/UsageLimitBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { LineItemRow } from '@/components/list-items';
 import { Loader2, Plus, Trash2, User, ArrowLeft, Receipt } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import { addDays, addMonths, format } from 'date-fns';
 import { RecurringInvoiceToggle } from '@/components/invoices/RecurringInvoiceToggle';
 import { generateUUID } from '@/lib/utils/uuid';
+import { updateLineItem as updateLineItemUtil, calculateLineItemTotals, type LineItem } from '@/lib/lineItems';
 
-type Client = Tables<'clients'>;
-
-interface LineItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unit: string;
-  unit_price: number;
-  item_type: 'labour' | 'materials';
-}
+const invoiceSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200),
+  client_id: z.string().optional(),
+  description: z.string().max(5000).optional(),
+  due_date: z.string().min(1, 'Due date is required'),
+  notes: z.string().max(5000).optional(),
+});
 
 export default function InvoiceForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { team } = useTeam();
   const { profile } = useProfile();
   const { toast } = useToast();
   const { canCreate, used, limit, tier, isUnlimited, incrementUsage } = useUsageLimits('invoices');
+  const { data: clients = [] } = useAllClients();
   const [loading, setLoading] = useState(false);
-  const [clients, setClients] = useState<Client[]>([]);
   const [form, setForm] = useState({
     client_id: '',
     title: '',
@@ -52,10 +55,6 @@ export default function InvoiceForm() {
   ]);
 
   useEffect(() => {
-    if (user) fetchClients();
-  }, [user]);
-
-  useEffect(() => {
     if (profile?.payment_terms) {
       setForm(f => ({
         ...f,
@@ -63,15 +62,6 @@ export default function InvoiceForm() {
       }));
     }
   }, [profile]);
-
-  const fetchClients = async () => {
-    const { data } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('name');
-    setClients(data || []);
-  };
 
   const addLineItem = () => {
     setLineItems([...lineItems, {
@@ -90,22 +80,22 @@ export default function InvoiceForm() {
     }
   };
 
-  const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
-    setLineItems(lineItems.map(item =>
-      item.id === id ? { ...item, [field]: value } : item
-    ));
+  const updateLineItem = (id: string, field: keyof LineItem, value: LineItem[keyof LineItem]) => {
+    updateLineItemUtil(setLineItems, id, field, value);
   };
 
-  const calculateTotals = () => {
-    const subtotal = lineItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-    const gst = subtotal * 0.1;
-    const total = subtotal + gst;
-    return { subtotal, gst, total };
-  };
+  const calculateTotals = () => calculateLineItemTotals(lineItems);
 
-  const generateInvoiceNumber = () => {
-    const date = new Date();
-    return `INV${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+  const generateInvoiceNumber = async (): Promise<string> => {
+    const { data, error } = await supabase.rpc('get_next_document_number', {
+      p_document_type: 'invoice'
+    });
+    if (error || !data) {
+      // Fallback to old method if RPC fails
+      const date = new Date();
+      return `INV-${date.getFullYear()}-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`;
+    }
+    return data as string;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -117,6 +107,14 @@ export default function InvoiceForm() {
       return;
     }
 
+    // Zod schema validation
+    const result = invoiceSchema.safeParse(form);
+    if (!result.success) {
+      const firstError = result.error.errors[0];
+      toast({ title: 'Validation error', description: firstError.message, variant: 'destructive' });
+      return;
+    }
+
     const validItems = lineItems.filter(item => item.description && item.unit_price > 0);
     if (validItems.length === 0) {
       toast({ title: 'Error', description: 'Add at least one line item', variant: 'destructive' });
@@ -125,13 +123,15 @@ export default function InvoiceForm() {
 
     setLoading(true);
     const { subtotal, gst, total } = calculateTotals();
+    const invoiceNumber = await generateInvoiceNumber();
 
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .insert({
         user_id: user.id,
+        team_id: team?.id || null,
         client_id: form.client_id || null,
-        invoice_number: generateInvoiceNumber(),
+        invoice_number: invoiceNumber,
         title: form.title,
         description: form.description,
         due_date: form.due_date,
@@ -169,7 +169,9 @@ export default function InvoiceForm() {
       .insert(lineItemsToInsert);
 
     if (itemsError) {
-      toast({ title: 'Error', description: itemsError.message, variant: 'destructive' });
+      // Rollback: delete orphaned invoice since line items failed
+      await supabase.from('invoices').delete().eq('id', invoice.id);
+      toast({ title: 'Error', description: `Failed to save line items: ${itemsError.message}`, variant: 'destructive' });
     } else {
       await incrementUsage();
       toast({ title: 'Invoice created', description: 'Your invoice has been saved.' });
@@ -301,72 +303,14 @@ export default function InvoiceForm() {
             </div>
 
             {lineItems.map((item, index) => (
-              <div key={item.id} className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-3 animate-fade-in" style={{ animationDelay: `${index * 0.05}s` }}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Item {index + 1}</span>
-                  {lineItems.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeLineItem(item.id)}
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
-                  )}
-                </div>
-
-                <Input
-                  placeholder="Description"
-                  value={item.description}
-                  onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                  className="h-11 rounded-xl"
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                  <div>
-                    <Label className="text-xs">Qty</Label>
-                    <Input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={item.quantity}
-                      onChange={(e) => updateLineItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                      className="h-10 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Unit</Label>
-                    <Select value={item.unit} onValueChange={(v) => updateLineItem(item.id, 'unit', v)}>
-                      <SelectTrigger className="h-10 rounded-xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="each">Each</SelectItem>
-                        <SelectItem value="hour">Hour</SelectItem>
-                        <SelectItem value="sqm">m²</SelectItem>
-                        <SelectItem value="lm">Lm</SelectItem>
-                        <SelectItem value="job">Job</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Price</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.unit_price}
-                      onChange={(e) => updateLineItem(item.id, 'unit_price', parseFloat(e.target.value) || 0)}
-                      className="h-10 rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div className="text-right text-sm font-semibold text-primary">
-                  ${(item.quantity * item.unit_price).toFixed(2)}
-                </div>
-              </div>
+              <LineItemRow
+                key={item.id}
+                item={item}
+                index={index}
+                canRemove={lineItems.length > 1}
+                onUpdate={updateLineItem}
+                onRemove={removeLineItem}
+              />
             ))}
           </div>
 

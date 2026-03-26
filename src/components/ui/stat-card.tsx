@@ -67,7 +67,7 @@ export function StatCard({
         {icon && (
           <IconContainer
             icon={icon}
-            variant={variant === 'default' ? 'primary' : variant as any}
+            variant={variant === 'default' || variant === 'success' || variant === 'warning' || variant === 'destructive' ? 'primary' : variant}
             className="group-hover:scale-110 transition-transform duration-300 shadow-glow-sm"
           />
         )}

@@ -15,7 +15,8 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 // This prevents XSS attacks from stealing auth tokens
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: secureStorage as any, // Cast needed for Supabase's Storage interface
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase's Storage interface doesn't match our secure wrapper exactly
+    storage: secureStorage as any,
     persistSession: true,
     autoRefreshToken: true,
   }

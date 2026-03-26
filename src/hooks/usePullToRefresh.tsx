@@ -5,6 +5,12 @@ interface UsePullToRefreshOptions {
   threshold?: number;
 }
 
+interface RefreshIndicatorProps {
+  pullDistance: number;
+  threshold: number;
+  isRefreshing: boolean;
+}
+
 interface UsePullToRefreshReturn {
   isRefreshing: boolean;
   pullDistance: number;
@@ -14,9 +20,36 @@ interface UsePullToRefreshReturn {
   RefreshIndicator: React.FC;
 }
 
-export function usePullToRefresh({ 
-  onRefresh, 
-  threshold = 80 
+const RefreshIndicator: React.FC<RefreshIndicatorProps> = ({ pullDistance, threshold, isRefreshing }) => {
+  const progress = Math.min(pullDistance / threshold, 1);
+  const shouldShow = pullDistance > 10 || isRefreshing;
+
+  if (!shouldShow) return null;
+
+  return (
+    <div
+      className="flex items-center justify-center py-4 transition-all duration-200"
+      style={{
+        height: isRefreshing ? 60 : pullDistance,
+        opacity: progress,
+      }}
+    >
+      <div
+        className={`w-8 h-8 border-3 border-primary border-t-transparent rounded-full ${
+          isRefreshing ? 'animate-spin' : ''
+        }`}
+        style={{
+          transform: isRefreshing ? 'none' : `rotate(${progress * 360}deg)`,
+          borderWidth: 3,
+        }}
+      />
+    </div>
+  );
+};
+
+export function usePullToRefresh({
+  onRefresh,
+  threshold = 80
 }: UsePullToRefreshOptions): UsePullToRefreshReturn {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -27,7 +60,7 @@ export function usePullToRefresh({
   const handleTouchStart = useCallback((e: TouchEvent) => {
     const container = containerRef.current;
     if (!container || isRefreshing) return;
-    
+
     // Only enable pull-to-refresh when scrolled to top
     if (container.scrollTop <= 0) {
       setStartY(e.touches[0].clientY);
@@ -37,10 +70,10 @@ export function usePullToRefresh({
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
     if (!isPulling || isRefreshing) return;
-    
+
     const currentY = e.touches[0].clientY;
     const distance = Math.max(0, (currentY - startY) * 0.5); // Resistance factor
-    
+
     if (distance > 0) {
       setPullDistance(Math.min(distance, threshold * 1.5));
     }
@@ -48,9 +81,9 @@ export function usePullToRefresh({
 
   const handleTouchEnd = useCallback(async () => {
     if (!isPulling || isRefreshing) return;
-    
+
     setIsPulling(false);
-    
+
     if (pullDistance >= threshold) {
       setIsRefreshing(true);
       try {
@@ -59,7 +92,7 @@ export function usePullToRefresh({
         setIsRefreshing(false);
       }
     }
-    
+
     setPullDistance(0);
   }, [isPulling, isRefreshing, pullDistance, threshold, onRefresh]);
 
@@ -78,32 +111,10 @@ export function usePullToRefresh({
     };
   }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
 
-  const RefreshIndicator: React.FC = () => {
-    const progress = Math.min(pullDistance / threshold, 1);
-    const shouldShow = pullDistance > 10 || isRefreshing;
-    
-    if (!shouldShow) return null;
-
-    return (
-      <div 
-        className="flex items-center justify-center py-4 transition-all duration-200"
-        style={{ 
-          height: isRefreshing ? 60 : pullDistance,
-          opacity: progress,
-        }}
-      >
-        <div 
-          className={`w-8 h-8 border-3 border-primary border-t-transparent rounded-full ${
-            isRefreshing ? 'animate-spin' : ''
-          }`}
-          style={{
-            transform: isRefreshing ? 'none' : `rotate(${progress * 360}deg)`,
-            borderWidth: 3,
-          }}
-        />
-      </div>
-    );
-  };
+  const BoundRefreshIndicator: React.FC = useCallback(
+    () => <RefreshIndicator pullDistance={pullDistance} threshold={threshold} isRefreshing={isRefreshing} />,
+    [pullDistance, threshold, isRefreshing]
+  );
 
   return {
     isRefreshing,
@@ -111,6 +122,6 @@ export function usePullToRefresh({
     containerProps: {
       ref: containerRef,
     },
-    RefreshIndicator,
+    RefreshIndicator: BoundRefreshIndicator,
   };
 }

@@ -4,8 +4,8 @@ import { cn } from '@/lib/utils';
 import { LucideIcon, Plus } from 'lucide-react';
 
 interface EmptyStateProps {
-  icon?: ReactNode;
-  Icon?: LucideIcon;
+  /** Accepts a LucideIcon component or a ReactNode element. */
+  icon?: LucideIcon | ReactNode;
   title: string;
   description?: string;
   action?: {
@@ -24,7 +24,6 @@ interface EmptyStateProps {
 
 export function EmptyState({
   icon,
-  Icon,
   title,
   description,
   action,
@@ -39,8 +38,9 @@ export function EmptyState({
   };
 
   const renderIcon = () => {
-    if (Icon) {
-      return <Icon className="w-10 h-10" aria-hidden="true" />;
+    if (typeof icon === 'function') {
+      const IconComponent = icon as LucideIcon;
+      return <IconComponent className="w-10 h-10" aria-hidden="true" />;
     }
     return icon;
   };
@@ -55,7 +55,7 @@ export function EmptyState({
       role="status"
       aria-label={title}
     >
-      {(icon || Icon) && (
+      {icon && (
         <div className="relative mb-6">
           <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full" />
           <div className={cn(

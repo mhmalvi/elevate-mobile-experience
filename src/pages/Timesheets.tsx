@@ -4,7 +4,6 @@ import { MobileLayout } from '@/components/layout/MobileLayout';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
-import { StatusBadge } from '@/components/ui/status-badge';
 import {
   Select,
   SelectContent,
@@ -15,27 +14,12 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useTeam } from '@/hooks/useTeam';
 import { useTimesheets } from '@/hooks/queries/useTimesheets';
-import { cn } from '@/lib/utils';
 import { TimesheetListItem } from '@/components/list-items';
 import {
   Clock,
   Plus,
   ArrowLeft,
-  User,
-  ChevronRight,
-  CheckCircle2,
-  Send,
-  FileEdit,
-  XCircle,
 } from 'lucide-react';
-import { format, addDays, parseISO, isThisWeek } from 'date-fns';
-
-const statusConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string }> = {
-  draft: { icon: FileEdit, color: 'text-muted-foreground' },
-  submitted: { icon: Send, color: 'text-blue-500' },
-  approved: { icon: CheckCircle2, color: 'text-green-500' },
-  rejected: { icon: XCircle, color: 'text-destructive' },
-};
 
 export default function Timesheets() {
   const navigate = useNavigate();
@@ -67,12 +51,6 @@ export default function Timesheets() {
 
   const handleCreateTimesheet = () => {
     navigate('/timesheets/new');
-  };
-
-  const formatWeekRange = (weekStarting: string) => {
-    const start = parseISO(weekStarting);
-    const end = addDays(start, 6);
-    return `${format(start, 'dd MMM')} - ${format(end, 'dd MMM yyyy')}`;
   };
 
   return (

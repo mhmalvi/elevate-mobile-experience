@@ -61,21 +61,36 @@ export function getCorsHeaders(req: Request): Record<string, string> {
     console.warn(`[CORS] Origin not allowed: ${origin}`);
   }
 
-  return {
-    'Access-Control-Allow-Origin': isAllowed ? origin : (origin || ALLOWED_ORIGINS[0]),
+  // SECURITY: If origin is not allowed, omit the Access-Control-Allow-Origin header
+  // so the browser will block the request rather than reflecting a hardcoded origin.
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
     'Access-Control-Max-Age': '86400', // 24 hours
   };
+
+  if (isAllowed) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  }
+
+  return headers;
 }
 
 /**
  * Create a CORS preflight response for OPTIONS requests
  */
 export function createCorsResponse(req: Request): Response {
+  const origin = req.headers.get('origin') || '';
+  const corsHeaders = getCorsHeaders(req);
+
+  // If the origin is not allowed, reject the preflight with 403
+  if (!corsHeaders['Access-Control-Allow-Origin'] && origin) {
+    return new Response('Forbidden', { status: 403 });
+  }
+
   return new Response(null, {
     status: 204,
-    headers: getCorsHeaders(req),
+    headers: corsHeaders,
   });
 }
 

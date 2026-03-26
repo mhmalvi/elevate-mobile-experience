@@ -10,15 +10,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useBranding, useSaveBranding } from '@/hooks/queries/useBranding';
 import type { BrandingFormData } from '@/hooks/queries/useBranding';
-import { Upload, X, Palette, FileText, Mail, ArrowLeft, Image as ImageIcon, Eye, Check } from 'lucide-react';
+import { Upload, X, Palette, FileText, Mail, ArrowLeft, Eye, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -192,7 +185,7 @@ export default function BrandingSettings() {
   const { toast } = useToast();
   const { data: brandingData, isLoading: initialLoading } = useBranding();
   const saveBranding = useSaveBranding();
-  const [uploading, setUploading] = useState(false);
+  const [_uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState('logo');
 
   const [form, setForm] = useState<BrandingFormData>({

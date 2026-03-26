@@ -7,6 +7,7 @@ import { Mail, MessageSquare, Loader2, Send } from 'lucide-react';
 interface SendNotificationButtonProps {
   type: 'quote' | 'invoice';
   id: string;
+  publicToken?: string | null;
   recipient: {
     email?: string | null;
     phone?: string | null;
@@ -15,11 +16,12 @@ interface SendNotificationButtonProps {
   onSent?: () => void;
 }
 
-export function SendNotificationButton({ 
-  type, 
-  id, 
-  recipient, 
-  onSent 
+export function SendNotificationButton({
+  type,
+  id,
+  publicToken,
+  recipient,
+  onSent
 }: SendNotificationButtonProps) {
   const { toast } = useToast();
   const [sendingEmail, setSendingEmail] = useState(false);
@@ -74,7 +76,7 @@ export function SendNotificationButton({
           description: 'Your SMS has been delivered successfully.'
         });
       } else if (method === 'email' && data.mailto) {
-        window.location.href = data.mailto;
+        window.open(data.mailto, '_self');
         toast({
           title: 'Ready to send!',
           description: 'Your email app will open now.'
@@ -85,7 +87,7 @@ export function SendNotificationButton({
 
         if (isMobile) {
           // On mobile, try to open SMS app
-          window.location.href = data.smsUrl;
+          window.open(data.smsUrl, '_self');
           toast({
             title: 'Ready to send!',
             description: 'Your SMS app will open now.'
@@ -101,26 +103,27 @@ export function SendNotificationButton({
       }
 
       onSent?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Send notification error:', error);
 
       // Provide specific error messages
       let errorTitle = 'Error';
-      let errorDescription = error.message || 'Failed to send notification';
+      const err = error as { message?: string; context?: { status?: number } };
+      let errorDescription = err.message || 'Failed to send notification';
 
       // Handle FunctionsHttpError with status code
-      if (error.context?.status === 429 || error.message?.includes('429')) {
+      if (err.context?.status === 429 || err.message?.includes('429')) {
         errorTitle = 'Monthly Limit Reached';
         errorDescription = `You've reached your monthly ${method === 'sms' ? 'SMS' : 'email'} limit. Please upgrade your subscription plan for more notifications.`;
-      } else if (error.message?.includes('JWT') || error.message?.includes('auth')) {
+      } else if (err.message?.includes('JWT') || err.message?.includes('auth')) {
         errorTitle = 'Authentication error';
         errorDescription = 'Please sign out and sign in again to refresh your session.';
-      } else if (error.message?.includes('not configured')) {
+      } else if (err.message?.includes('not configured')) {
         errorTitle = 'Service not configured';
         errorDescription = 'Notification service is not properly configured. Please contact support.';
-      } else if (error.message?.includes('rate limit') || error.message?.includes('limit reached')) {
+      } else if (err.message?.includes('rate limit') || err.message?.includes('limit reached')) {
         errorTitle = 'Limit reached';
-        errorDescription = error.message || 'You have reached your monthly notification limit. Please upgrade your plan.';
+        errorDescription = err.message || 'You have reached your monthly notification limit. Please upgrade your plan.';
       }
 
       toast({
@@ -147,7 +150,6 @@ export function SendNotificationButton({
     setSendingDirectEmail(true);
 
     try {
-      console.log('Sending direct email:', { type, id, email: recipient.email });
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           type,
@@ -157,10 +159,7 @@ export function SendNotificationButton({
         },
       });
 
-      console.log('Email response:', { data, error });
-
       if (error) {
-        console.error('Email API error:', error);
         throw error;
       }
 
@@ -170,9 +169,10 @@ export function SendNotificationButton({
       });
 
       onSent?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Direct email error (full):', error);
-      const errorMessage = error?.message || error?.error_description || 'Unknown error';
+      const err = error as { message?: string; error_description?: string };
+      const errorMessage = err?.message || err?.error_description || 'Unknown error';
 
       // Provide specific error messages
       let fallbackMessage = `Direct email failed (${errorMessage})`;
@@ -189,8 +189,10 @@ export function SendNotificationButton({
 
       // If direct email fails, fall back to mailto
       const subject = encodeURIComponent(`Your ${type === 'quote' ? 'Quote' : 'Invoice'}`);
-      const body = encodeURIComponent(`Hi ${recipient.name || 'there'},\n\nPlease find your ${type} attached.\n\nView it online: ${window.location.origin}/${type === 'quote' ? 'q' : 'i'}/${id}\n\nThank you!`);
-      window.location.href = `mailto:${recipient.email}?subject=${subject}&body=${body}`;
+      const publicPath = publicToken ? `${window.location.origin}/${type === 'quote' ? 'q' : 'i'}/${publicToken}` : '';
+      const viewOnline = publicPath ? `\n\nView it online: ${publicPath}` : '';
+      const body = encodeURIComponent(`Hi ${recipient.name || 'there'},\n\nPlease find your ${type} attached.${viewOnline}\n\nThank you!`);
+      window.open(`mailto:${recipient.email}?subject=${subject}&body=${body}`, '_self');
       toast({
         title: 'Opening email app',
         description: fallbackMessage

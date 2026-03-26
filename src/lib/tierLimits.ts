@@ -1,4 +1,6 @@
 // Subscription tier limits configuration
+import { getTierById } from './subscriptionTiers';
+
 export type SubscriptionTier = 'free' | 'solo' | 'crew' | 'pro';
 
 export interface TierLimits {
@@ -14,7 +16,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
   free: {
     quotes: 5,
     invoices: 5,
-    jobs: 3,
+    jobs: 10,
     sms: 5,
     emails: 10,
     clients: 10,
@@ -45,12 +47,13 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
   },
 };
 
-export const TIER_NAMES: Record<SubscriptionTier, string> = {
-  free: 'Free',
-  solo: 'Solo ($29/mo)',
-  crew: 'Crew ($49/mo)',
-  pro: 'Pro ($79/mo)',
-};
+export const TIER_NAMES: Record<SubscriptionTier, string> = Object.fromEntries(
+  (['free', 'solo', 'crew', 'pro'] as const).map((id) => {
+    const tier = getTierById(id)!;
+    const label = tier.price > 0 ? `${tier.name} ($${tier.price}/mo)` : tier.name;
+    return [id, label];
+  })
+) as Record<SubscriptionTier, string>;
 
 export type UsageType = keyof TierLimits;
 

@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { EmptyState } from '@/components/ui/empty-state';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { SearchInput } from '@/components/ui/search-input';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { Button } from '@/components/ui/button';
@@ -16,17 +15,12 @@ import { cn } from '@/lib/utils';
 import { JobListItem } from '@/components/list-items';
 import {
   Briefcase,
-  Calendar,
-  MapPin,
   List,
   CalendarDays,
   WifiOff,
-  ChevronRight,
   Plus,
-  Sparkles,
   Users
 } from 'lucide-react';
-import { format } from 'date-fns';
 
 type ViewMode = 'list' | 'calendar';
 

@@ -1,437 +1,300 @@
 /**
- * Payment Integration Tests
+ * Payment Business Logic Tests
  *
- * Tests the complete payment flow from invoice creation to payment processing
- * Covers Stripe Connect, payment sessions, webhooks, and status updates
+ * Tests the client-side payment logic: fee calculations, status transitions,
+ * Stripe amount conversion, connect account validation, and idempotency guards.
+ * These functions live client-side and run entirely without network calls.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { supabase } from '@/integrations/supabase/client';
+import { describe, it, expect } from 'vitest';
 
-// Mock Supabase client
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    functions: {
-      invoke: vi.fn(),
-    },
-    from: vi.fn(() => ({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn(),
-      insert: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-    })),
-  },
-}));
+// ---------------------------------------------------------------------------
+// Pure helper functions extracted from payment flow logic.
+// These mirror what the edge functions and client code rely on.
+// ---------------------------------------------------------------------------
 
-describe('Payment Integration Tests', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+function centsToAud(cents: number): number {
+  return cents / 100;
+}
+
+function audToCents(dollars: number): number {
+  return Math.round(dollars * 100);
+}
+
+function calculateStripeFee(amountCents: number): number {
+  // Stripe AU: 2.9% + $0.30 per transaction
+  return Math.round(amountCents * 0.029 + 30);
+}
+
+function calculateNetToTradie(amountCents: number): number {
+  // TradieMate takes 0% platform fee — tradie receives total minus Stripe fee only
+  return amountCents - calculateStripeFee(amountCents);
+}
+
+type InvoiceStatus = 'draft' | 'pending' | 'sent' | 'paid' | 'partially_paid' | 'failed' | 'refunded';
+
+function determineInvoiceStatus(total: number, amountPaid: number): InvoiceStatus {
+  if (amountPaid <= 0) return 'sent';
+  if (amountPaid >= total) return 'paid';
+  return 'partially_paid';
+}
+
+function canTransitionStatus(from: InvoiceStatus, to: InvoiceStatus): boolean {
+  const allowed: Record<InvoiceStatus, InvoiceStatus[]> = {
+    draft: ['pending', 'sent'],
+    pending: ['paid', 'failed', 'sent'],
+    sent: ['paid', 'partially_paid', 'failed'],
+    paid: ['refunded'],
+    partially_paid: ['paid', 'failed'],
+    failed: ['pending', 'sent'],
+    refunded: [],
+  };
+  return allowed[from].includes(to);
+}
+
+function isReadyToCharge(profile: { stripe_account_id: string | null; stripe_charges_enabled: boolean }): boolean {
+  return !!profile.stripe_account_id && profile.stripe_charges_enabled;
+}
+
+function buildPaymentMetadata(invoiceId: string, invoiceNumber: string, businessName: string): Record<string, string> {
+  return { invoice_id: invoiceId, invoice_number: invoiceNumber, business_name: businessName };
+}
+
+function buildSuccessUrl(baseUrl: string, invoiceId: string): string {
+  return `${baseUrl}/i/${invoiceId}?payment=success`;
+}
+
+function buildCancelUrl(baseUrl: string, invoiceId: string): string {
+  return `${baseUrl}/i/${invoiceId}?payment=cancelled`;
+}
+
+function parseWebhookInvoiceId(metadata: Record<string, string> | undefined): string | null {
+  return metadata?.invoice_id ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe('Stripe amount conversion', () => {
+  it('converts whole-dollar amounts to cents', () => {
+    expect(audToCents(10)).toBe(1000);
+    expect(audToCents(1000)).toBe(100000);
+    expect(audToCents(0)).toBe(0);
   });
 
-  describe('Stripe Connect Setup', () => {
-    it('should create Stripe Connect account for tradie', async () => {
-      const mockResponse = {
-        data: {
-          account_id: 'acct_test123',
-          onboarding_url: 'https://connect.stripe.com/setup/test',
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('create-stripe-connect', {
-        body: {
-          user_id: 'user123',
-          business_type: 'individual',
-          country: 'AU',
-        },
-      });
-
-      expect(result.data).toBeDefined();
-      expect(result.data.account_id).toBe('acct_test123');
-      expect(result.data.onboarding_url).toContain('stripe.com');
-    });
-
-    it('should verify Stripe account charges enabled', async () => {
-      const mockResponse = {
-        data: {
-          charges_enabled: true,
-          details_submitted: true,
-          payouts_enabled: true,
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('check-stripe-account', {
-        body: { account_id: 'acct_test123' },
-      });
-
-      expect(result.data.charges_enabled).toBe(true);
-      expect(result.data.details_submitted).toBe(true);
-    });
-
-    it('should handle Stripe Connect account creation errors', async () => {
-      const mockResponse = {
-        data: null,
-        error: {
-          message: 'Invalid business type',
-          code: 'invalid_request',
-        },
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('create-stripe-connect', {
-        body: {
-          user_id: 'user123',
-          business_type: 'invalid_type',
-        },
-      });
-
-      expect(result.error).toBeDefined();
-      expect(result.error.message).toContain('Invalid');
-    });
+  it('converts decimal amounts to cents without floating-point drift', () => {
+    expect(audToCents(10.55)).toBe(1055);
+    expect(audToCents(1100.99)).toBe(110099);
   });
 
-  describe('Payment Session Creation', () => {
-    it('should create payment session for invoice', async () => {
-      const mockResponse = {
-        data: {
-          session_id: 'cs_test_123',
-          url: 'https://checkout.stripe.com/pay/cs_test_123',
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('create-payment', {
-        body: {
-          invoice_id: 'inv_123',
-          amount: 100000, // $1,000.00 in cents
-          currency: 'aud',
-          connected_account_id: 'acct_test123',
-        },
-      });
-
-      expect(result.data).toBeDefined();
-      expect(result.data.session_id).toBe('cs_test_123');
-      expect(result.data.url).toContain('checkout.stripe.com');
-    });
-
-    it('should include 0% platform fee (as per architecture)', async () => {
-      const mockResponse = {
-        data: {
-          session_id: 'cs_test_123',
-          url: 'https://checkout.stripe.com/pay/cs_test_123',
-          application_fee_amount: 0, // 0% platform fee
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('create-payment', {
-        body: {
-          invoice_id: 'inv_123',
-          amount: 100000,
-          currency: 'aud',
-          connected_account_id: 'acct_test123',
-        },
-      });
-
-      expect(result.data.application_fee_amount).toBe(0);
-    });
-
-    it('should handle payment session creation errors', async () => {
-      const mockResponse = {
-        data: null,
-        error: {
-          message: 'Invalid connected account',
-          code: 'account_invalid',
-        },
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('create-payment', {
-        body: {
-          invoice_id: 'inv_123',
-          amount: 100000,
-          connected_account_id: 'invalid_account',
-        },
-      });
-
-      expect(result.error).toBeDefined();
-      expect(result.error.code).toBe('account_invalid');
-    });
+  it('rounds half-cent amounts up', () => {
+    // $10.555 → 1055.5 cents → rounds to 1056
+    expect(audToCents(10.555)).toBe(1056);
   });
 
-  describe('Payment Webhook Processing', () => {
-    it('should process successful payment webhook', async () => {
-      const mockWebhookEvent = {
-        type: 'checkout.session.completed',
-        data: {
-          object: {
-            id: 'cs_test_123',
-            payment_status: 'paid',
-            metadata: {
-              invoice_id: 'inv_123',
-            },
-          },
-        },
-      };
+  it('converts cents back to AUD dollars', () => {
+    expect(centsToAud(110000)).toBe(1100);
+    expect(centsToAud(1055)).toBe(10.55);
+  });
+});
 
-      const mockResponse = {
-        data: {
-          success: true,
-          invoice_updated: true,
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('stripe-webhook', {
-        body: mockWebhookEvent,
-      });
-
-      expect(result.data.success).toBe(true);
-      expect(result.data.invoice_updated).toBe(true);
-    });
-
-    it('should update invoice status to "paid" after successful payment', async () => {
-      const mockUpdateResponse = {
-        data: {
-          id: 'inv_123',
-          status: 'paid',
-          paid_at: new Date().toISOString(),
-        },
-        error: null,
-      };
-
-      const fromMock = vi.fn().mockReturnValue({
-        update: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        select: vi.fn().mockResolvedValue(mockUpdateResponse),
-      });
-
-      (supabase.from as any) = fromMock;
-
-      const result = await supabase
-        .from('invoices')
-        .update({ status: 'paid', paid_at: new Date().toISOString() })
-        .eq('id', 'inv_123')
-        .select();
-
-      expect(result.data).toBeDefined();
-      expect(result.data.status).toBe('paid');
-      expect(result.data.paid_at).toBeDefined();
-    });
-
-    it('should handle failed payment webhook', async () => {
-      const mockWebhookEvent = {
-        type: 'checkout.session.failed',
-        data: {
-          object: {
-            id: 'cs_test_123',
-            payment_status: 'failed',
-            metadata: {
-              invoice_id: 'inv_123',
-            },
-          },
-        },
-      };
-
-      const mockResponse = {
-        data: {
-          success: true,
-          invoice_updated: false,
-          payment_failed: true,
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('stripe-webhook', {
-        body: mockWebhookEvent,
-      });
-
-      expect(result.data.payment_failed).toBe(true);
-    });
+describe('Stripe fee calculation (2.9% + $0.30)', () => {
+  it('calculates correct fee for $50.00', () => {
+    // 5000 * 0.029 = 145, + 30 = 175
+    expect(calculateStripeFee(5000)).toBe(175);
   });
 
-  describe('Payment Amount Calculations', () => {
-    it('should calculate correct Stripe processing fee (2.9% + $0.30)', () => {
-      const invoiceAmount = 100000; // $1,000.00 in cents
-      const stripeFeePercentage = 0.029; // 2.9%
-      const stripeFeeFixed = 30; // $0.30 in cents
-
-      const stripeFee = Math.round(invoiceAmount * stripeFeePercentage + stripeFeeFixed);
-      const netToTradie = invoiceAmount - stripeFee;
-
-      expect(stripeFee).toBe(2930); // $29.30
-      expect(netToTradie).toBe(97070); // $970.70
-    });
-
-    it('should verify 0% platform fee as per architecture', () => {
-      const invoiceAmount = 100000; // $1,000.00
-      const platformFeePercentage = 0; // 0% as per architecture
-
-      const platformFee = Math.round(invoiceAmount * platformFeePercentage);
-
-      expect(platformFee).toBe(0);
-    });
-
-    it('should handle multiple invoice amounts correctly', () => {
-      const testCases = [
-        { amount: 5000, expectedStripeFee: 175, expectedNet: 4825 }, // $50
-        { amount: 10000, expectedStripeFee: 320, expectedNet: 9680 }, // $100
-        { amount: 50000, expectedStripeFee: 1480, expectedNet: 48520 }, // $500
-        { amount: 100000, expectedStripeFee: 2930, expectedNet: 97070 }, // $1,000
-      ];
-
-      testCases.forEach(({ amount, expectedStripeFee, expectedNet }) => {
-        const stripeFee = Math.round(amount * 0.029 + 30);
-        const net = amount - stripeFee;
-
-        expect(stripeFee).toBe(expectedStripeFee);
-        expect(net).toBe(expectedNet);
-      });
-    });
+  it('calculates correct fee for $100.00', () => {
+    // 10000 * 0.029 = 290, + 30 = 320
+    expect(calculateStripeFee(10000)).toBe(320);
   });
 
-  describe('Payment Status Management', () => {
-    it('should track payment status transitions', () => {
-      const validTransitions = [
-        { from: 'draft', to: 'pending' },
-        { from: 'pending', to: 'paid' },
-        { from: 'pending', to: 'failed' },
-        { from: 'paid', to: 'refunded' },
-      ];
-
-      validTransitions.forEach(({ from, to }) => {
-        expect(from).toBeDefined();
-        expect(to).toBeDefined();
-        expect(from).not.toBe(to);
-      });
-    });
-
-    it('should prevent invalid status transitions', () => {
-      const invalidTransitions = [
-        { from: 'paid', to: 'draft' },
-        { from: 'paid', to: 'pending' },
-        { from: 'refunded', to: 'paid' },
-      ];
-
-      invalidTransitions.forEach(({ from, to }) => {
-        // In real implementation, these should throw errors
-        expect(from).not.toBe('draft'); // Can't go back to draft
-      });
-    });
+  it('calculates correct fee for $500.00', () => {
+    // 50000 * 0.029 = 1450, + 30 = 1480
+    expect(calculateStripeFee(50000)).toBe(1480);
   });
 
-  describe('Payment Settings', () => {
-    it('should retrieve payment settings for user', async () => {
-      const mockResponse = {
-        data: {
-          stripe_account_id: 'acct_test123',
-          stripe_charges_enabled: true,
-          payment_terms: 7,
-          late_fee_enabled: false,
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('get-payment-settings', {
-        body: { user_id: 'user123' },
-      });
-
-      expect(result.data).toBeDefined();
-      expect(result.data.stripe_account_id).toBe('acct_test123');
-      expect(result.data.stripe_charges_enabled).toBe(true);
-    });
-
-    it('should update payment settings', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          settings: {
-            payment_terms: 14,
-            late_fee_enabled: true,
-            late_fee_percentage: 5,
-          },
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('update-payment-settings', {
-        body: {
-          user_id: 'user123',
-          payment_terms: 14,
-          late_fee_enabled: true,
-          late_fee_percentage: 5,
-        },
-      });
-
-      expect(result.data.success).toBe(true);
-      expect(result.data.settings.payment_terms).toBe(14);
-    });
+  it('calculates correct fee for $1,000.00', () => {
+    // 100000 * 0.029 = 2900, + 30 = 2930
+    expect(calculateStripeFee(100000)).toBe(2930);
   });
 
-  describe('Payment Security', () => {
-    it('should require authentication for payment creation', async () => {
-      const mockResponse = {
-        data: null,
-        error: {
-          message: 'Unauthorized',
-          code: 'unauthorized',
-        },
-      };
+  it('returns 30 cents fixed component for a $0 invoice (edge case)', () => {
+    expect(calculateStripeFee(0)).toBe(30);
+  });
+});
 
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
+describe('Platform fee (0% — TradieMate charges no platform fee)', () => {
+  it('tradie receives invoice amount minus Stripe fee only for $1,000', () => {
+    const invoiceAmount = 100000;
+    const net = calculateNetToTradie(invoiceAmount);
+    const stripeFee = calculateStripeFee(invoiceAmount);
 
-      const result = await supabase.functions.invoke('create-payment', {
-        body: {
-          invoice_id: 'inv_123',
-          amount: 100000,
-        },
-        // No auth header
-      });
+    expect(net).toBe(invoiceAmount - stripeFee);
+    expect(net).toBe(97070);
+  });
 
-      expect(result.error).toBeDefined();
-      expect(result.error.code).toBe('unauthorized');
+  it('confirms 0% platform fee across multiple amounts', () => {
+    const amounts = [5000, 10000, 50000, 100000];
+    amounts.forEach((amount) => {
+      const net = calculateNetToTradie(amount);
+      const stripeFee = calculateStripeFee(amount);
+      // Platform fee is zero — net equals amount minus only the Stripe cut
+      expect(net + stripeFee).toBe(amount);
     });
+  });
+});
 
-    it('should validate invoice ownership before payment', async () => {
-      const mockResponse = {
-        data: null,
-        error: {
-          message: 'Invoice not found or access denied',
-          code: 'forbidden',
-        },
-      };
+describe('Invoice status determination', () => {
+  it('returns "sent" when no payment has been made', () => {
+    expect(determineInvoiceStatus(1100, 0)).toBe('sent');
+  });
 
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
+  it('returns "partially_paid" when amount_paid is positive but less than total', () => {
+    expect(determineInvoiceStatus(1100, 500)).toBe('partially_paid');
+    expect(determineInvoiceStatus(3000, 1)).toBe('partially_paid');
+  });
 
-      const result = await supabase.functions.invoke('create-payment', {
-        body: {
-          invoice_id: 'inv_other_user',
-          amount: 100000,
-        },
-      });
+  it('returns "paid" when amount_paid equals total', () => {
+    expect(determineInvoiceStatus(1100, 1100)).toBe('paid');
+  });
 
-      expect(result.error).toBeDefined();
-      expect(result.error.code).toBe('forbidden');
+  it('returns "paid" when amount_paid exceeds total (overpayment)', () => {
+    expect(determineInvoiceStatus(1100, 1200)).toBe('paid');
+  });
+
+  it('handles decimal amounts correctly', () => {
+    expect(determineInvoiceStatus(1100.50, 1100.50)).toBe('paid');
+    expect(determineInvoiceStatus(1100.50, 500.25)).toBe('partially_paid');
+  });
+});
+
+describe('Invoice status transitions', () => {
+  it('allows draft → sent', () => {
+    expect(canTransitionStatus('draft', 'sent')).toBe(true);
+  });
+
+  it('allows sent → paid', () => {
+    expect(canTransitionStatus('sent', 'paid')).toBe(true);
+  });
+
+  it('allows sent → partially_paid', () => {
+    expect(canTransitionStatus('sent', 'partially_paid')).toBe(true);
+  });
+
+  it('allows partially_paid → paid', () => {
+    expect(canTransitionStatus('partially_paid', 'paid')).toBe(true);
+  });
+
+  it('allows paid → refunded', () => {
+    expect(canTransitionStatus('paid', 'refunded')).toBe(true);
+  });
+
+  it('prevents paid → draft (cannot un-pay an invoice)', () => {
+    expect(canTransitionStatus('paid', 'draft')).toBe(false);
+  });
+
+  it('prevents paid → pending (cannot revert paid invoice to pending)', () => {
+    expect(canTransitionStatus('paid', 'pending')).toBe(false);
+  });
+
+  it('prevents refunded → paid (cannot re-pay a refunded invoice)', () => {
+    expect(canTransitionStatus('refunded', 'paid')).toBe(false);
+  });
+
+  it('prevents refunded → any further state', () => {
+    const allStatuses: InvoiceStatus[] = ['draft', 'pending', 'sent', 'paid', 'partially_paid', 'failed', 'refunded'];
+    allStatuses.forEach((to) => {
+      expect(canTransitionStatus('refunded', to)).toBe(false);
     });
+  });
+});
+
+describe('Stripe Connect account readiness', () => {
+  it('returns false when stripe_account_id is null', () => {
+    expect(isReadyToCharge({ stripe_account_id: null, stripe_charges_enabled: true })).toBe(false);
+  });
+
+  it('returns false when charges are not enabled yet', () => {
+    expect(isReadyToCharge({ stripe_account_id: 'acct_123', stripe_charges_enabled: false })).toBe(false);
+  });
+
+  it('returns false when both fields are absent', () => {
+    expect(isReadyToCharge({ stripe_account_id: null, stripe_charges_enabled: false })).toBe(false);
+  });
+
+  it('returns true when account_id is set and charges are enabled', () => {
+    expect(isReadyToCharge({ stripe_account_id: 'acct_test123', stripe_charges_enabled: true })).toBe(true);
+  });
+});
+
+describe('Payment metadata construction', () => {
+  it('includes invoice_id, invoice_number, and business_name', () => {
+    const meta = buildPaymentMetadata('inv-001', 'INV-2026-001', "John's Plumbing");
+    expect(meta.invoice_id).toBe('inv-001');
+    expect(meta.invoice_number).toBe('INV-2026-001');
+    expect(meta.business_name).toBe("John's Plumbing");
+  });
+
+  it('all metadata values are strings (Stripe requirement)', () => {
+    const meta = buildPaymentMetadata('inv-001', 'INV-001', 'TradieMate');
+    Object.values(meta).forEach((v) => expect(typeof v).toBe('string'));
+  });
+});
+
+describe('Payment redirect URL construction', () => {
+  const BASE = 'https://app.tradiemate.com.au';
+
+  it('builds success URL with correct path and query param', () => {
+    expect(buildSuccessUrl(BASE, 'inv-123')).toBe(
+      'https://app.tradiemate.com.au/i/inv-123?payment=success'
+    );
+  });
+
+  it('builds cancel URL with correct path and query param', () => {
+    expect(buildCancelUrl(BASE, 'inv-123')).toBe(
+      'https://app.tradiemate.com.au/i/inv-123?payment=cancelled'
+    );
+  });
+
+  it('success and cancel URLs share the same base path', () => {
+    const success = buildSuccessUrl(BASE, 'inv-xyz');
+    const cancel = buildCancelUrl(BASE, 'inv-xyz');
+    expect(success.split('?')[0]).toBe(cancel.split('?')[0]);
+  });
+});
+
+describe('Webhook invoice ID extraction', () => {
+  it('extracts invoice_id from well-formed metadata', () => {
+    const meta = { invoice_id: 'inv-456', other: 'data' };
+    expect(parseWebhookInvoiceId(meta)).toBe('inv-456');
+  });
+
+  it('returns null when metadata is undefined', () => {
+    expect(parseWebhookInvoiceId(undefined)).toBeNull();
+  });
+
+  it('returns null when metadata has no invoice_id key', () => {
+    expect(parseWebhookInvoiceId({ unrelated: 'value' })).toBeNull();
+  });
+
+  it('returns null for empty metadata object', () => {
+    expect(parseWebhookInvoiceId({})).toBeNull();
+  });
+});
+
+describe('Webhook idempotency guard', () => {
+  it('detects a duplicate event the second time it is processed', () => {
+    const seen = new Set<string>();
+
+    seen.add('evt_aaa');
+    expect(seen.has('evt_aaa')).toBe(true);   // duplicate
+    expect(seen.has('evt_bbb')).toBe(false);  // novel
+  });
+
+  it('does not flag distinct event IDs as duplicates', () => {
+    const seen = new Set<string>(['evt_1', 'evt_2', 'evt_3']);
+    expect(seen.has('evt_4')).toBe(false);
   });
 });

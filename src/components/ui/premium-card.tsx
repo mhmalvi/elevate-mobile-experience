@@ -14,6 +14,7 @@ export function PremiumCard({ children, onClick, className, interactive = true, 
 
   return (
     <Component
+      {...(onClick ? { type: 'button' as const } : {})}
       onClick={onClick}
       style={style}
       className={cn(

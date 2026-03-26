@@ -30,7 +30,6 @@ import {
   Zap,
   Star,
   Shield,
-  X,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -431,7 +430,6 @@ export default function SubscriptionSettings() {
               const currentTierIndex = SUBSCRIPTION_TIERS.findIndex(t => t.id === currentTier);
               const tierIndex = SUBSCRIPTION_TIERS.findIndex(t => t.id === tier.id);
               const isDowngrade = tierIndex < currentTierIndex;
-              const isUpgrade = tierIndex > currentTierIndex;
               const TierIcon = tierIcons[tier.id];
               const colors = tierColors[tier.id];
               const displayPrice = billingPeriod === 'annual' ? tier.annualPrice : tier.price;

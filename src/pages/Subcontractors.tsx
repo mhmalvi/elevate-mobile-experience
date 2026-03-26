@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { z } from 'zod';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +30,8 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { useTeam } from '@/hooks/useTeam';
+import { useSubcontractors, useDeleteSubcontractor, useSaveSubcontractor } from '@/hooks/queries/useSubcontractors';
 import { useToast } from '@/hooks/use-toast';
 import { cn, formatCurrency } from '@/lib/utils';
 import {
@@ -69,6 +71,16 @@ interface SubcontractorFormData {
     notes: string;
 }
 
+const subcontractorSchema = z.object({
+    name: z.string().min(1, 'Name is required').max(200),
+    trade: z.string().max(100).optional(),
+    phone: z.string().max(20).optional(),
+    email: z.string().email('Invalid email').or(z.literal('')).optional(),
+    abn: z.string().regex(/^\d{2}\s?\d{3}\s?\d{3}\s?\d{3}$/, 'Invalid ABN format').or(z.literal('')).optional(),
+    hourly_rate: z.string().optional(),
+    notes: z.string().max(2000).optional(),
+});
+
 const initialFormData: SubcontractorFormData = {
     name: '',
     trade: '',
@@ -82,35 +94,15 @@ const initialFormData: SubcontractorFormData = {
 export default function Subcontractors() {
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { team } = useTeam();
     const { toast } = useToast();
-    const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { data: subcontractors = [], isLoading: loading } = useSubcontractors();
+    const deleteSubcontractor = useDeleteSubcontractor();
+    const saveSubcontractor = useSaveSubcontractor();
     const [search, setSearch] = useState('');
     const [dialogOpen, setDialogOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [saving, setSaving] = useState(false);
     const [form, setForm] = useState<SubcontractorFormData>(initialFormData);
-
-    useEffect(() => {
-        if (user) {
-            fetchSubcontractors();
-        }
-    }, [user]);
-
-    const fetchSubcontractors = async () => {
-        const { data, error } = await (supabase as any)
-            .from('subcontractors')
-            .select('*')
-            .eq('user_id', user?.id)
-            .order('name');
-
-        if (error) {
-            console.error('Error fetching subcontractors:', error);
-        } else {
-            setSubcontractors((data as Subcontractor[]) || []);
-        }
-        setLoading(false);
-    };
 
     const filteredSubcontractors = subcontractors.filter(sub => {
         if (!search.trim()) return true;
@@ -146,15 +138,21 @@ export default function Subcontractors() {
         e.preventDefault();
         if (!user) return;
 
+        const validationResult = subcontractorSchema.safeParse(form);
+        if (!validationResult.success) {
+            const firstError = validationResult.error.errors[0];
+            toast({ title: 'Validation error', description: firstError.message, variant: 'destructive' });
+            return;
+        }
+
         if (!form.name.trim()) {
             toast({ title: 'Name required', variant: 'destructive' });
             return;
         }
 
-        setSaving(true);
-
         const payload = {
             user_id: user.id,
+            team_id: team?.id || null,
             name: form.name.trim(),
             trade: form.trade.trim(),
             phone: form.phone.trim() || null,
@@ -165,46 +163,25 @@ export default function Subcontractors() {
             updated_at: new Date().toISOString(),
         };
 
-        if (editingId) {
-            const { error } = await (supabase as any)
-                .from('subcontractors')
-                .update(payload)
-                .eq('id', editingId);
-
-            if (error) {
-                toast({ title: 'Error updating', description: error.message, variant: 'destructive' });
-            } else {
-                toast({ title: 'Subcontractor updated' });
-                setDialogOpen(false);
-                fetchSubcontractors();
+        saveSubcontractor.mutate(
+            {
+                id: editingId || undefined,
+                data: editingId ? payload : { ...payload, created_at: new Date().toISOString() },
+            },
+            {
+                onSuccess: () => {
+                    setDialogOpen(false);
+                },
             }
-        } else {
-            const { error } = await (supabase as any).from('subcontractors').insert({
-                ...payload,
-                created_at: new Date().toISOString(),
-            });
-
-            if (error) {
-                toast({ title: 'Error adding', description: error.message, variant: 'destructive' });
-            } else {
-                toast({ title: 'Subcontractor added! 🎉' });
-                setDialogOpen(false);
-                fetchSubcontractors();
-            }
-        }
-
-        setSaving(false);
+        );
     };
 
-    const handleDelete = async (id: string) => {
-        const { error } = await (supabase as any).from('subcontractors').delete().eq('id', id);
-
-        if (error) {
-            toast({ title: 'Error deleting', description: error.message, variant: 'destructive' });
-        } else {
-            toast({ title: 'Subcontractor removed' });
-            setSubcontractors(subcontractors.filter(s => s.id !== id));
-        }
+    const handleDelete = (id: string) => {
+        deleteSubcontractor.mutate(id, {
+            onSuccess: () => {
+                toast({ title: 'Subcontractor removed' });
+            },
+        });
     };
 
     return (
@@ -336,8 +313,8 @@ export default function Subcontractors() {
                                         </div>
 
                                         <DialogFooter>
-                                            <Button type="submit" disabled={saving} className="w-full rounded-xl">
-                                                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                            <Button type="submit" disabled={saveSubcontractor.isPending} className="w-full rounded-xl">
+                                                {saveSubcontractor.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                                 {editingId ? 'Update' : 'Add Subcontractor'}
                                             </Button>
                                         </DialogFooter>

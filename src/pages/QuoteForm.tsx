@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { z } from 'zod';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,27 +9,21 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PremiumCard } from '@/components/ui/premium-card';
 import { useAuth } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 import { useProfile } from '@/hooks/useProfile';
 import { useUsageLimits } from '@/hooks/useUsageLimits';
+import { useAllClients } from '@/hooks/queries/useClients';
 import { UsageLimitBanner, UsageLimitBlocker } from '@/components/UsageLimitBanner';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Trash2, User, FileText, Sparkles, Calendar, ArrowLeft } from 'lucide-react';
+import { LineItemRow } from '@/components/list-items';
+import { Loader2, Plus, User, FileText, Sparkles, Calendar, ArrowLeft } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import { format, addDays } from 'date-fns';
 import { generateUUID } from '@/lib/utils/uuid';
+import { updateLineItem as updateLineItemUtil, calculateLineItemTotals, type LineItem } from '@/lib/lineItems';
 
-type Client = Tables<'clients'>;
 type QuoteTemplate = Tables<'quote_templates'>;
-
-interface LineItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unit: string;
-  unit_price: number;
-  item_type: 'labour' | 'materials';
-}
 
 interface TemplateItem {
   description: string;
@@ -38,14 +33,23 @@ interface TemplateItem {
   item_type: string;
 }
 
+const quoteSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(200),
+  client_id: z.string().optional(),
+  description: z.string().max(5000).optional(),
+  notes: z.string().max(5000).optional(),
+  valid_until: z.string().optional(),
+});
+
 export default function QuoteForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { team } = useTeam();
   const { profile } = useProfile();
   const { toast } = useToast();
   const { canCreate, used, limit, tier, isUnlimited, incrementUsage } = useUsageLimits('quotes');
+  const { data: clients = [] } = useAllClients();
   const [loading, setLoading] = useState(false);
-  const [clients, setClients] = useState<Client[]>([]);
   const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
   const [step, setStep] = useState<'template' | 'details'>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<QuoteTemplate | null>(null);
@@ -62,19 +66,9 @@ export default function QuoteForm() {
 
   useEffect(() => {
     if (user) {
-      fetchClients();
       fetchTemplates();
     }
   }, [user]);
-
-  const fetchClients = async () => {
-    const { data } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('name');
-    setClients(data || []);
-  };
 
   const fetchTemplates = async () => {
     const { data } = await supabase
@@ -133,22 +127,22 @@ export default function QuoteForm() {
     }
   };
 
-  const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
-    setLineItems(lineItems.map(item =>
-      item.id === id ? { ...item, [field]: value } : item
-    ));
+  const updateLineItem = (id: string, field: keyof LineItem, value: LineItem[keyof LineItem]) => {
+    updateLineItemUtil(setLineItems, id, field, value);
   };
 
-  const calculateTotals = () => {
-    const subtotal = lineItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-    const gst = subtotal * 0.1;
-    const total = subtotal + gst;
-    return { subtotal, gst, total };
-  };
+  const calculateTotals = () => calculateLineItemTotals(lineItems);
 
-  const generateQuoteNumber = () => {
-    const date = new Date();
-    return `Q${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+  const generateQuoteNumber = async (): Promise<string> => {
+    const { data, error } = await supabase.rpc('get_next_document_number', {
+      p_document_type: 'quote'
+    });
+    if (error || !data) {
+      // Fallback to old method if RPC fails
+      const date = new Date();
+      return `QT-${date.getFullYear()}-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`;
+    }
+    return data as string;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -158,6 +152,14 @@ export default function QuoteForm() {
     // Check usage limits
     if (!canCreate) {
       toast({ title: 'Limit reached', description: 'Upgrade your plan to create more quotes', variant: 'destructive' });
+      return;
+    }
+
+    // Zod schema validation
+    const result = quoteSchema.safeParse(form);
+    if (!result.success) {
+      const firstError = result.error.errors[0];
+      toast({ title: 'Validation error', description: firstError.message, variant: 'destructive' });
       return;
     }
 
@@ -175,13 +177,15 @@ export default function QuoteForm() {
 
     setLoading(true);
     const { subtotal, gst, total } = calculateTotals();
+    const quoteNumber = await generateQuoteNumber();
 
     const { data: quote, error: quoteError } = await supabase
       .from('quotes')
       .insert({
         user_id: user.id,
+        team_id: team?.id || null,
         client_id: form.client_id || null,
-        quote_number: generateQuoteNumber(),
+        quote_number: quoteNumber,
         title: form.title,
         description: form.description,
         notes: form.notes,
@@ -216,11 +220,12 @@ export default function QuoteForm() {
       .insert(lineItemsToInsert);
 
     if (itemsError) {
-      toast({ title: 'Error', description: itemsError.message, variant: 'destructive' });
+      // Rollback: delete orphaned quote since line items failed
+      await supabase.from('quotes').delete().eq('id', quote.id);
+      toast({ title: 'Error', description: `Failed to save line items: ${itemsError.message}`, variant: 'destructive' });
     } else {
-      // Increment usage counter
       await incrementUsage();
-      toast({ title: 'Quote created! 🎉', description: 'Looking good.' });
+      toast({ title: 'Quote created!', description: 'Looking good.' });
       navigate('/quotes');
     }
     setLoading(false);
@@ -444,85 +449,15 @@ export default function QuoteForm() {
             </div>
 
             {lineItems.map((item, index) => (
-              <div key={item.id} className="p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 space-y-3 animate-fade-in">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Item {index + 1}</span>
-                  {lineItems.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeLineItem(item.id)}
-                    >
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
-                  )}
-                </div>
-
-                <Input
-                  placeholder="Description"
-                  value={item.description}
-                  onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                  className="h-11"
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                  <div>
-                    <Label className="text-xs">Qty</Label>
-                    <Input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={item.quantity}
-                      onChange={(e) => updateLineItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                      className="h-10"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Unit</Label>
-                    <Select value={item.unit} onValueChange={(v) => updateLineItem(item.id, 'unit', v)}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="each">Each</SelectItem>
-                        <SelectItem value="hour">Hour</SelectItem>
-                        <SelectItem value="sqm">m²</SelectItem>
-                        <SelectItem value="lm">Lm</SelectItem>
-                        <SelectItem value="job">Job</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Price ($)</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.unit_price}
-                      onChange={(e) => updateLineItem(item.id, 'unit_price', parseFloat(e.target.value) || 0)}
-                      className="h-10"
-                    />
-                  </div>
-                </div>
-
-                <Select
-                  value={item.item_type}
-                  onValueChange={(v: 'labour' | 'materials') => updateLineItem(item.id, 'item_type', v)}
-                >
-                  <SelectTrigger className="h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="labour">Labour</SelectItem>
-                    <SelectItem value="materials">Materials</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="text-right text-sm font-semibold text-foreground">
-                  ${(item.quantity * item.unit_price).toFixed(2)}
-                </div>
-              </div>
+              <LineItemRow
+                key={item.id}
+                item={item}
+                index={index}
+                canRemove={lineItems.length > 1}
+                showItemType
+                onUpdate={updateLineItem}
+                onRemove={removeLineItem}
+              />
             ))}
           </div>
 

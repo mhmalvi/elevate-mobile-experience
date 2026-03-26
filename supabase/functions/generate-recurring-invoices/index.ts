@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 
@@ -21,11 +21,16 @@ serve(async (req) => {
   }
 
   try {
-    // SECURITY: Verify caller is authorized (cron job or service role)
+    // SECURITY: Verify caller is authorized (cron job via CRON_SECRET or service role)
     const authHeader = req.headers.get("Authorization");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const cronSecret = Deno.env.get("CRON_SECRET");
 
-    if (!authHeader || authHeader !== `Bearer ${supabaseServiceKey}`) {
+    const isAuthorized = authHeader && (
+      (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
+      authHeader === `Bearer ${supabaseServiceKey}`
+    );
+    if (!isAuthorized) {
       console.error("Unauthorized access attempt to generate-recurring-invoices");
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
@@ -62,27 +67,38 @@ serve(async (req) => {
       console.log(`Processing invoice ${template.id} for user ${template.user_id}`);
 
       try {
-        // Check subscription limits
+        // Check subscription limits (atomic — delegates to DB RPC)
         const tier = template.profiles?.subscription_tier || 'free';
-        const monthYear = new Date().toISOString().slice(0, 7); // YYYY-MM format
+        const usageCheck = await checkAndIncrementInvoiceUsage(supabase, template.user_id, tier);
 
-        const { data: usage } = await supabase
-          .from('usage_tracking')
-          .select('*')
-          .eq('user_id', template.user_id)
-          .eq('month_year', monthYear)
-          .maybeSingle();
-
-        const invoiceLimit = getInvoiceLimit(tier);
-        const currentUsage = usage?.invoices_created || 0;
-
-        if (invoiceLimit !== -1 && currentUsage >= invoiceLimit) {
-          console.log(`Skipping - user ${template.user_id} has reached invoice limit (${currentUsage}/${invoiceLimit})`);
+        if (!usageCheck.allowed) {
+          console.log(`Skipping - user ${template.user_id} has reached invoice limit (${usageCheck.used}/${usageCheck.limit})`);
           results.push({
             template_id: template.id,
             status: 'skipped',
             reason: 'limit_reached',
             user_id: template.user_id
+          });
+          continue;
+        }
+
+        // Idempotency check: skip if an invoice was already generated for this
+        // template on the same due date (prevents duplicates on retries/re-runs)
+        const nextDueDateForCheck = template.next_due_date;
+        const { data: existingInvoice } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('parent_invoice_id', template.id)
+          .eq('due_date', nextDueDateForCheck)
+          .maybeSingle();
+
+        if (existingInvoice) {
+          console.log(`Invoice already exists for template ${template.id} on ${nextDueDateForCheck}, skipping`);
+          results.push({
+            template_id: template.id,
+            status: 'skipped',
+            reason: 'already_generated',
+            user_id: template.user_id,
           });
           continue;
         }
@@ -171,28 +187,6 @@ serve(async (req) => {
           }
         }
 
-        // Update usage tracking
-        if (usage) {
-          await supabase
-            .from('usage_tracking')
-            .update({ invoices_created: currentUsage + 1 })
-            .eq('user_id', template.user_id)
-            .eq('month_year', monthYear);
-        } else {
-          await supabase
-            .from('usage_tracking')
-            .insert({
-              user_id: template.user_id,
-              month_year: monthYear,
-              invoices_created: 1,
-              quotes_created: 0,
-              jobs_created: 0,
-              emails_sent: 0,
-              sms_sent: 0,
-              clients_created: 0,
-            });
-        }
-
         // Send email to client if they have an email address
         if (template.clients?.email) {
           console.log(`Sending email to ${template.clients.email}`);
@@ -277,6 +271,41 @@ serve(async (req) => {
   }
 });
 
+// Atomic usage check-and-increment via DB RPC, matching the send-email pattern.
+// Fails closed (returns allowed:false) if the RPC itself errors.
+async function checkAndIncrementInvoiceUsage(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  tier: string
+): Promise<{ allowed: boolean; used: number; limit: number }> {
+  const limit = getInvoiceLimit(tier);
+
+  if (limit === -1) {
+    return { allowed: true, used: 0, limit: -1 };
+  }
+
+  // Ensure a usage_tracking row exists for this month before calling the RPC
+  const monthYear = new Date().toISOString().slice(0, 7);
+  await supabase
+    .from('usage_tracking')
+    .upsert({ user_id: userId, month_year: monthYear }, { onConflict: 'user_id,month_year', ignoreDuplicates: true });
+
+  // Single atomic read-and-increment — eliminates TOCTOU race condition
+  const { data: allowed, error } = await supabase.rpc('increment_usage_if_under_limit', {
+    p_user_id: userId,
+    p_field: 'invoices_created',
+    p_limit: limit,
+  });
+
+  if (error) {
+    console.error('Usage tracking RPC error:', error.message);
+    // Fail closed: deny if we cannot verify usage
+    return { allowed: false, used: limit, limit };
+  }
+
+  return { allowed: !!allowed, used: allowed ? limit - 1 : limit, limit };
+}
+
 function getInvoiceLimit(tier: string): number {
   const limits: Record<string, number> = {
     free: 5,
@@ -300,7 +329,7 @@ function generateNextNumber(lastNumber?: string, templateNumber?: string): strin
 
   // Otherwise generate a new one
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const randomStr = crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase();
   return `INV${dateStr}-${randomStr}`;
 }
 

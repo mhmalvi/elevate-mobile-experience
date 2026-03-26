@@ -1,60 +1,106 @@
 import Dexie, { Table } from 'dexie';
+import type { Json } from '@/integrations/supabase/types';
 
 // Entity types matching Supabase tables
 export interface OfflineJob {
   id: string;
   user_id: string;
+  team_id?: string;
   client_id?: string;
+  quote_id?: string;
   title: string;
   description?: string;
   status: string;
-  priority?: string;
-  scheduled_date?: string;
-  completed_date?: string;
-  address?: string;
   site_address?: string;
+  scheduled_date?: string;
   notes?: string;
+  material_cost?: number;
+  assigned_to?: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
+  // Legacy fields kept for backward compatibility with existing offline data
+  /** @deprecated Not in Supabase schema */
+  priority?: string;
+  /** @deprecated Not in Supabase schema - use site_address instead */
+  address?: string;
+  /** @deprecated Not in Supabase schema */
+  completed_date?: string;
 }
 
 export interface OfflineQuote {
   id: string;
   user_id: string;
+  team_id?: string;
   client_id?: string;
   quote_number: string;
   title: string;
   description?: string;
+  notes?: string;
   status: string;
+  subtotal?: number;
+  gst?: number;
   total: number;
   valid_until?: string;
-  line_items: any[];
+  accepted_at?: string;
+  public_token?: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
+  // Legacy field kept for backward compatibility with existing offline data
+  /** @deprecated Line items are now stored in the quote_line_items table */
+  line_items?: Json[];
 }
 
 export interface OfflineInvoice {
   id: string;
   user_id: string;
+  team_id?: string;
   client_id?: string;
+  job_id?: string;
+  quote_id?: string;
   invoice_number: string;
-  title?: string;
+  title: string;
+  description?: string;
+  notes?: string;
   status: string;
+  subtotal?: number;
+  gst?: number;
   total: number;
   amount_paid: number;
   due_date?: string;
   paid_at?: string;
-  line_items: any[];
+  sent_at?: string;
+  // Recurring invoice fields
+  is_recurring?: boolean;
+  recurring_interval?: string;
+  next_due_date?: string;
+  parent_invoice_id?: string;
+  // Stripe
+  stripe_payment_link?: string;
+  // Xero sync
+  xero_invoice_id?: string;
+  last_synced_to_xero?: string;
+  xero_sync_error?: string;
+  xero_sync_status?: string;
+  // QuickBooks sync
+  qb_invoice_id?: string;
+  last_synced_to_qb?: string;
+  qb_sync_error?: string;
+  // Public access token
+  public_token?: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
+  // Legacy field kept for backward compatibility with existing offline data
+  /** @deprecated Line items are now stored in the invoice_line_items table */
+  line_items?: Json[];
 }
 
 export interface OfflineClient {
   id: string;
   user_id: string;
+  team_id?: string;
   name: string;
   email?: string;
   phone?: string;
@@ -63,17 +109,65 @@ export interface OfflineClient {
   state?: string;
   postcode?: string;
   notes?: string;
+  // Xero sync
+  xero_contact_id?: string;
+  last_synced_to_xero?: string;
+  xero_sync_error?: string;
+  // QuickBooks sync
+  qb_customer_id?: string;
+  last_synced_to_qb?: string;
+  qb_sync_error?: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
 }
 
+export interface OfflineQuoteLineItem {
+  id: string;
+  quote_id: string;
+  description: string;
+  quantity: number;
+  unit?: string;
+  unit_price: number;
+  total: number;
+  item_type?: string;
+  sort_order?: number;
+  created_at: string;
+  // Legacy fields kept for backward compatibility with existing offline data
+  /** @deprecated Not in Supabase schema */
+  updated_at?: string;
+  /** @deprecated Not in Supabase schema */
+  deleted_at?: string;
+  /** @deprecated Not in Supabase schema */
+  synced?: number;
+}
+
+export interface OfflineInvoiceLineItem {
+  id: string;
+  invoice_id: string;
+  description: string;
+  quantity: number;
+  unit?: string;
+  unit_price: number;
+  total: number;
+  item_type?: string;
+  sort_order?: number;
+  created_at: string;
+  // Legacy fields kept for backward compatibility with existing offline data
+  /** @deprecated Not in Supabase schema */
+  updated_at?: string;
+  /** @deprecated Not in Supabase schema */
+  deleted_at?: string;
+  /** @deprecated Not in Supabase schema */
+  synced?: number;
+}
+
 export interface SyncQueueItem {
   id?: number;
-  entity_type: 'job' | 'quote' | 'invoice' | 'client';
+  entity_type: 'job' | 'quote' | 'invoice' | 'client' | 'quote_line_item' | 'invoice_line_item';
   entity_id: string;
   action: 'create' | 'update' | 'delete';
-  data: any;
+  data: Json;
   created_at: string;
   updated_at?: string; // For tracking coalesced updates
   synced: boolean;
@@ -83,7 +177,7 @@ export interface SyncQueueItem {
 
 export interface OfflineMetadata {
   key: string;
-  value: any;
+  value: Json;
   updated_at: string;
 }
 
@@ -97,6 +191,8 @@ class TradieMateDB extends Dexie {
   quotes!: Table<OfflineQuote, string>;
   invoices!: Table<OfflineInvoice, string>;
   clients!: Table<OfflineClient, string>;
+  quote_line_items!: Table<OfflineQuoteLineItem, string>;
+  invoice_line_items!: Table<OfflineInvoiceLineItem, string>;
 
   // Sync queue
   syncQueue!: Table<SyncQueueItem, number>;
@@ -222,6 +318,32 @@ class TradieMateDB extends Dexie {
         console.error('[DB] Error during v5 upgrade (non-fatal):', error);
       }
     });
+
+    // Version 6: Add quote_line_items and invoice_line_items tables for offline line item support
+    this.version(6).stores({
+      jobs: 'id, user_id, status, updated_at, client_id, scheduled_date',
+      quotes: 'id, user_id, status, updated_at, client_id',
+      invoices: 'id, user_id, status, updated_at, client_id, due_date',
+      clients: 'id, user_id, name, updated_at',
+      quote_line_items: '++id, quote_id, synced, created_at',
+      invoice_line_items: '++id, invoice_id, synced, created_at',
+      syncQueue: '++id, entity_type, entity_id, created_at',
+      metadata: 'key, updated_at',
+    });
+
+    // Version 7: Fix line item tables - use string id (not auto-increment) and remove boolean 'synced' index
+    this.version(7).stores({
+      jobs: 'id, user_id, status, updated_at, client_id, scheduled_date',
+      quotes: 'id, user_id, status, updated_at, client_id',
+      invoices: 'id, user_id, status, updated_at, client_id, due_date',
+      clients: 'id, user_id, name, updated_at',
+      // ✅ CRITICAL FIX: Changed '++id' to 'id' since UUIDs are generated in code
+      // ✅ CRITICAL FIX: Removed 'synced' from index to prevent IDBKeyRange errors
+      quote_line_items: 'id, quote_id, created_at',
+      invoice_line_items: 'id, invoice_id, created_at',
+      syncQueue: '++id, entity_type, entity_id, created_at',
+      metadata: 'key, updated_at',
+    });
   }
 
   /**
@@ -233,24 +355,43 @@ class TradieMateDB extends Dexie {
     await this.quotes.clear();
     await this.invoices.clear();
     await this.clients.clear();
+    await this.quote_line_items.clear();
+    await this.invoice_line_items.clear();
     await this.syncQueue.clear();
     await this.metadata.clear();
   }
 
   /**
-   * Clear user-specific data
+   * Clear user-specific data, including related line items and sync queue entries
    */
   async clearUserData(userId: string) {
+    // Get user's quote and invoice IDs so we can clear their line items
+    const userQuoteIds = (await this.quotes.where('user_id').equals(userId).primaryKeys()) as string[];
+    const userInvoiceIds = (await this.invoices.where('user_id').equals(userId).primaryKeys()) as string[];
+
+    // Clear entity tables scoped to this user
     await this.jobs.where('user_id').equals(userId).delete();
     await this.quotes.where('user_id').equals(userId).delete();
     await this.invoices.where('user_id').equals(userId).delete();
     await this.clients.where('user_id').equals(userId).delete();
+
+    // Clear line items belonging to the user's quotes/invoices
+    if (userQuoteIds.length > 0) {
+      await this.quote_line_items.where('quote_id').anyOf(userQuoteIds).delete();
+    }
+    if (userInvoiceIds.length > 0) {
+      await this.invoice_line_items.where('invoice_id').anyOf(userInvoiceIds).delete();
+    }
+
+    // Clear sync queue and metadata for this user
+    await this.syncQueue.clear();
+    await this.metadata.clear();
   }
 
   /**
    * Get metadata value
    */
-  async getMeta(key: string): Promise<any> {
+  async getMeta(key: string): Promise<Json | undefined> {
     const meta = await this.metadata.get(key);
     return meta?.value;
   }
@@ -258,7 +399,7 @@ class TradieMateDB extends Dexie {
   /**
    * Set metadata value
    */
-  async setMeta(key: string, value: any) {
+  async setMeta(key: string, value: Json) {
     await this.metadata.put({
       key,
       value,
@@ -306,11 +447,15 @@ class TradieMateDB extends Dexie {
       quotesCount,
       invoicesCount,
       clientsCount,
+      quoteLineItemsCount,
+      invoiceLineItemsCount,
     ] = await Promise.all([
       this.jobs.count(),
       this.quotes.count(),
       this.invoices.count(),
       this.clients.count(),
+      this.quote_line_items.count(),
+      this.invoice_line_items.count(),
     ]);
 
     return {
@@ -318,6 +463,8 @@ class TradieMateDB extends Dexie {
       quotes: quotesCount,
       invoices: invoicesCount,
       clients: clientsCount,
+      quoteLineItems: quoteLineItemsCount,
+      invoiceLineItems: invoiceLineItemsCount,
       pendingSync: pendingSyncCount,
     };
   }

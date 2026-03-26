@@ -137,6 +137,7 @@ serve(async (req) => {
 
     let smsSent = false;
     let emailSent = false;
+    const warnings: string[] = [];
 
     // Send SMS if requested
     if (send_sms && invoice.clients.phone) {
@@ -147,6 +148,7 @@ serve(async (req) => {
 
         if (!twilioAccountSid || !twilioAuthToken || !twilioPhoneNumber) {
           console.error("Twilio credentials not configured");
+          warnings.push("SMS not sent: Twilio credentials are not configured.");
         } else {
           const twilioClient = Twilio(twilioAccountSid, twilioAuthToken);
 
@@ -174,8 +176,10 @@ ${businessPhone ? `Questions? Call ${businessPhone}` : ""}`;
           console.log("SMS sent successfully");
         }
       } catch (smsError) {
+        const smsErrorMessage = smsError instanceof Error ? smsError.message : "Unknown SMS error";
         console.error("Error sending SMS:", smsError);
-        // Continue execution even if SMS fails
+        warnings.push(`SMS failed: ${smsErrorMessage}. Payment link is still valid.`);
+        // Continue execution - payment link is still valid
       }
     }
 
@@ -206,12 +210,21 @@ ${businessPhone ? `Questions? Call ${businessPhone}` : ""}`;
           emailSent = true;
           console.log("Email sent successfully");
         } else {
-          const errorData = await emailResponse.json();
-          console.error("Error sending email:", errorData);
+          let emailErrorDetail = "Unknown error";
+          try {
+            const errorData = await emailResponse.json();
+            emailErrorDetail = errorData.error || `HTTP ${emailResponse.status}`;
+          } catch {
+            emailErrorDetail = `HTTP ${emailResponse.status}`;
+          }
+          console.error("Error sending email:", emailErrorDetail);
+          warnings.push(`Email failed: ${emailErrorDetail}. Payment link was created successfully.`);
         }
       } catch (emailError) {
+        const emailErrorMessage = emailError instanceof Error ? emailError.message : "Unknown email error";
         console.error("Error sending email:", emailError);
-        // Continue execution even if email fails
+        warnings.push(`Email failed: ${emailErrorMessage}. Payment link was created successfully.`);
+        // Continue execution - payment link is still valid
       }
     }
 
@@ -227,23 +240,50 @@ ${businessPhone ? `Questions? Call ${businessPhone}` : ""}`;
 
     if (updateError) {
       console.error("Error updating invoice:", updateError);
+      // Even if status update fails, payment link was created and notifications may have been sent.
+      // Return partial success so the client knows what happened.
+      warnings.push("Invoice status could not be updated, but the payment link is valid.");
       return new Response(
-        JSON.stringify({ error: "Failed to update invoice status" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: false,
+          partial_success: true,
+          payment_url: paymentUrl,
+          sms_sent: smsSent,
+          email_sent: emailSent,
+          invoice_id: invoice_id,
+          warnings,
+        }),
+        { status: 207, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log("Invoice sent successfully");
+    // Determine if this was a full success or partial success
+    const requestedSms = send_sms && !!invoice.clients.phone;
+    const requestedEmail = send_email && !!invoice.clients.email;
+    const allDeliveriesSucceeded =
+      (!requestedSms || smsSent) && (!requestedEmail || emailSent);
+
+    if (!allDeliveriesSucceeded) {
+      console.log("Invoice sent with partial delivery failures:", warnings);
+    } else {
+      console.log("Invoice sent successfully");
+    }
+
+    // Use 207 Multi-Status when there are partial failures so the client
+    // can distinguish full success from partial success
+    const statusCode = allDeliveriesSucceeded ? 200 : 207;
 
     return new Response(
       JSON.stringify({
-        success: true,
+        success: allDeliveriesSucceeded,
+        partial_success: !allDeliveriesSucceeded && warnings.length > 0,
         payment_url: paymentUrl,
         sms_sent: smsSent,
         email_sent: emailSent,
         invoice_id: invoice_id,
+        warnings: warnings.length > 0 ? warnings : undefined,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: statusCode, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error: unknown) {

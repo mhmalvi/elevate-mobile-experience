@@ -22,7 +22,7 @@ export default function VoiceQuoteWizard() {
     const { user } = useAuth();
     const { toast } = useToast();
     const [step, setStep] = useState<WizardStep>('intro');
-    const [isSpeaking, setIsSpeaking] = useState(false);
+    const [_isSpeaking, setIsSpeaking] = useState(false);
 
     // Form Data
     const [clientName, setClientName] = useState('');

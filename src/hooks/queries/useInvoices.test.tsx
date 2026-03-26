@@ -15,6 +15,60 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }));
 
+// Mock useTeam hook — the hooks under test call useTeam() internally
+vi.mock('@/hooks/useTeam', () => ({
+  useTeam: () => ({
+    team: { id: 'test-team-id', name: 'Test Team' },
+    userRole: 'owner',
+    teamMembers: [],
+    allTeams: [],
+    canCreate: true,
+    canEdit: true,
+    canDelete: true,
+    canManageTeam: true,
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+    switchTeam: vi.fn(),
+  }),
+}));
+
+/**
+ * Build a fully chainable supabase query mock that resolves with the given
+ * value when awaited (via a custom `.then()` implementation). This handles
+ * the pattern where the hook calls an additional `.eq()` after the "terminal"
+ * method (e.g. `.range()` or `.limit()`) depending on whether a team is set.
+ */
+function makeChainableMock(resolvedValue: Record<string, unknown>) {
+  const mock: Record<string, ReturnType<typeof vi.fn>> & {
+    then: (onFulfilled: (v: unknown) => unknown) => Promise<unknown>;
+  } = {
+    select: vi.fn(),
+    eq: vi.fn(),
+    is: vi.fn(),
+    or: vi.fn(),
+    order: vi.fn(),
+    range: vi.fn(),
+    limit: vi.fn(),
+    single: vi.fn(),
+    update: vi.fn(),
+    then: (onFulfilled: (v: unknown) => unknown) =>
+      Promise.resolve(resolvedValue).then(onFulfilled),
+  };
+
+  mock.select.mockReturnValue(mock);
+  mock.eq.mockReturnValue(mock);
+  mock.is.mockReturnValue(mock);
+  mock.or.mockReturnValue(mock);
+  mock.order.mockReturnValue(mock);
+  mock.range.mockReturnValue(mock);
+  mock.limit.mockReturnValue(mock);
+  mock.update.mockReturnValue(mock);
+  mock.single.mockResolvedValue(resolvedValue);
+
+  return mock;
+}
+
 describe('Invoice Management - useInvoices Hook', () => {
   let queryClient: QueryClient;
 
@@ -74,17 +128,11 @@ describe('Invoice Management - useInvoices Hook', () => {
         },
       ];
 
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        range: vi.fn().mockResolvedValue({
-          data: mockInvoices,
-          count: 2,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: mockInvoices,
+        count: 2,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -123,17 +171,11 @@ describe('Invoice Management - useInvoices Hook', () => {
         },
       ];
 
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        range: vi.fn().mockResolvedValue({
-          data: mockInvoices,
-          count: 3,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: mockInvoices,
+        count: 3,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -184,15 +226,10 @@ describe('Invoice Management - useInvoices Hook', () => {
         deleted_at: null,
       };
 
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
-          data: mockInvoice,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: mockInvoice,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -215,15 +252,10 @@ describe('Invoice Management - useInvoices Hook', () => {
         balance: 1200,
       };
 
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
-          data: mockInvoice,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: mockInvoice,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -406,15 +438,10 @@ describe('Invoice Management - useInvoices Hook', () => {
         ],
       };
 
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
-          data: mockInvoice,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: mockInvoice,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -450,15 +477,10 @@ describe('Invoice Management - useInvoices Hook', () => {
         status: 'paid',
       };
 
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
-          data: mockInvoice,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: mockInvoice,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -478,15 +500,10 @@ describe('Invoice Management - useInvoices Hook', () => {
         balance: -100,
       };
 
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
-          data: mockInvoice,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: mockInvoice,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 

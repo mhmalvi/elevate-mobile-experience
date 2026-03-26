@@ -269,7 +269,7 @@ describe('Password Validation', () => {
   });
 
   it('should provide helpful error messages', () => {
-    expect(validatePassword('short').error).toContain('12 characters');
+    expect(validatePassword('short').error).toContain('8 characters');
     expect(validatePassword('nouppercase1!').error).toContain('uppercase');
     expect(validatePassword('NOLOWERCASE1!').error).toContain('lowercase');
     expect(validatePassword('NoNumbersHere!').error).toContain('number');

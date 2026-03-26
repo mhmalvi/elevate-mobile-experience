@@ -36,29 +36,33 @@ export default function ClientEdit() {
   }, [id]);
 
   const fetchClient = async () => {
-    const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('id', id)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', id)
+        .is('deleted_at', null)
+        .single();
 
-    if (error || !data) {
-      toast({ title: 'Client not found', variant: 'destructive' });
-      navigate('/clients');
-      return;
+      if (error || !data) {
+        toast({ title: 'Client not found', variant: 'destructive' });
+        navigate('/clients');
+        return;
+      }
+
+      setForm({
+        name: data.name,
+        email: data.email || '',
+        phone: data.phone || '',
+        address: data.address || '',
+        suburb: data.suburb || '',
+        state: data.state || 'NSW',
+        postcode: data.postcode || '',
+        notes: data.notes || '',
+      });
+    } finally {
+      setFetching(false);
     }
-
-    setForm({
-      name: data.name,
-      email: data.email || '',
-      phone: data.phone || '',
-      address: data.address || '',
-      suburb: data.suburb || '',
-      state: data.state || 'NSW',
-      postcode: data.postcode || '',
-      notes: data.notes || '',
-    });
-    setFetching(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -66,18 +70,21 @@ export default function ClientEdit() {
     if (!user) return;
 
     setLoading(true);
-    const { error } = await supabase
-      .from('clients')
-      .update(form)
-      .eq('id', id);
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .update(form)
+        .eq('id', id);
 
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Client updated', description: `${form.name} has been updated.` });
-      navigate(`/clients/${id}`);
+      if (error) {
+        toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Client updated', description: `${form.name} has been updated.` });
+        navigate(`/clients/${id}`);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   if (fetching) {

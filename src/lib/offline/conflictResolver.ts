@@ -57,9 +57,8 @@ export function resolveConflict<T extends { updated_at: string }>(
         };
       }
 
-    case 'merge':
+    case 'merge': {
       // Merge strategy: combine both versions intelligently
-      // This is complex and entity-specific
       const merged = mergeData(localData, serverData);
       return {
         resolved: merged,
@@ -67,6 +66,7 @@ export function resolveConflict<T extends { updated_at: string }>(
         strategy,
         message: 'Changes were merged automatically.',
       };
+    }
 
     default:
       return {
@@ -81,7 +81,7 @@ export function resolveConflict<T extends { updated_at: string }>(
  * Merge two data objects intelligently
  * Uses server data as base and applies non-conflicting local changes
  */
-function mergeData<T extends Record<string, any>>(localData: T, serverData: T): T {
+function mergeData<T extends Record<string, unknown>>(localData: T, serverData: T): T {
   const merged = { ...serverData };
 
   // For each field in local data
@@ -134,7 +134,7 @@ function isServerComputedField(fieldName: string): boolean {
  * Check if data has conflicts
  * Returns true if local and server versions differ significantly
  */
-export function hasConflict<T extends Record<string, any>>(
+export function hasConflict<T extends Record<string, unknown>>(
   localData: T,
   serverData: T,
   ignoreFields: string[] = ['updated_at', 'deleted_at']
@@ -156,7 +156,7 @@ export function hasConflict<T extends Record<string, any>>(
 /**
  * Get list of conflicting fields
  */
-export function getConflictingFields<T extends Record<string, any>>(
+export function getConflictingFields<T extends Record<string, unknown>>(
   localData: T,
   serverData: T,
   ignoreFields: string[] = ['updated_at', 'deleted_at']

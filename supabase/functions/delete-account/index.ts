@@ -47,6 +47,56 @@ serve(async (req) => {
 
     console.log(`Starting account deletion for user: ${user.id}`);
 
+    // Fetch profile before any mutations so we have stripe_customer_id
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("stripe_customer_id")
+      .eq("user_id", user.id)
+      .single();
+
+    // Cancel any active Stripe subscriptions before deleting the account so
+    // the customer is not billed after deletion.
+    const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (stripeSecretKey && profile?.stripe_customer_id) {
+      const customerId = profile.stripe_customer_id;
+      try {
+        // List all active/trialing subscriptions for this customer
+        const listUrl =
+          `https://api.stripe.com/v1/subscriptions?customer=${encodeURIComponent(customerId)}&status=active&limit=10`;
+        const listRes = await fetch(listUrl, {
+          headers: { Authorization: `Bearer ${stripeSecretKey}` },
+        });
+
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          const subscriptions: Array<{ id: string }> = listData?.data ?? [];
+
+          for (const sub of subscriptions) {
+            const cancelRes = await fetch(
+              `https://api.stripe.com/v1/subscriptions/${encodeURIComponent(sub.id)}`,
+              {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${stripeSecretKey}` },
+              }
+            );
+            if (cancelRes.ok) {
+              console.log(`Cancelled Stripe subscription ${sub.id} for customer ${customerId}`);
+            } else {
+              const cancelErr = await cancelRes.json().catch(() => ({}));
+              console.error(`Failed to cancel Stripe subscription ${sub.id}:`, cancelErr);
+            }
+          }
+        } else {
+          const listErr = await listRes.json().catch(() => ({}));
+          console.error(`Failed to list Stripe subscriptions for customer ${customerId}:`, listErr);
+        }
+      } catch (stripeError) {
+        // Log but do not abort — we still want to delete the account even if
+        // Stripe cancellation fails. Admins can reconcile via the Stripe dashboard.
+        console.error("Stripe subscription cancellation error during account deletion:", stripeError);
+      }
+    }
+
     // Soft delete user data by setting deleted_at timestamp
     const deletedAt = new Date().toISOString();
 
@@ -60,8 +110,8 @@ serve(async (req) => {
       console.error("Error soft deleting profile:", profileError);
     }
 
-    // Soft delete related data (clients, quotes, invoices, jobs)
-    const tables = ['clients', 'quotes', 'invoices', 'jobs'];
+    // Soft delete related data (clients, quotes, invoices, jobs, subcontractors)
+    const tables = ['clients', 'quotes', 'invoices', 'jobs', 'subcontractors'];
 
     for (const table of tables) {
       const { error } = await supabase
@@ -71,6 +121,76 @@ serve(async (req) => {
 
       if (error) {
         console.error(`Error soft deleting ${table}:`, error);
+      }
+    }
+
+    // Soft delete line items via parent invoices
+    const { data: userInvoices } = await supabase
+      .from("invoices")
+      .select("id")
+      .eq("user_id", user.id);
+
+    if (userInvoices && userInvoices.length > 0) {
+      const invoiceIds = userInvoices.map((inv: any) => inv.id);
+      const { error: iliError } = await supabase
+        .from("invoice_line_items")
+        .update({ deleted_at: deletedAt })
+        .in("invoice_id", invoiceIds);
+
+      if (iliError) {
+        console.error("Error soft deleting invoice_line_items:", iliError);
+      }
+    }
+
+    // Soft delete line items via parent quotes
+    const { data: userQuotes } = await supabase
+      .from("quotes")
+      .select("id")
+      .eq("user_id", user.id);
+
+    if (userQuotes && userQuotes.length > 0) {
+      const quoteIds = userQuotes.map((q: any) => q.id);
+      const { error: qliError } = await supabase
+        .from("quote_line_items")
+        .update({ deleted_at: deletedAt })
+        .in("quote_id", quoteIds);
+
+      if (qliError) {
+        console.error("Error soft deleting quote_line_items:", qliError);
+      }
+    }
+
+    // Remove team memberships
+    const { error: tmError } = await supabase
+      .from("team_members")
+      .delete()
+      .eq("user_id", user.id);
+
+    if (tmError) {
+      console.error("Error removing team_members:", tmError);
+    }
+
+    // Invalidate team invitations sent by this user
+    const { error: tiError } = await supabase
+      .from("team_invitations")
+      .update({ status: "invalidated" })
+      .eq("invited_by", user.id);
+
+    if (tiError) {
+      console.error("Error invalidating team_invitations:", tiError);
+    }
+
+    // Also invalidate invitations sent TO this user's email
+    const userEmail = user.email;
+    if (userEmail) {
+      const { error: tiEmailError } = await supabase
+        .from("team_invitations")
+        .update({ status: "invalidated" })
+        .eq("email", userEmail)
+        .eq("status", "pending");
+
+      if (tiEmailError) {
+        console.error("Error invalidating team_invitations by email:", tiEmailError);
       }
     }
 

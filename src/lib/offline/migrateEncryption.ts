@@ -47,7 +47,7 @@ export async function migrateToEncryptedStorage(): Promise<void> {
     console.debug(`[Migration] Migrating ${clients.length} clients...`);
     for (const client of clients) {
       // Check if already encrypted (encrypted data will be base64 and won't contain spaces typically)
-      const isAlreadyEncrypted = client.name && /^[A-Za-z0-9+/=]+$/.test(client.name);
+      const isAlreadyEncrypted = client.name && client.name.length > 40 && /^[A-Za-z0-9+/=]+$/.test(client.name);
       if (!isAlreadyEncrypted) {
         const encrypted = await encryptClientFields(client);
         await db.clients.put(encrypted);

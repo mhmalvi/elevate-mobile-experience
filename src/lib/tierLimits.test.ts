@@ -11,7 +11,7 @@ describe('tierLimits', () => {
     it('free tier should have strict limits', () => {
       expect(TIER_LIMITS.free.quotes).toBe(5);
       expect(TIER_LIMITS.free.invoices).toBe(5);
-      expect(TIER_LIMITS.free.jobs).toBe(3);
+      expect(TIER_LIMITS.free.jobs).toBe(10);
       expect(TIER_LIMITS.free.sms).toBe(5);
       expect(TIER_LIMITS.free.emails).toBe(10);
       expect(TIER_LIMITS.free.clients).toBe(10);

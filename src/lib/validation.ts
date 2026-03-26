@@ -113,8 +113,8 @@ export function validatePassword(password: string): ValidationResult {
     return { valid: false, error: 'Password is required' };
   }
 
-  if (password.length < 12) {
-    return { valid: false, error: 'Password must be at least 12 characters' };
+  if (password.length < 8) {
+    return { valid: false, error: 'Password must be at least 8 characters' };
   }
 
   if (password.length > 128) {

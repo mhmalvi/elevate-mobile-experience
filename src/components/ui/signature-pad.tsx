@@ -17,20 +17,34 @@ export function SignaturePad({ onSave, className }: SignaturePadProps) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const initCanvas = () => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-    // Set canvas size
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * 2;
-    canvas.height = rect.height * 2;
-    ctx.scale(2, 2);
+      // Set canvas size
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * 2;
+      canvas.height = rect.height * 2;
+      ctx.scale(2, 2);
 
-    // Set drawing styles
-    ctx.strokeStyle = 'hsl(var(--foreground))';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+      // Set drawing styles
+      ctx.strokeStyle = 'hsl(var(--foreground))';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+    };
+
+    initCanvas();
+
+    const observer = new ResizeObserver(() => {
+      initCanvas();
+      setHasSignature(false);
+    });
+    observer.observe(canvas);
+
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   const getCoordinates = (e: React.MouseEvent | React.TouchEvent) => {

@@ -54,7 +54,7 @@ serve(async (req) => {
     if (!priceId) throw new Error('Price ID is required');
     logStep('Request body parsed', { priceId, tierId });
 
-    const stripe = new Stripe(stripeKey, { apiVersion: '2025-04-30.basil' });
+    const stripe = new Stripe(stripeKey, { apiVersion: '2025-08-27.basil' });
 
     // Validate the price exists in Stripe before proceeding
     try {

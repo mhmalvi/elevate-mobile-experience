@@ -80,7 +80,7 @@ serve(async (req) => {
       );
     }
 
-    const appUrl = Deno.env.get("APP_URL") || "https://elevate-mobile-experience.vercel.app";
+    const appUrl = Deno.env.get("APP_URL") || "https://app.tradiemate.com.au";
 
     // Check if URL is a valid public URL (not localhost/local IP)
     const isPublicUrl = appUrl.startsWith("https://") &&

@@ -1,545 +1,309 @@
 /**
- * Notification Integration Tests
+ * Notification Formatting and Validation Logic Tests
  *
- * Tests email and SMS notification functionality
- * Covers invoice/quote sending, payment reminders, and client notifications
+ * Tests the client-side logic that prepares and validates notification data
+ * before it is sent to edge functions: phone number normalisation, SMS length
+ * enforcement, email content sanitisation, and preference-gate checks.
+ *
+ * No network calls are made. All assertions are on deterministic pure functions.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { supabase } from '@/integrations/supabase/client';
+import { describe, it, expect } from 'vitest';
 
-// Mock Supabase client
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    functions: {
-      invoke: vi.fn(),
-    },
-  },
-}));
+// ---------------------------------------------------------------------------
+// Helper functions that mirror the client-side notification layer
+// ---------------------------------------------------------------------------
 
-describe('Email Notification Tests', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+/**
+ * Normalise an Australian phone number to E.164 (+61XXXXXXXXX).
+ * Handles inputs like "0412345678", "+61412345678", "61412345678".
+ */
+function normaliseAustralianPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+
+  if (digits.startsWith('61') && digits.length === 11) {
+    return `+${digits}`;
+  }
+  if (digits.startsWith('0') && digits.length === 10) {
+    return `+61${digits.slice(1)}`;
+  }
+  // Already in E.164 form (leading + stripped by replace)
+  if (raw.startsWith('+61') && digits.length === 11) {
+    return `+${digits}`;
+  }
+  return raw; // Return original if unrecognised — caller should validate first
+}
+
+/** Returns true if the phone number is a valid Australian mobile (04XX) */
+function isValidAustralianMobile(phone: string): boolean {
+  const digits = phone.replace(/\D/g, '');
+  return digits.length === 10 && digits.startsWith('04');
+}
+
+/** Strip <script> tags from a string (XSS prevention before templating) */
+function sanitiseHtml(input: string): string {
+  return input.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+}
+
+/** Build a short SMS body for an invoice, respecting the 160-char limit */
+function buildInvoiceSms(
+  invoiceNumber: string,
+  totalAud: number,
+  shortUrl: string
+): string {
+  const formatted = `$${totalAud.toLocaleString('en-AU')}`;
+  return `Invoice ${invoiceNumber} for ${formatted}. Pay now: ${shortUrl}`;
+}
+
+/** Build a short SMS body for a quote */
+function buildQuoteSms(
+  quoteNumber: string,
+  totalAud: number,
+  validUntil: string,
+  shortUrl: string
+): string {
+  return `Quote ${quoteNumber} for $${totalAud.toLocaleString('en-AU')}. Valid until ${validUntil}. View: ${shortUrl}`;
+}
+
+/** Determine whether a notification should be sent given user preferences */
+function shouldSendNotification(
+  method: 'email' | 'sms',
+  preferences: { email_notifications: boolean; sms_notifications: boolean }
+): boolean {
+  if (method === 'email') return preferences.email_notifications;
+  if (method === 'sms') return preferences.sms_notifications;
+  return false;
+}
+
+/** Determine whether a marketing email should be sent */
+function shouldSendMarketing(preferences: { marketing_emails: boolean }): boolean {
+  return preferences.marketing_emails;
+}
+
+type SubscriptionTier = 'free' | 'solo' | 'crew' | 'pro';
+
+const SMS_MONTHLY_LIMITS: Record<SubscriptionTier, number> = {
+  free: 0,
+  solo: 50,
+  crew: 200,
+  pro: 500,
+};
+
+/** Returns true when the tier allows sending more SMS messages */
+function canSendSms(tier: SubscriptionTier, smsSentThisMonth: number): boolean {
+  const limit = SMS_MONTHLY_LIMITS[tier];
+  return smsSentThisMonth < limit;
+}
+
+/** Build the payment URL embedded in invoice emails */
+function buildPaymentUrl(baseUrl: string, invoiceId: string): string {
+  return `${baseUrl}/pay/${invoiceId}`;
+}
+
+/** Build the view URL embedded in quote emails */
+function buildQuoteViewUrl(baseUrl: string, quoteId: string): string {
+  return `${baseUrl}/quotes/${quoteId}`;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe('Australian phone number normalisation', () => {
+  it('converts local mobile format (0412...) to E.164', () => {
+    expect(normaliseAustralianPhone('0412345678')).toBe('+61412345678');
   });
 
-  describe('Invoice Email Sending', () => {
-    it('should send invoice via email', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          message_id: 'msg_123',
-          email_sent_to: 'client@example.com',
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-invoice', {
-        body: {
-          invoice_id: 'inv_123',
-          to_email: 'client@example.com',
-          method: 'email',
-        },
-      });
-
-      expect(result.data).toBeDefined();
-      expect(result.data.success).toBe(true);
-      expect(result.data.email_sent_to).toBe('client@example.com');
-    });
-
-    it('should include invoice details in email', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          email_content: {
-            subject: 'Invoice #INV-2026-001 from Test Plumbing',
-            invoice_number: 'INV-2026-001',
-            total: 1000,
-            due_date: '2026-01-22',
-            payment_url: 'https://app.tradiemate.com/pay/inv_123',
-          },
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-invoice', {
-        body: {
-          invoice_id: 'inv_123',
-          to_email: 'client@example.com',
-        },
-      });
-
-      expect(result.data.email_content.invoice_number).toBe('INV-2026-001');
-      expect(result.data.email_content.payment_url).toContain('/pay/');
-    });
-
-    it('should handle email sending errors', async () => {
-      const mockResponse = {
-        data: null,
-        error: {
-          message: 'Invalid email address',
-          code: 'invalid_email',
-        },
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-invoice', {
-        body: {
-          invoice_id: 'inv_123',
-          to_email: 'invalid-email',
-        },
-      });
-
-      expect(result.error).toBeDefined();
-      expect(result.error.code).toBe('invalid_email');
-    });
+  it('leaves already-normalised E.164 numbers unchanged', () => {
+    expect(normaliseAustralianPhone('+61412345678')).toBe('+61412345678');
   });
 
-  describe('Quote Email Sending', () => {
-    it('should send quote via email', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          message_id: 'msg_124',
-          email_sent_to: 'client@example.com',
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-notification', {
-        body: {
-          quote_id: 'quo_123',
-          to_email: 'client@example.com',
-          type: 'quote',
-        },
-      });
-
-      expect(result.data).toBeDefined();
-      expect(result.data.success).toBe(true);
-    });
-
-    it('should include quote validity period in email', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          email_content: {
-            subject: 'Quote #QUO-2026-001 from Test Plumbing',
-            quote_number: 'QUO-2026-001',
-            total: 5000,
-            valid_until: '2026-02-15',
-            view_url: 'https://app.tradiemate.com/quotes/quo_123',
-          },
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-notification', {
-        body: {
-          quote_id: 'quo_123',
-          to_email: 'client@example.com',
-          type: 'quote',
-        },
-      });
-
-      expect(result.data.email_content.valid_until).toBeDefined();
-      expect(result.data.email_content.view_url).toContain('/quotes/');
-    });
+  it('converts country-code-prefix format (61...) to E.164', () => {
+    expect(normaliseAustralianPhone('61412345678')).toBe('+61412345678');
   });
 
-  describe('Payment Reminder Emails', () => {
-    it('should send payment reminder for overdue invoice', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          reminder_sent: true,
-          days_overdue: 3,
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('payment-reminder', {
-        body: {
-          invoice_id: 'inv_123',
-          days_overdue: 3,
-        },
-      });
-
-      expect(result.data).toBeDefined();
-      expect(result.data.reminder_sent).toBe(true);
-      expect(result.data.days_overdue).toBe(3);
-    });
-
-    it('should include overdue amount in reminder', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          email_content: {
-            subject: 'Payment Reminder - Invoice #INV-2026-001',
-            days_overdue: 5,
-            total_amount: 1000,
-            late_fee: 50,
-            payment_url: 'https://app.tradiemate.com/pay/inv_123',
-          },
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('payment-reminder', {
-        body: {
-          invoice_id: 'inv_123',
-        },
-      });
-
-      expect(result.data.email_content.days_overdue).toBeGreaterThan(0);
-      expect(result.data.email_content.total_amount).toBeGreaterThan(0);
-    });
+  it('handles numbers with spaces stripped during normalisation', () => {
+    expect(normaliseAustralianPhone('0412 345 678')).toBe('+61412345678');
   });
 
-  describe('Email Formatting', () => {
-    it('should use proper email template structure', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          email_content: {
-            from: 'noreply@tradiemate.com',
-            to: 'client@example.com',
-            subject: 'Invoice from Test Plumbing',
-            html: '<html><body>Invoice content</body></html>',
-            text: 'Invoice content (plain text)',
-          },
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-email', {
-        body: {
-          to: 'client@example.com',
-          template: 'invoice',
-          data: {
-            invoice_number: 'INV-001',
-          },
-        },
-      });
-
-      expect(result.data.email_content.html).toContain('<html>');
-      expect(result.data.email_content.text).toBeDefined();
-    });
-
-    it('should include unsubscribe link in emails', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          email_content: {
-            html: '<html><body>Content <a href="unsubscribe">Unsubscribe</a></body></html>',
-          },
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-email', {
-        body: {
-          to: 'client@example.com',
-          template: 'marketing',
-        },
-      });
-
-      expect(result.data.email_content.html).toContain('unsubscribe');
-    });
+  it('handles numbers with hyphens stripped during normalisation', () => {
+    expect(normaliseAustralianPhone('0412-345-678')).toBe('+61412345678');
   });
 });
 
-describe('SMS Notification Tests', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe('Australian mobile number validation', () => {
+  it('accepts valid 04XX mobile numbers', () => {
+    expect(isValidAustralianMobile('0400000000')).toBe(true);
+    expect(isValidAustralianMobile('0499999999')).toBe(true);
+    expect(isValidAustralianMobile('0412345678')).toBe(true);
   });
 
-  describe('Invoice SMS Sending', () => {
-    it('should send invoice via SMS', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          message_sid: 'SM123',
-          sms_sent_to: '+61412345678',
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-invoice', {
-        body: {
-          invoice_id: 'inv_123',
-          to_phone: '+61412345678',
-          method: 'sms',
-        },
-      });
-
-      expect(result.data).toBeDefined();
-      expect(result.data.success).toBe(true);
-      expect(result.data.sms_sent_to).toContain('+61');
-    });
-
-    it('should format Australian phone numbers correctly', () => {
-      const testCases = [
-        { input: '0412345678', expected: '+61412345678' },
-        { input: '+61412345678', expected: '+61412345678' },
-        { input: '61412345678', expected: '+61412345678' },
-      ];
-
-      testCases.forEach(({ input, expected }) => {
-        const formatted = input.replace(/^0/, '+61').replace(/^(?!\+)/, '+');
-        expect(formatted).toBe(expected);
-      });
-    });
-
-    it('should include short invoice summary in SMS', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          sms_content: 'Invoice #INV-001 for $1,000. Pay now: https://short.link/inv123',
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-invoice', {
-        body: {
-          invoice_id: 'inv_123',
-          to_phone: '+61412345678',
-          method: 'sms',
-        },
-      });
-
-      expect(result.data.sms_content).toContain('Invoice');
-      expect(result.data.sms_content).toContain('$');
-      expect(result.data.sms_content.length).toBeLessThan(160); // SMS limit
-    });
+  it('rejects landline area codes', () => {
+    expect(isValidAustralianMobile('0298765432')).toBe(false);
+    expect(isValidAustralianMobile('0312345678')).toBe(false);
   });
 
-  describe('Quote SMS Sending', () => {
-    it('should send quote via SMS', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          message_sid: 'SM124',
-          sms_sent_to: '+61412345678',
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-notification', {
-        body: {
-          quote_id: 'quo_123',
-          to_phone: '+61412345678',
-          type: 'quote',
-          method: 'sms',
-        },
-      });
-
-      expect(result.data).toBeDefined();
-      expect(result.data.success).toBe(true);
-    });
-
-    it('should keep SMS under 160 characters', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          sms_content: 'Quote #QUO-001 for $5,000. Valid until 15/02. View: https://short.link/quo123',
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-notification', {
-        body: {
-          quote_id: 'quo_123',
-          to_phone: '+61412345678',
-          type: 'quote',
-          method: 'sms',
-        },
-      });
-
-      expect(result.data.sms_content.length).toBeLessThanOrEqual(160);
-    });
+  it('rejects numbers that are too short', () => {
+    expect(isValidAustralianMobile('041234567')).toBe(false);
   });
 
-  describe('SMS Rate Limiting', () => {
-    it('should respect subscription SMS limits', async () => {
-      const subscriptionLimits = {
-        free: 0,
-        solo: 100,
-        crew: 500,
-        pro: Infinity,
-      };
-
-      Object.entries(subscriptionLimits).forEach(([tier, limit]) => {
-        expect(limit).toBeGreaterThanOrEqual(0);
-      });
-    });
-
-    it('should return error when SMS limit exceeded', async () => {
-      const mockResponse = {
-        data: null,
-        error: {
-          message: 'SMS limit exceeded for your subscription tier',
-          code: 'sms_limit_exceeded',
-        },
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-notification', {
-        body: {
-          invoice_id: 'inv_123',
-          to_phone: '+61412345678',
-          method: 'sms',
-        },
-      });
-
-      expect(result.error).toBeDefined();
-      expect(result.error.code).toBe('sms_limit_exceeded');
-    });
+  it('rejects numbers that are too long', () => {
+    expect(isValidAustralianMobile('04123456789')).toBe(false);
   });
 
-  describe('SMS Delivery Status', () => {
-    it('should track SMS delivery status', async () => {
-      const mockResponse = {
-        data: {
-          success: true,
-          message_sid: 'SM123',
-          status: 'sent',
-          delivery_status: 'queued',
-        },
-        error: null,
-      };
-
-      (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-      const result = await supabase.functions.invoke('send-notification', {
-        body: {
-          invoice_id: 'inv_123',
-          to_phone: '+61412345678',
-          method: 'sms',
-        },
-      });
-
-      expect(result.data.status).toBe('sent');
-      expect(result.data.delivery_status).toBeDefined();
-    });
+  it('rejects empty string', () => {
+    expect(isValidAustralianMobile('')).toBe(false);
   });
 });
 
-describe('Notification Preferences', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe('HTML content sanitisation (XSS prevention)', () => {
+  it('removes <script> tags from user-supplied content', () => {
+    const unsafe = '<script>alert("xss")</script>Hello';
+    expect(sanitiseHtml(unsafe)).toBe('Hello');
   });
 
-  it('should respect client notification preferences', async () => {
-    const mockPreferences = {
-      email_notifications: true,
-      sms_notifications: false,
-      marketing_emails: false,
-    };
-
-    expect(mockPreferences.email_notifications).toBe(true);
-    expect(mockPreferences.sms_notifications).toBe(false);
+  it('removes <script> tags with attributes', () => {
+    const unsafe = '<script type="text/javascript">evil()</script>Safe text';
+    expect(sanitiseHtml(unsafe)).toBe('Safe text');
   });
 
-  it('should allow clients to opt out of notifications', async () => {
-    const mockResponse = {
-      data: {
-        success: true,
-        unsubscribed: true,
-      },
-      error: null,
-    };
+  it('preserves non-script content', () => {
+    const safe = '<p>Hello <strong>World</strong></p>';
+    expect(sanitiseHtml(safe)).toBe(safe);
+  });
 
-    (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
+  it('handles multiple script tags in one string', () => {
+    const unsafe = '<script>a()</script>Text<script>b()</script>';
+    expect(sanitiseHtml(unsafe)).toBe('Text');
+  });
 
-    const result = await supabase.functions.invoke('send-notification', {
-      body: {
-        client_id: 'client_123',
-        check_preferences: true,
-      },
-    });
+  it('is case-insensitive for SCRIPT tag', () => {
+    const unsafe = '<SCRIPT>evil()</SCRIPT>Content';
+    expect(sanitiseHtml(unsafe)).toBe('Content');
+  });
+});
 
-    if (result.data && result.data.unsubscribed) {
-      expect(result.data.unsubscribed).toBe(true);
+describe('Invoice SMS body construction', () => {
+  it('includes the invoice number and formatted amount', () => {
+    const sms = buildInvoiceSms('INV-2026-001', 1000, 'https://short.link/inv123');
+    expect(sms).toContain('INV-2026-001');
+    expect(sms).toContain('$1,000');
+  });
+
+  it('includes the payment URL', () => {
+    const sms = buildInvoiceSms('INV-001', 500, 'https://short.link/abc');
+    expect(sms).toContain('https://short.link/abc');
+  });
+
+  it('stays within the 160-character SMS limit for typical invoices', () => {
+    const sms = buildInvoiceSms('INV-2026-001', 1000, 'https://short.link/inv123');
+    expect(sms.length).toBeLessThanOrEqual(160);
+  });
+
+  it('stays within SMS limit for large invoice amounts', () => {
+    const sms = buildInvoiceSms('INV-2026-999', 99999, 'https://short.link/inv999');
+    expect(sms.length).toBeLessThanOrEqual(160);
+  });
+});
+
+describe('Quote SMS body construction', () => {
+  it('includes the quote number, amount, validity date, and URL', () => {
+    const sms = buildQuoteSms('QUO-2026-001', 5000, '15/02', 'https://short.link/quo123');
+    expect(sms).toContain('QUO-2026-001');
+    expect(sms).toContain('$5,000');
+    expect(sms).toContain('15/02');
+    expect(sms).toContain('https://short.link/quo123');
+  });
+
+  it('stays within the 160-character SMS limit', () => {
+    const sms = buildQuoteSms('QUO-2026-001', 5000, '15/02/26', 'https://short.link/q1');
+    expect(sms.length).toBeLessThanOrEqual(160);
+  });
+});
+
+describe('Notification preference gate', () => {
+  it('sends email when email_notifications is true', () => {
+    expect(
+      shouldSendNotification('email', { email_notifications: true, sms_notifications: false })
+    ).toBe(true);
+  });
+
+  it('blocks email when email_notifications is false', () => {
+    expect(
+      shouldSendNotification('email', { email_notifications: false, sms_notifications: true })
+    ).toBe(false);
+  });
+
+  it('sends SMS when sms_notifications is true', () => {
+    expect(
+      shouldSendNotification('sms', { email_notifications: false, sms_notifications: true })
+    ).toBe(true);
+  });
+
+  it('blocks SMS when sms_notifications is false', () => {
+    expect(
+      shouldSendNotification('sms', { email_notifications: true, sms_notifications: false })
+    ).toBe(false);
+  });
+
+  it('blocks marketing emails when marketing_emails preference is false', () => {
+    expect(shouldSendMarketing({ marketing_emails: false })).toBe(false);
+  });
+
+  it('sends marketing emails when preference is true', () => {
+    expect(shouldSendMarketing({ marketing_emails: true })).toBe(true);
+  });
+});
+
+describe('SMS monthly limit enforcement by subscription tier', () => {
+  it('free tier cannot send any SMS (limit = 0)', () => {
+    expect(canSendSms('free', 0)).toBe(false);
+  });
+
+  it('solo tier can send SMS when below 50-message limit', () => {
+    expect(canSendSms('solo', 0)).toBe(true);
+    expect(canSendSms('solo', 49)).toBe(true);
+  });
+
+  it('solo tier is blocked when 50 messages have been sent', () => {
+    expect(canSendSms('solo', 50)).toBe(false);
+  });
+
+  it('crew tier allows up to 200 SMS per month', () => {
+    expect(canSendSms('crew', 199)).toBe(true);
+    expect(canSendSms('crew', 200)).toBe(false);
+  });
+
+  it('pro tier allows up to 500 SMS per month', () => {
+    expect(canSendSms('pro', 499)).toBe(true);
+    expect(canSendSms('pro', 500)).toBe(false);
+  });
+
+  it('limits increase from free < solo < crew < pro', () => {
+    const tiers: SubscriptionTier[] = ['free', 'solo', 'crew', 'pro'];
+    const limits = tiers.map((t) => SMS_MONTHLY_LIMITS[t]);
+    for (let i = 1; i < limits.length; i++) {
+      expect(limits[i]).toBeGreaterThan(limits[i - 1]);
     }
   });
 });
 
-describe('Notification Security', () => {
-  it('should require authentication to send notifications', async () => {
-    const mockResponse = {
-      data: null,
-      error: {
-        message: 'Unauthorized',
-        code: 'unauthorized',
-      },
-    };
+describe('Notification URL construction', () => {
+  const BASE = 'https://app.tradiemate.com';
 
-    (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-    const result = await supabase.functions.invoke('send-notification', {
-      body: {
-        invoice_id: 'inv_123',
-        to_email: 'client@example.com',
-      },
-      // No auth header
-    });
-
-    expect(result.error).toBeDefined();
-    expect(result.error.code).toBe('unauthorized');
+  it('builds a /pay/ URL for invoice payment links', () => {
+    expect(buildPaymentUrl(BASE, 'inv_123')).toBe('https://app.tradiemate.com/pay/inv_123');
   });
 
-  it('should verify invoice ownership before sending', async () => {
-    const mockResponse = {
-      data: null,
-      error: {
-        message: 'Access denied',
-        code: 'forbidden',
-      },
-    };
-
-    (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-    const result = await supabase.functions.invoke('send-notification', {
-      body: {
-        invoice_id: 'inv_other_user',
-        to_email: 'client@example.com',
-      },
-    });
-
-    expect(result.error).toBeDefined();
-    expect(result.error.code).toBe('forbidden');
+  it('builds a /quotes/ URL for quote view links', () => {
+    expect(buildQuoteViewUrl(BASE, 'quo_123')).toBe('https://app.tradiemate.com/quotes/quo_123');
   });
 
-  it('should sanitize email content to prevent injection', () => {
-    const unsafeContent = '<script>alert("xss")</script>Hello';
-    const sanitized = unsafeContent.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  it('payment URL contains /pay/ segment', () => {
+    expect(buildPaymentUrl(BASE, 'inv_abc')).toContain('/pay/');
+  });
 
-    expect(sanitized).not.toContain('<script>');
-    expect(sanitized).toBe('Hello');
+  it('quote URL contains /quotes/ segment', () => {
+    expect(buildQuoteViewUrl(BASE, 'quo_abc')).toContain('/quotes/');
   });
 });

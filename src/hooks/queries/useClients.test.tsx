@@ -17,6 +17,63 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }));
 
+// Mock useTeam hook — the hooks under test call useTeam() internally
+vi.mock('@/hooks/useTeam', () => ({
+  useTeam: () => ({
+    team: { id: 'test-team-id', name: 'Test Team' },
+    userRole: 'owner',
+    teamMembers: [],
+    allTeams: [],
+    canCreate: true,
+    canEdit: true,
+    canDelete: true,
+    canManageTeam: true,
+    loading: false,
+    error: null,
+    refetch: vi.fn(),
+    switchTeam: vi.fn(),
+  }),
+}));
+
+/**
+ * Build a fully chainable supabase query mock that resolves with the given
+ * value when awaited (via a custom `.then()` implementation). This handles
+ * the pattern where the hook calls an additional `.eq()` after the "terminal"
+ * method (e.g. `.range()` or `.limit()`) depending on whether a team is set.
+ */
+function makeChainableMock(resolvedValue: Record<string, unknown>) {
+  const mock: Record<string, ReturnType<typeof vi.fn>> & {
+    then: (onFulfilled: (v: unknown) => unknown) => Promise<unknown>;
+  } = {
+    select: vi.fn(),
+    eq: vi.fn(),
+    is: vi.fn(),
+    or: vi.fn(),
+    order: vi.fn(),
+    range: vi.fn(),
+    limit: vi.fn(),
+    single: vi.fn(),
+    update: vi.fn(),
+    then: (onFulfilled: (v: unknown) => unknown) =>
+      Promise.resolve(resolvedValue).then(onFulfilled),
+  };
+
+  // All chainable methods return `this` so any further method call works.
+  // `.then()` makes the mock itself a thenable so `await mock` resolves.
+  mock.select.mockReturnValue(mock);
+  mock.eq.mockReturnValue(mock);
+  mock.is.mockReturnValue(mock);
+  mock.or.mockReturnValue(mock);
+  mock.order.mockReturnValue(mock);
+  mock.range.mockReturnValue(mock);
+  mock.limit.mockReturnValue(mock);
+  mock.update.mockReturnValue(mock);
+  // `.single()` is always terminal — resolve immediately
+  mock.single.mockResolvedValue(resolvedValue);
+
+  return mock;
+}
+
 describe('Client Management - useClients Hook', () => {
   let queryClient: QueryClient;
 
@@ -65,17 +122,11 @@ describe('Client Management - useClients Hook', () => {
         },
       ];
 
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        range: vi.fn().mockResolvedValue({
-          data: mockClients,
-          count: 2,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: mockClients,
+        count: 2,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -90,17 +141,11 @@ describe('Client Management - useClients Hook', () => {
     });
 
     it('should handle pagination correctly', async () => {
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        range: vi.fn().mockResolvedValue({
-          data: [],
-          count: 45,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: [],
+        count: 45,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -129,17 +174,11 @@ describe('Client Management - useClients Hook', () => {
     });
 
     it('should handle errors when fetching clients fails', async () => {
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        range: vi.fn().mockResolvedValue({
-          data: null,
-          count: null,
-          error: { message: 'Database error' },
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: null,
+        count: null,
+        error: { message: 'Database error' },
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -151,17 +190,11 @@ describe('Client Management - useClients Hook', () => {
     });
 
     it('should filter out soft-deleted clients', async () => {
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        range: vi.fn().mockResolvedValue({
-          data: [],
-          count: 0,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: [],
+        count: 0,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -185,15 +218,10 @@ describe('Client Management - useClients Hook', () => {
         deleted_at: null,
       };
 
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
-          data: mockClient,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: mockClient,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -207,15 +235,10 @@ describe('Client Management - useClients Hook', () => {
     });
 
     it('should handle client not found', async () => {
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({
-          data: null,
-          error: { message: 'Not found' },
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: null,
+        error: { message: 'Not found' },
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -277,17 +300,10 @@ describe('Client Management - useClients Hook', () => {
         { id: 'client-2', name: 'Johnny Doe', email: 'johnny@example.com' },
       ];
 
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        or: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue({
-          data: mockClients,
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: mockClients,
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -302,17 +318,10 @@ describe('Client Management - useClients Hook', () => {
     });
 
     it('should search clients by email', async () => {
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        or: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue({
-          data: [],
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: [],
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 
@@ -333,17 +342,10 @@ describe('Client Management - useClients Hook', () => {
     });
 
     it('should limit search results to 10', async () => {
-      const mockSupabaseChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-        or: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue({
-          data: [],
-          error: null,
-        }),
-      };
+      const mockSupabaseChain = makeChainableMock({
+        data: [],
+        error: null,
+      });
 
       vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
 

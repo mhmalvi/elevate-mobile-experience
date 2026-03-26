@@ -65,15 +65,6 @@ verify_jwt = true
 [functions.process-voice-command]
 verify_jwt = true
 
-[functions.myob-oauth]
-verify_jwt = true
-
-[functions.myob-sync-clients]
-verify_jwt = true
-
-[functions.myob-sync-invoices]
-verify_jwt = true
-
 [functions.quickbooks-oauth]
 verify_jwt = true
 
@@ -98,6 +89,9 @@ verify_jwt = false
 [functions.revenuecat-webhook]
 verify_jwt = false
 
+# DEPRECATED: subscription-webhook is consolidated into stripe-webhook.
+# This entry is kept temporarily so the forwarding stub remains deployed.
+# Remove once the Stripe dashboard webhook URL has been updated.
 [functions.subscription-webhook]
 verify_jwt = false
 

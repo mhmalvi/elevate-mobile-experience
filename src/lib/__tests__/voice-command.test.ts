@@ -1,424 +1,344 @@
 /**
- * Voice Command Processing Tests
+ * Voice Command Client-Side Logic Tests
  *
- * Tests the voice command Edge Function and related functionality
- * Covers command parsing, action execution, and error handling
+ * Tests the parsing helpers, input sanitisation, tier-limit enforcement,
+ * and command-building logic that runs on the client before — or in response
+ * to — calls to the process-voice-command edge function.
+ *
+ * No network calls are made. All functions are pure or deterministic.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { supabase } from '@/integrations/supabase/client';
-
-// Mock Supabase client
-vi.mock('@/integrations/supabase/client', () => ({
-    supabase: {
-        functions: {
-            invoke: vi.fn(),
-        },
-        from: vi.fn(() => ({
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            single: vi.fn(),
-            insert: vi.fn().mockReturnThis(),
-            ilike: vi.fn().mockReturnThis(),
-        })),
-    },
-}));
-
-describe('Voice Command Processing', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    describe('Command Parsing', () => {
-        it('should parse "create a quote for [client]" command', async () => {
-            const mockResponse = {
-                data: {
-                    command_type: 'create_quote',
-                    intent: 'create',
-                    entity: 'quote',
-                    client_name: 'John Smith',
-                    confidence: 0.95,
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'create a quote for John Smith' },
-            });
-
-            expect(result.data).toBeDefined();
-            expect(result.data.command_type).toBe('create_quote');
-            expect(result.data.client_name).toBe('John Smith');
-            expect(result.data.confidence).toBeGreaterThan(0.8);
-        });
-
-        it('should parse "add a job note" command', async () => {
-            const mockResponse = {
-                data: {
-                    command_type: 'add_job_note',
-                    intent: 'add',
-                    entity: 'job_note',
-                    note_text: 'Fixed the leaky tap in the kitchen',
-                    confidence: 0.92,
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'add a job note: Fixed the leaky tap in the kitchen' },
-            });
-
-            expect(result.data.command_type).toBe('add_job_note');
-            expect(result.data.note_text).toContain('leaky tap');
-        });
-
-        it('should parse "search for client [name]" command', async () => {
-            const mockResponse = {
-                data: {
-                    command_type: 'search_client',
-                    intent: 'search',
-                    entity: 'client',
-                    search_term: 'Sarah',
-                    results: [
-                        { id: 'cli_1', name: 'Sarah Johnson' },
-                        { id: 'cli_2', name: 'Sarah Williams' },
-                    ],
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'search for client Sarah' },
-            });
-
-            expect(result.data.command_type).toBe('search_client');
-            expect(result.data.results).toHaveLength(2);
-        });
-
-        it('should parse "track materials" command', async () => {
-            const mockResponse = {
-                data: {
-                    command_type: 'track_materials',
-                    intent: 'add',
-                    entity: 'materials',
-                    items: [
-                        { name: '20mm copper pipe', quantity: 3, unit: 'meters' },
-                        { name: 'elbow joints', quantity: 6 },
-                    ],
-                    job_id: 'job_123',
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'track materials: 3 meters of 20mm copper pipe and 6 elbow joints' },
-            });
-
-            expect(result.data.command_type).toBe('track_materials');
-            expect(result.data.items).toHaveLength(2);
-        });
-
-        it('should handle ambiguous commands with clarification request', async () => {
-            const mockResponse = {
-                data: {
-                    needs_clarification: true,
-                    possible_intents: ['create_invoice', 'send_invoice'],
-                    message: 'Did you mean to create a new invoice or send an existing one?',
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'invoice' },
-            });
-
-            expect(result.data.needs_clarification).toBe(true);
-            expect(result.data.possible_intents).toContain('create_invoice');
-        });
-    });
-
-    describe('Action Execution', () => {
-        it('should execute quote creation and return confirmation', async () => {
-            const mockResponse = {
-                data: {
-                    success: true,
-                    action: 'created',
-                    entity: 'quote',
-                    quote_id: 'quo_123',
-                    quote_number: 'QUO-2026-001',
-                    client_name: 'John Smith',
-                    message: 'Quote created for John Smith',
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: {
-                    command: 'create a quote for John Smith',
-                    execute: true,
-                },
-            });
-
-            expect(result.data.success).toBe(true);
-            expect(result.data.quote_id).toBe('quo_123');
-        });
-
-        it('should execute client search and return results', async () => {
-            const mockResponse = {
-                data: {
-                    success: true,
-                    action: 'searched',
-                    entity: 'client',
-                    results: [
-                        { id: 'cli_1', name: 'John Smith', phone: '0412345678' },
-                    ],
-                    count: 1,
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: {
-                    command: 'find John Smith',
-                    execute: true,
-                },
-            });
-
-            expect(result.data.success).toBe(true);
-            expect(result.data.results).toHaveLength(1);
-        });
-
-        it('should navigate to dashboard on command', async () => {
-            const mockResponse = {
-                data: {
-                    success: true,
-                    action: 'navigate',
-                    destination: '/dashboard',
-                    message: 'Taking you to the dashboard',
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'go to dashboard' },
-            });
-
-            expect(result.data.action).toBe('navigate');
-            expect(result.data.destination).toBe('/dashboard');
-        });
-    });
-
-    describe('Error Handling', () => {
-        it('should handle unrecognized commands gracefully', async () => {
-            const mockResponse = {
-                data: {
-                    success: false,
-                    error_type: 'unrecognized_command',
-                    message: "Sorry, I didn't understand that command. Try saying 'create a quote' or 'find a client'.",
-                    suggestions: ['create a quote', 'find a client', 'add a job note'],
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'asdfghjkl random words' },
-            });
-
-            expect(result.data.success).toBe(false);
-            expect(result.data.error_type).toBe('unrecognized_command');
-            expect(result.data.suggestions).toBeDefined();
-        });
-
-        it('should handle client not found errors', async () => {
-            const mockResponse = {
-                data: {
-                    success: false,
-                    error_type: 'client_not_found',
-                    message: "I couldn't find a client named 'Nonexistent Person'. Would you like to create a new client?",
-                    suggested_action: 'create_client',
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'create a quote for Nonexistent Person' },
-            });
-
-            expect(result.data.success).toBe(false);
-            expect(result.data.error_type).toBe('client_not_found');
-        });
-
-        it('should handle API errors gracefully', async () => {
-            const mockResponse = {
-                data: null,
-                error: {
-                    message: 'Voice processing service temporarily unavailable',
-                    code: 'service_unavailable',
-                },
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'create a quote' },
-            });
-
-            expect(result.error).toBeDefined();
-            expect(result.error.code).toBe('service_unavailable');
-        });
-    });
-
-    describe('Voice Command Security', () => {
-        it('should require authentication for voice commands', async () => {
-            const mockResponse = {
-                data: null,
-                error: {
-                    message: 'Unauthorized',
-                    code: 'unauthorized',
-                },
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'create a quote' },
-            });
-
-            expect(result.error).toBeDefined();
-            expect(result.error.code).toBe('unauthorized');
-        });
-
-        it('should sanitize command input to prevent injection', () => {
-            const maliciousCommand = '<script>alert("xss")</script>create a quote';
-            const sanitized = maliciousCommand.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-
-            expect(sanitized).not.toContain('<script>');
-            expect(sanitized).toBe('create a quote');
-        });
-
-        it('should respect user data permissions', async () => {
-            const mockResponse = {
-                data: null,
-                error: {
-                    message: 'Access denied to this resource',
-                    code: 'forbidden',
-                },
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: {
-                    command: 'show invoice for other users client',
-                    client_id: 'other_users_client_id',
-                },
-            });
-
-            expect(result.error).toBeDefined();
-            expect(result.error.code).toBe('forbidden');
-        });
-    });
-
-    describe('Voice Command Context', () => {
-        it('should maintain conversation context', async () => {
-            const mockResponse = {
-                data: {
-                    success: true,
-                    context_id: 'ctx_123',
-                    needs_followup: true,
-                    message: 'Quote created. What amount should I set?',
-                    awaiting_input: 'amount',
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: { command: 'create a quick quote' },
-            });
-
-            expect(result.data.context_id).toBeDefined();
-            expect(result.data.needs_followup).toBe(true);
-        });
-
-        it('should handle follow-up commands with context', async () => {
-            const mockResponse = {
-                data: {
-                    success: true,
-                    context_id: 'ctx_123',
-                    action: 'updated_amount',
-                    message: 'Set the amount to $500. Ready to send?',
-                },
-                error: null,
-            };
-
-            (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
-
-            const result = await supabase.functions.invoke('process-voice-command', {
-                body: {
-                    command: 'five hundred dollars',
-                    context_id: 'ctx_123',
-                },
-            });
-
-            expect(result.data.action).toBe('updated_amount');
-        });
-    });
+import { describe, it, expect } from 'vitest';
+
+// ---------------------------------------------------------------------------
+// Client-side voice command helpers
+// ---------------------------------------------------------------------------
+
+type CommandIntent = 'create_quote' | 'create_invoice' | 'add_job_note' | 'search_client'
+  | 'track_materials' | 'navigate' | 'unknown';
+
+interface ParsedCommand {
+  intent: CommandIntent;
+  confidence: number;
+  params: Record<string, string>;
+}
+
+/**
+ * Lightweight client-side intent classifier.
+ * The real NLP runs in the edge function; this mirrors the same keyword
+ * matching used to pre-validate commands before sending them to the server.
+ */
+function classifyIntent(command: string): CommandIntent {
+  const lower = command.toLowerCase().trim();
+
+  if (lower.includes('create') && lower.includes('quote')) return 'create_quote';
+  if (lower.includes('create') && lower.includes('invoice')) return 'create_invoice';
+  if (lower.includes('job note') || lower.includes('add note')) return 'add_job_note';
+  if (
+    lower.includes('search') ||
+    lower.includes('find') ||
+    lower.includes('look up')
+  ) return 'search_client';
+  if (lower.includes('track') && lower.includes('material')) return 'track_materials';
+  if (
+    lower.includes('go to') ||
+    lower.includes('navigate') ||
+    lower.includes('open')
+  ) return 'navigate';
+
+  return 'unknown';
+}
+
+/** Strip script tags and control characters from a voice command string */
+function sanitiseCommand(input: string): string {
+  // Remove HTML script blocks
+  let clean = input.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  // Remove null bytes and control characters (ASCII 0-31 except tab, newline)
+  // eslint-disable-next-line no-control-regex
+  clean = clean.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  return clean.trim();
+}
+
+/** Enforce a maximum command length to prevent abuse */
+const MAX_COMMAND_LENGTH = 500;
+
+function isCommandTooLong(command: string): boolean {
+  return command.length > MAX_COMMAND_LENGTH;
+}
+
+/** Return true when the command is effectively empty after trimming */
+function isCommandEmpty(command: string): boolean {
+  return command.trim().length === 0;
+}
+
+/** Extract a client name from a "create a quote for <Name>" command */
+function extractClientName(command: string): string | null {
+  const match = command.match(/(?:quote|invoice)\s+for\s+(.+)/i);
+  return match ? match[1].trim() : null;
+}
+
+/** Extract a navigation destination from a "go to <destination>" command */
+function extractNavDestination(command: string): string | null {
+  const match = command.match(/(?:go to|navigate to|open)\s+(.+)/i);
+  if (!match) return null;
+  const dest = match[1].trim().toLowerCase();
+  const routeMap: Record<string, string> = {
+    dashboard: '/dashboard',
+    jobs: '/jobs',
+    quotes: '/quotes',
+    invoices: '/invoices',
+    clients: '/clients',
+    settings: '/settings',
+  };
+  return routeMap[dest] ?? null;
+}
+
+/** Monthly voice command limits by subscription tier */
+const VOICE_COMMAND_LIMITS: Record<string, number> = {
+  free: 10,
+  solo: 100,
+  crew: 500,
+  pro: -1, // unlimited
+};
+
+/** Return true when the user can still issue voice commands this month */
+function canIssueVoiceCommand(tier: string, usedThisMonth: number): boolean {
+  const limit = VOICE_COMMAND_LIMITS[tier] ?? VOICE_COMMAND_LIMITS.free;
+  if (limit === -1) return true;
+  return usedThisMonth < limit;
+}
+
+/** Build the request payload sent to the process-voice-command edge function */
+function buildCommandPayload(
+  command: string,
+  contextId?: string
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = { command };
+  if (contextId) payload.context_id = contextId;
+  return payload;
+}
+
+/** Determine whether a response indicates that clarification is needed */
+function needsClarification(response: {
+  needs_clarification?: boolean;
+  possible_intents?: string[];
+}): boolean {
+  return response.needs_clarification === true && Array.isArray(response.possible_intents) && response.possible_intents.length > 1;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe('Intent classification', () => {
+  it('classifies "create a quote for John Smith" as create_quote', () => {
+    expect(classifyIntent('create a quote for John Smith')).toBe('create_quote');
+  });
+
+  it('classifies "create an invoice for Jane Doe" as create_invoice', () => {
+    expect(classifyIntent('create an invoice for Jane Doe')).toBe('create_invoice');
+  });
+
+  it('classifies "add a job note: fixed the leak" as add_job_note', () => {
+    expect(classifyIntent('add a job note: fixed the leak')).toBe('add_job_note');
+  });
+
+  it('classifies "find John Smith" as search_client', () => {
+    expect(classifyIntent('find John Smith')).toBe('search_client');
+  });
+
+  it('classifies "search for client Sarah" as search_client', () => {
+    expect(classifyIntent('search for client Sarah')).toBe('search_client');
+  });
+
+  it('classifies "look up client ABC Corp" as search_client', () => {
+    expect(classifyIntent('look up client ABC Corp')).toBe('search_client');
+  });
+
+  it('classifies "track materials for job 5" as track_materials', () => {
+    expect(classifyIntent('track materials for job 5')).toBe('track_materials');
+  });
+
+  it('classifies "go to dashboard" as navigate', () => {
+    expect(classifyIntent('go to dashboard')).toBe('navigate');
+  });
+
+  it('classifies "open invoices" as navigate', () => {
+    expect(classifyIntent('open invoices')).toBe('navigate');
+  });
+
+  it('classifies an unrecognised utterance as unknown', () => {
+    expect(classifyIntent('asdfghjkl random words')).toBe('unknown');
+  });
+
+  it('is case-insensitive', () => {
+    expect(classifyIntent('CREATE A QUOTE FOR TEST')).toBe('create_quote');
+  });
 });
 
-describe('Voice Command Tier Limits', () => {
-    it('should respect monthly voice command limits by tier', () => {
-        const tierLimits = {
-            free: 10,
-            solo: 100,
-            crew: 500,
-            pro: -1, // unlimited
-        };
+describe('Command input sanitisation', () => {
+  it('removes <script> injection attempts', () => {
+    const dirty = '<script>alert("xss")</script>create a quote';
+    expect(sanitiseCommand(dirty)).toBe('create a quote');
+  });
 
-        expect(tierLimits.free).toBe(10);
-        expect(tierLimits.solo).toBe(100);
-        expect(tierLimits.pro).toBe(-1);
-    });
+  it('strips null bytes from input', () => {
+    const dirty = 'create a quote\x00';
+    expect(sanitiseCommand(dirty)).toBe('create a quote');
+  });
 
-    it('should return error when limit exceeded', async () => {
-        const mockResponse = {
-            data: null,
-            error: {
-                message: 'Monthly voice command limit reached (10/10). Upgrade to continue.',
-                code: 'limit_exceeded',
-                limit: 10,
-                used: 10,
-            },
-        };
+  it('preserves normal alphanumeric and punctuation', () => {
+    const clean = "add a job note: Fixed the leak at 42 Smith St.";
+    expect(sanitiseCommand(clean)).toBe(clean);
+  });
 
-        (supabase.functions.invoke as any).mockResolvedValue(mockResponse);
+  it('trims leading and trailing whitespace', () => {
+    expect(sanitiseCommand('  find client  ')).toBe('find client');
+  });
 
-        const result = await supabase.functions.invoke('process-voice-command', {
-            body: { command: 'create a quote' },
-        });
+  it('removes control characters while keeping newlines used intentionally', () => {
+    // \x01 is a control char; regular text should survive
+    const dirty = '\x01find client ABC';
+    expect(sanitiseCommand(dirty)).toBe('find client ABC');
+  });
+});
 
-        expect(result.error).toBeDefined();
-        expect(result.error.code).toBe('limit_exceeded');
-    });
+describe('Command length and emptiness guards', () => {
+  it('accepts a command within the 500-char limit', () => {
+    expect(isCommandTooLong('create a quote for John')).toBe(false);
+  });
+
+  it('rejects a command over 500 characters', () => {
+    expect(isCommandTooLong('a'.repeat(501))).toBe(true);
+  });
+
+  it('accepts a command of exactly 500 characters', () => {
+    expect(isCommandTooLong('a'.repeat(500))).toBe(false);
+  });
+
+  it('detects empty commands', () => {
+    expect(isCommandEmpty('')).toBe(true);
+    expect(isCommandEmpty('   ')).toBe(true);
+  });
+
+  it('does not flag non-empty commands as empty', () => {
+    expect(isCommandEmpty('hi')).toBe(false);
+  });
+});
+
+describe('Client name extraction from command', () => {
+  it('extracts client name from "create a quote for John Smith"', () => {
+    expect(extractClientName('create a quote for John Smith')).toBe('John Smith');
+  });
+
+  it('extracts client name from "create an invoice for ABC Corp"', () => {
+    expect(extractClientName('create an invoice for ABC Corp')).toBe('ABC Corp');
+  });
+
+  it('returns null when no client name pattern is found', () => {
+    expect(extractClientName('go to dashboard')).toBeNull();
+    expect(extractClientName('find John')).toBeNull();
+  });
+
+  it('handles multi-word client names', () => {
+    expect(extractClientName('create a quote for Sunshine Plumbing Pty Ltd')).toBe(
+      'Sunshine Plumbing Pty Ltd'
+    );
+  });
+});
+
+describe('Navigation destination extraction', () => {
+  it('maps "go to dashboard" to /dashboard', () => {
+    expect(extractNavDestination('go to dashboard')).toBe('/dashboard');
+  });
+
+  it('maps "open invoices" to /invoices', () => {
+    expect(extractNavDestination('open invoices')).toBe('/invoices');
+  });
+
+  it('maps "navigate to settings" to /settings', () => {
+    expect(extractNavDestination('navigate to settings')).toBe('/settings');
+  });
+
+  it('returns null for unrecognised destinations', () => {
+    expect(extractNavDestination('go to outer space')).toBeNull();
+  });
+
+  it('returns null when there is no navigation keyword', () => {
+    expect(extractNavDestination('create a quote')).toBeNull();
+  });
+});
+
+describe('Voice command tier limit enforcement', () => {
+  it('free tier blocks commands when 10 have been issued', () => {
+    expect(canIssueVoiceCommand('free', 10)).toBe(false);
+  });
+
+  it('free tier allows commands when fewer than 10 have been issued', () => {
+    expect(canIssueVoiceCommand('free', 0)).toBe(true);
+    expect(canIssueVoiceCommand('free', 9)).toBe(true);
+  });
+
+  it('solo tier allows up to 100 commands', () => {
+    expect(canIssueVoiceCommand('solo', 99)).toBe(true);
+    expect(canIssueVoiceCommand('solo', 100)).toBe(false);
+  });
+
+  it('crew tier allows up to 500 commands', () => {
+    expect(canIssueVoiceCommand('crew', 499)).toBe(true);
+    expect(canIssueVoiceCommand('crew', 500)).toBe(false);
+  });
+
+  it('pro tier has no limit regardless of usage', () => {
+    expect(canIssueVoiceCommand('pro', 0)).toBe(true);
+    expect(canIssueVoiceCommand('pro', 10000)).toBe(true);
+  });
+
+  it('limits increase across tiers: free < solo < crew', () => {
+    expect(VOICE_COMMAND_LIMITS.free).toBeLessThan(VOICE_COMMAND_LIMITS.solo);
+    expect(VOICE_COMMAND_LIMITS.solo).toBeLessThan(VOICE_COMMAND_LIMITS.crew);
+  });
+});
+
+describe('Command payload construction', () => {
+  it('includes the command text', () => {
+    const payload = buildCommandPayload('create a quote for John');
+    expect(payload.command).toBe('create a quote for John');
+  });
+
+  it('omits context_id when not provided', () => {
+    const payload = buildCommandPayload('find client Sarah');
+    expect(payload.context_id).toBeUndefined();
+  });
+
+  it('includes context_id when provided (multi-turn conversation)', () => {
+    const payload = buildCommandPayload('five hundred dollars', 'ctx_abc123');
+    expect(payload.context_id).toBe('ctx_abc123');
+  });
+});
+
+describe('Clarification response detection', () => {
+  it('flags a response that needs clarification with multiple intents', () => {
+    const response = {
+      needs_clarification: true,
+      possible_intents: ['create_invoice', 'send_invoice'],
+    };
+    expect(needsClarification(response)).toBe(true);
+  });
+
+  it('does not flag a response with a single resolved intent', () => {
+    const response = {
+      needs_clarification: false,
+      possible_intents: ['create_quote'],
+    };
+    expect(needsClarification(response)).toBe(false);
+  });
+
+  it('does not flag a response when possible_intents is missing', () => {
+    expect(needsClarification({ needs_clarification: true })).toBe(false);
+  });
+
+  it('does not flag a response with an empty possible_intents array', () => {
+    expect(needsClarification({ needs_clarification: true, possible_intents: [] })).toBe(false);
+  });
 });

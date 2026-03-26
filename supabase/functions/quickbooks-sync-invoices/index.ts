@@ -81,25 +81,44 @@ serve(async (req) => {
       );
     }
 
-    // Check if token needs refresh
+    // Check if token needs refresh (with retry + exponential backoff)
     if (profile.qb_token_expires_at && new Date(profile.qb_token_expires_at) < new Date()) {
       console.log("QuickBooks access token expired, refreshing...");
 
-      const refreshResponse = await fetch(
-        `${supabaseUrl}/functions/v1/quickbooks-oauth`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": authHeader,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ action: "refresh" }),
+      let refreshed = false;
+      const maxRetries = 3;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        if (attempt > 0) {
+          const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+          await new Promise(r => setTimeout(r, delayMs));
+          console.log(`QuickBooks token refresh retry ${attempt + 1}/${maxRetries}...`);
         }
-      );
 
-      if (!refreshResponse.ok) {
+        try {
+          const refreshResponse = await fetch(
+            `${supabaseUrl}/functions/v1/quickbooks-oauth`,
+            {
+              method: "POST",
+              headers: {
+                "Authorization": authHeader,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ action: "refresh" }),
+            }
+          );
+
+          if (refreshResponse.ok) {
+            refreshed = true;
+            break;
+          }
+        } catch (err) {
+          console.warn(`QuickBooks token refresh attempt ${attempt + 1} failed:`, err);
+        }
+      }
+
+      if (!refreshed) {
         return new Response(
-          JSON.stringify({ error: "Failed to refresh QuickBooks token. Please reconnect." }),
+          JSON.stringify({ error: "Failed to refresh QuickBooks token after retries. Please reconnect." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -132,6 +151,7 @@ serve(async (req) => {
         .from("invoices")
         .select("*, clients(name, email, phone, address, qb_customer_id), invoice_line_items(*)")
         .eq("user_id", user.id)
+        .in("status", ["sent", "paid", "partially_paid", "overdue"])
         .is("deleted_at", null);
 
       invoicesToSync = invoices || [];

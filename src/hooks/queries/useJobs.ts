@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useTeam } from '@/hooks/useTeam';
+import { useToast } from '@/hooks/use-toast';
 
 const PAGE_SIZE = 20;
 
@@ -42,33 +43,47 @@ export function useJobs(page: number = 1) {
       };
     },
     enabled: !!user,
-    staleTime: 30000,
-    gcTime: 300000,
+    staleTime: 5 * 60 * 1000, // 5 minutes - list data doesn't change frequently
+    gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache longer
   });
 }
 
 export function useJob(id: string) {
   const { user } = useAuth();
+  const { team } = useTeam();
 
   return useQuery({
-    queryKey: ['job', id],
+    queryKey: ['job', id, team?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      if (!user) throw new Error('User not authenticated');
+
+      let query = supabase
         .from('jobs')
         .select('*, clients(*), quote:quotes(*)')
         .eq('id', id)
-        .is('deleted_at', null)
-        .single();
+        .is('deleted_at', null);
+
+      // Defence-in-depth: filter by team or user in addition to RLS
+      if (team?.id) {
+        query = query.eq('team_id', team.id);
+      } else {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { data, error } = await query.single();
 
       if (error) throw error;
       return data;
     },
     enabled: !!user && !!id,
+    staleTime: 2 * 60 * 1000,  // 2 minutes
+    gcTime: 10 * 60 * 1000,    // 10 minutes
   });
 }
 
 export function useDeleteJob() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (id: string) => {
@@ -82,6 +97,13 @@ export function useDeleteJob() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to delete job',
+        description: error.message,
+        variant: 'destructive',
+      });
     },
   });
 }

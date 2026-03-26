@@ -1,14 +1,16 @@
-import { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext, ReactNode } from 'react';
+import { User, Session, AuthResponse } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { initializePurchases, setRevenueCatUserId, logOutRevenueCat } from '@/lib/purchases';
+import { clearSubscriptionCache } from '@/lib/subscriptionCache';
+import { clearSecureStorage } from '@/lib/secureStorage';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string) => Promise<{ data?: any; error: Error | null }>;
-  signIn: (email: string, password: string) => Promise<{ data?: any; error: Error | null }>;
+  signUp: (email: string, password: string) => Promise<AuthResponse>;
+  signIn: (email: string, password: string) => Promise<AuthResponse>;
   signOut: () => Promise<void>;
 }
 
@@ -19,31 +21,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const rcInitialized = useRef(false);
+  const initializedByListener = useRef(false);
 
   // Initialize RevenueCat with a user ID (required by Web SDK)
   const initRC = async (userId: string) => {
     if (rcInitialized.current) {
-      // Already initialized - just sync the user ID
       await setRevenueCatUserId(userId).catch(() => {});
       return;
     }
     try {
       await initializePurchases(userId);
       rcInitialized.current = true;
-    } catch (err: any) {
-      console.warn('[RevenueCat] Init skipped:', err.message);
+    } catch (err: unknown) {
+      console.warn('[RevenueCat] Init skipped:', err instanceof Error ? err.message : err);
     }
   };
 
   useEffect(() => {
-    // Set up auth state listener FIRST
+    // Set up auth state listener FIRST — this is the single source of truth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        initializedByListener.current = true;
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
 
-        // Initialize/sync RevenueCat on auth changes
         if (event === 'SIGNED_IN' && session?.user) {
           initRC(session.user.id);
         } else if (event === 'SIGNED_OUT') {
@@ -52,22 +54,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     );
 
-    // THEN check for existing session
+    // Fallback: only use getSession if the listener hasn't fired yet
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      if (!initializedByListener.current) {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
 
-      // Initialize RevenueCat for existing session
-      if (session?.user) {
-        initRC(session.user.id);
+        if (session?.user) {
+          initRC(session.user.id);
+        }
+      }
+    }).catch((err) => {
+      console.error('[Auth] Failed to get session:', err);
+      if (!initializedByListener.current) {
+        setLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = useCallback(async (email: string, password: string) => {
     const redirectUrl = `${window.location.origin}/`;
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -77,22 +85,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
     return { data, error };
-  };
+  }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     return { data, error };
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
+    await clearSubscriptionCache();
+    await clearSecureStorage();
     await supabase.auth.signOut();
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    user, session, loading, signUp, signIn, signOut,
+  }), [user, session, loading, signUp, signIn, signOut]);
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

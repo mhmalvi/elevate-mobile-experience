@@ -2,16 +2,13 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { EmptyState } from '@/components/ui/empty-state';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { SearchInput } from '@/components/ui/search-input';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { Button } from '@/components/ui/button';
-import { FileText, Calendar, WifiOff, ChevronRight, Plus } from 'lucide-react';
-import { format } from 'date-fns';
+import { QuoteListItem } from '@/components/list-items';
+import { FileText, WifiOff, Plus } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useOfflineQuotes } from '@/lib/offline/offlineHooks';
-import { formatCurrency } from '@/lib/utils';
-import { cn } from '@/lib/utils';
 
 export default function Quotes() {
   const navigate = useNavigate();
@@ -56,6 +53,7 @@ export default function Quotes() {
             <div className="absolute top-8 right-4 flex items-center gap-3">
               <button
                 onClick={() => navigate('/quotes/new')}
+                aria-label="Create new quote"
                 className="p-2.5 rounded-full bg-primary shadow-premium hover:bg-primary/90 transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 <Plus className="w-6 h-6 text-primary-foreground" />
@@ -109,46 +107,7 @@ export default function Quotes() {
           ) : (
             <div className="space-y-3">
               {filteredQuotes.map((quote, index) => (
-                <button
-                  key={quote.id}
-                  onClick={() => navigate(`/quotes/${quote.id}`)}
-                  className={cn(
-                    "w-full p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50",
-                    "hover:bg-card hover:border-primary/20 hover:shadow-lg",
-                    "transition-all duration-300 group animate-fade-in text-left"
-                  )}
-                  style={{ animationDelay: `${index * 0.05}s` }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
-                        <FileText className="w-5 h-5 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold truncate text-foreground">{quote.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {quote.clients?.name || 'No client'} • {quote.quote_number}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <StatusBadge status={quote.status as any} />
-                      <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between pl-13">
-                    <p className="text-lg font-bold text-foreground">
-                      {formatCurrency(quote.total)}
-                    </p>
-                    {quote.valid_until && (
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <Calendar className="w-3.5 h-3.5" />
-                        Valid until {format(new Date(quote.valid_until), 'd MMM')}
-                      </div>
-                    )}
-                  </div>
-                </button>
+                <QuoteListItem key={quote.id} quote={quote} index={index} />
               ))}
             </div>
           )}

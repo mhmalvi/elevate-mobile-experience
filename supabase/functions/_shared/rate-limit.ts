@@ -70,6 +70,12 @@ export async function checkRateLimit(
       console.warn('[RateLimit] Insert failed, allowing request:', insertError.message);
     }
 
+    // Probabilistic cleanup to prevent unbounded growth of rate_limits table
+    if (Math.random() < 0.01) {
+      const cleanupCutoff = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // 2 hours ago
+      await supabase.from('rate_limits').delete().lt('created_at', cleanupCutoff);
+    }
+
     return {
       limited: false,
       remaining: maxRequests - currentCount - 1,

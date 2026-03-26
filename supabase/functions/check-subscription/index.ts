@@ -81,35 +81,55 @@ serve(async (req) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: '2025-08-27.basil' });
 
-    // Find customer by email
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    // Check if we have a cached Stripe customer ID in the profile
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('stripe_customer_id')
+      .eq('user_id', user.id)
+      .single();
 
-    if (customers.data.length === 0) {
-      logStep('No Stripe customer found, user is on free tier');
+    let customerId = profile?.stripe_customer_id;
 
-      // Update profile to free tier
+    if (!customerId) {
+      // Fall back to email lookup if no cached customer ID
+      const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+
+      if (customers.data.length === 0) {
+        logStep('No Stripe customer found, user is on free tier');
+
+        // Update profile to free tier
+        await supabaseClient
+          .from('profiles')
+          .update({
+            subscription_tier: 'free',
+            subscription_provider: null,
+            subscription_id: null,
+            subscription_expires_at: null,
+          })
+          .eq('user_id', user.id);
+
+        return new Response(JSON.stringify({
+          subscribed: false,
+          tier: 'free',
+          subscription_end: null,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+
+      customerId = customers.data[0].id;
+
+      // Cache the Stripe customer ID for future calls
       await supabaseClient
         .from('profiles')
-        .update({
-          subscription_tier: 'free',
-          subscription_provider: null,
-          subscription_id: null,
-          subscription_expires_at: null,
-        })
+        .update({ stripe_customer_id: customerId })
         .eq('user_id', user.id);
 
-      return new Response(JSON.stringify({
-        subscribed: false,
-        tier: 'free',
-        subscription_end: null,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      });
+      logStep('Found and cached Stripe customer', { customerId });
+    } else {
+      logStep('Using cached Stripe customer', { customerId });
     }
-
-    const customerId = customers.data[0].id;
-    logStep('Found Stripe customer', { customerId });
 
     // Check for active subscriptions
     const subscriptions = await stripe.subscriptions.list({

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Mic, Square, Play, Pause, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 interface VoiceRecorderProps {
     onSave: (audioBlob: Blob, duration: number) => Promise<void>;
@@ -9,6 +10,7 @@ interface VoiceRecorderProps {
 }
 
 export function VoiceRecorder({ onSave, className }: VoiceRecorderProps) {
+    const { toast } = useToast();
     const [isRecording, setIsRecording] = useState(false);
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -57,6 +59,11 @@ export function VoiceRecorder({ onSave, className }: VoiceRecorderProps) {
             }, 1000);
         } catch (error) {
             console.error('Error accessing microphone:', error);
+            toast({
+                title: 'Microphone access denied',
+                description: 'Please allow microphone access in your browser settings to record voice notes.',
+                variant: 'destructive',
+            });
         }
     };
 
@@ -90,13 +97,18 @@ export function VoiceRecorder({ onSave, className }: VoiceRecorderProps) {
             discardRecording();
         } catch (error) {
             console.error('Error saving voice note:', error);
+            toast({
+                title: 'Failed to save voice note',
+                description: 'Something went wrong. Please try again.',
+                variant: 'destructive',
+            });
         } finally {
             setSaving(false);
         }
     };
 
     const discardRecording = () => {
-        if (audioUrl) URL.revokeObjectURL(audioUrl);
+        // URL.revokeObjectURL is handled by the effect cleanup when audioUrl changes
         setAudioBlob(null);
         setAudioUrl(null);
         setDuration(0);

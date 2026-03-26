@@ -34,9 +34,9 @@ Set-VercelEnv -Name "VITE_SUPABASE_PROJECT_ID" -Value "rucuomtojzifrvplhwja"
 
 # RevenueCat Variables
 Write-Host "📦 Setting RevenueCat variables..." -ForegroundColor Yellow
-Set-VercelEnv -Name "VITE_REVENUECAT_ANDROID_API_KEY" -Value "sk_RaPieGIXYSWkXUvztlmmuERESyqZk"
-Set-VercelEnv -Name "VITE_REVENUECAT_IOS_API_KEY" -Value "sk_IigVSHMnIvIGZLJOxKQewiFvMQPrW"
-Set-VercelEnv -Name "VITE_REVENUECAT_WEB_API_KEY" -Value "sk_IigVSHMnIvIGZLJOxKQewiFvMQPrW"
+Set-VercelEnv -Name "VITE_REVENUECAT_ANDROID_API_KEY" -Value "goog_egutxzdihWOcKqqEWMOWGrindTQ"
+Set-VercelEnv -Name "VITE_REVENUECAT_IOS_API_KEY" -Value "appl_PLACEHOLDER_IOS_API_KEY"
+Set-VercelEnv -Name "VITE_REVENUECAT_WEB_API_KEY" -Value "rcb_PLACEHOLDER_WEB_API_KEY"
 
 # Stripe Variables
 Write-Host "📦 Setting Stripe variables..." -ForegroundColor Yellow

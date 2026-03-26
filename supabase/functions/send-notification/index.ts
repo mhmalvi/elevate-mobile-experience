@@ -1,8 +1,19 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
+
+// SECURITY: Escape HTML special characters to prevent XSS in email templates
+function escapeHtml(str: string | undefined | null): string {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
 
 interface NotificationRequest {
   type: 'quote' | 'invoice';
@@ -23,14 +34,13 @@ const SMS_LIMITS: Record<string, number> = {
   pro: -1, // unlimited
 };
 
-// Check and increment usage for rate limiting
+// Atomic usage check and increment via database RPC to prevent race conditions
 async function checkAndIncrementUsage(
   supabase: any,
   userId: string,
   tier: string,
   usageType: 'sms' | 'email'
 ): Promise<{ allowed: boolean; used: number; limit: number }> {
-  const monthYear = new Date().toISOString().slice(0, 7); // "2025-01"
   const limits = usageType === 'sms' ? SMS_LIMITS : { free: 10, solo: 50, crew: -1, pro: -1 };
   const limit = limits[tier] ?? limits.free;
 
@@ -39,39 +49,31 @@ async function checkAndIncrementUsage(
     return { allowed: true, used: 0, limit: -1 };
   }
 
-  // Get current usage
-  const column = usageType === 'sms' ? 'sms_sent' : 'emails_sent';
-  const { data: existing } = await supabase
+  // Ensure a usage_tracking row exists for this month
+  const monthYear = new Date().toISOString().slice(0, 7);
+  await supabase
     .from('usage_tracking')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('month_year', monthYear)
-    .maybeSingle();
+    .upsert({ user_id: userId, month_year: monthYear }, { onConflict: 'user_id,month_year', ignoreDuplicates: true });
 
-  const currentUsage = existing?.[column] || 0;
+  // Atomic increment-if-under-limit at the database level
+  const column = usageType === 'sms' ? 'sms_sent' : 'emails_sent';
+  const { data: allowed, error } = await supabase.rpc('increment_usage_if_under_limit', {
+    p_user_id: userId,
+    p_field: column,
+    p_limit: limit,
+  });
 
-  if (currentUsage >= limit) {
-    return { allowed: false, used: currentUsage, limit };
+  if (error) {
+    console.error('Usage tracking RPC error:', error.message);
+    // Fail closed: deny if we cannot verify usage
+    return { allowed: false, used: limit, limit };
   }
 
-  // Increment usage
-  if (existing) {
-    await supabase
-      .from('usage_tracking')
-      .update({ [column]: currentUsage + 1 })
-      .eq('user_id', userId)
-      .eq('month_year', monthYear);
-  } else {
-    await supabase
-      .from('usage_tracking')
-      .insert({
-        user_id: userId,
-        month_year: monthYear,
-        [column]: 1,
-      });
+  if (!allowed) {
+    return { allowed: false, used: limit, limit };
   }
 
-  return { allowed: true, used: currentUsage + 1, limit };
+  return { allowed: true, used: 0, limit };
 }
 
 // Send SMS via Twilio API
@@ -85,11 +87,18 @@ async function sendTwilioSms(to: string, body: string): Promise<{ success: boole
     return { success: false, error: 'Twilio not configured' };
   }
 
-  // Format Australian phone number
-  let formattedTo = to.replace(/\s+/g, '');
-  if (formattedTo.startsWith('0')) {
+  // Format phone number: handle international and Australian numbers
+  let formattedTo = to.replace(/[\s\-()]/g, '');
+  if (formattedTo.startsWith('+')) {
+    // Already international format, use as-is
+  } else if (formattedTo.startsWith('0')) {
+    // Australian local format: replace leading 0 with +61
     formattedTo = '+61' + formattedTo.slice(1);
-  } else if (!formattedTo.startsWith('+')) {
+  } else if (/^\d{9,15}$/.test(formattedTo)) {
+    // Looks like a full international number without +, prepend +
+    formattedTo = '+' + formattedTo;
+  } else {
+    // Default: assume Australian
     formattedTo = '+61' + formattedTo;
   }
 
@@ -124,6 +133,20 @@ async function sendTwilioSms(to: string, body: string): Promise<{ success: boole
   } catch (error) {
     console.error('Twilio request failed:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+// Gate status update on confirmed delivery: only call this after a provider
+// confirms the message was accepted. Fallback (mailto/smsUrl) paths must NOT
+// call this function because the document has not been demonstrably delivered.
+async function markDocumentSent(supabase: any, type: 'quote' | 'invoice', id: string): Promise<void> {
+  const table = type === 'quote' ? 'quotes' : 'invoices';
+  const { error } = await supabase
+    .from(table)
+    .update({ sent_at: new Date().toISOString(), status: 'sent' })
+    .eq('id', id);
+  if (error) {
+    console.error(`Failed to mark ${type} ${id} as sent:`, error.message);
   }
 }
 
@@ -168,11 +191,13 @@ serve(async (req) => {
     let document: any;
     let profile: any;
 
+    // SECURITY: Filter by user_id directly in the query to prevent TOCTOU issues
     if (type === 'quote') {
       const { data } = await supabase
         .from('quotes')
         .select('*, clients(*)')
         .eq('id', id)
+        .eq('user_id', user.id)
         .single();
       document = data;
     } else {
@@ -180,17 +205,27 @@ serve(async (req) => {
         .from('invoices')
         .select('*, clients(*)')
         .eq('id', id)
+        .eq('user_id', user.id)
         .single();
       document = data;
     }
 
     if (!document) {
-      throw new Error(`${type} not found`);
+      throw new Error(`${type} not found or access denied`);
     }
 
-    // SECURITY: Verify ownership
-    if (document.user_id !== user.id) {
-      return createErrorResponse(req, 'Unauthorized access to document', 403);
+    // Resolve public_token for client-facing URL; generate and persist if absent
+    let publicToken: string;
+    if (document.public_token) {
+      publicToken = document.public_token;
+    } else {
+      publicToken = crypto.randomUUID();
+      const table = type === 'quote' ? 'quotes' : 'invoices';
+      await supabase
+        .from(table)
+        .update({ public_token: publicToken })
+        .eq('id', id);
+      console.log(`Generated and saved public_token for ${type} ${id}`);
     }
 
     // Get business profile and subscription tier
@@ -220,13 +255,15 @@ serve(async (req) => {
       );
     }
 
-    // Generate the share URL
-    const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
+    // Generate the share URL using public_token so internal UUIDs are never exposed
+    const baseUrl = Deno.env.get('APP_URL') || 'https://app.tradiemate.com.au';
     const shareUrl = type === 'quote'
-      ? `${baseUrl}/q/${id}`
-      : `${baseUrl}/i/${id}`;
+      ? `${baseUrl}/public/quote/${publicToken}`
+      : `${baseUrl}/public/invoice/${publicToken}`;
 
-    const businessName = profile?.business_name || 'Your Business';
+    // SEC-M3: Strip CR/LF to prevent header injection when businessName is used in From: header
+    const businessName = (profile?.business_name || 'Your Business').replace(/[
+]/g, '');
     const documentNumber = type === 'quote' ? document.quote_number : document.invoice_number;
     const total = Number(document.total).toFixed(2);
 
@@ -238,39 +275,39 @@ serve(async (req) => {
       const htmlBody = type === 'quote'
         ? `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #45201c;">Quote from ${businessName}</h2>
-            <p>Hi ${recipient.name || 'there'},</p>
-            <p>Here's your quote for <strong>$${total}</strong>.</p>
+            <h2 style="color: #45201c;">Quote from ${escapeHtml(businessName)}</h2>
+            <p>Hi ${escapeHtml(recipient.name) || 'there'},</p>
+            <p>Here's your quote for <strong>${escapeHtml(total)}</strong>.</p>
             <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0;"><strong>Quote Number:</strong> ${documentNumber}</p>
-              <p style="margin: 10px 0 0 0;"><strong>Total:</strong> $${total}</p>
+              <p style="margin: 0;"><strong>Quote Number:</strong> ${escapeHtml(documentNumber)}</p>
+              <p style="margin: 10px 0 0 0;"><strong>Total:</strong> ${escapeHtml(total)}</p>
             </div>
             <a href="${shareUrl}" style="display: inline-block; background: #45201c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">View Quote</a>
-            <p>Thanks,<br>${businessName}</p>
+            <p>Thanks,<br>${escapeHtml(businessName)}</p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
             <p style="color: #888; font-size: 12px;">Powered by your business management app</p>
           </div>
         `
         : `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #45201c;">Invoice from ${businessName}</h2>
-            <p>Hi ${recipient.name || 'there'},</p>
-            <p>Here's your invoice for <strong>$${total}</strong>.</p>
+            <h2 style="color: #45201c;">Invoice from ${escapeHtml(businessName)}</h2>
+            <p>Hi ${escapeHtml(recipient.name) || 'there'},</p>
+            <p>Here's your invoice for <strong>${escapeHtml(total)}</strong>.</p>
             <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0;"><strong>Invoice Number:</strong> ${documentNumber}</p>
-              <p style="margin: 10px 0 0 0;"><strong>Total:</strong> $${total}</p>
+              <p style="margin: 0;"><strong>Invoice Number:</strong> ${escapeHtml(documentNumber)}</p>
+              <p style="margin: 10px 0 0 0;"><strong>Total:</strong> ${escapeHtml(total)}</p>
             </div>
             <a href="${shareUrl}" style="display: inline-block; background: #45201c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">View & Pay Invoice</a>
             <p>Payment details are included in the invoice.</p>
-            <p>Thanks,<br>${businessName}</p>
+            <p>Thanks,<br>${escapeHtml(businessName)}</p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
             <p style="color: #888; font-size: 12px;">Powered by your business management app</p>
           </div>
         `;
 
       const plainTextBody = type === 'quote'
-        ? `Hi ${recipient.name || 'there'},\n\nHere's your quote from ${businessName}.\n\nQuote: ${documentNumber}\nTotal: $${total}\n\nView and accept your quote here:\n${shareUrl}\n\nThanks,\n${businessName}`
-        : `Hi ${recipient.name || 'there'},\n\nHere's your invoice from ${businessName}.\n\nInvoice: ${documentNumber}\nTotal: $${total}\n\nView your invoice here:\n${shareUrl}\n\nPayment details are included in the invoice.\n\nThanks,\n${businessName}`;
+        ? `Hi ${escapeHtml(recipient.name) || 'there'},\n\nHere's your quote from ${businessName}.\n\nQuote: ${documentNumber}\nTotal: ${escapeHtml(total)}\n\nView and accept your quote here:\n${shareUrl}\n\nThanks,\n${businessName}`
+        : `Hi ${escapeHtml(recipient.name) || 'there'},\n\nHere's your invoice from ${businessName}.\n\nInvoice: ${documentNumber}\nTotal: ${escapeHtml(total)}\n\nView your invoice here:\n${shareUrl}\n\nPayment details are included in the invoice.\n\nThanks,\n${businessName}`;
 
       // Try to send via Resend first
       const resendApiKey = Deno.env.get('RESEND_API_KEY');
@@ -301,20 +338,9 @@ serve(async (req) => {
         }
       }
 
-      // Update sent_at timestamp
-      if (type === 'quote') {
-        await supabase
-          .from('quotes')
-          .update({ sent_at: new Date().toISOString(), status: 'sent' })
-          .eq('id', id);
-      } else {
-        await supabase
-          .from('invoices')
-          .update({ sent_at: new Date().toISOString(), status: 'sent' })
-          .eq('id', id);
-      }
-
       if (emailSent) {
+        // Only mark as sent after confirmed delivery by the email provider
+        await markDocumentSent(supabase, type, id);
         console.log('Email sent successfully via Resend');
         return new Response(
           JSON.stringify({
@@ -327,7 +353,10 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } else {
-        console.log('Falling back to mailto link');
+        // Delivery not confirmed: do NOT mark the document as sent.
+        // The client receives a mailto fallback and is responsible for
+        // actually dispatching the message.
+        console.log('Falling back to mailto link; status not updated');
         return new Response(
           JSON.stringify({
             success: true,
@@ -342,26 +371,23 @@ serve(async (req) => {
       }
     } else if (method === 'sms') {
       const smsBody = type === 'quote'
-        ? `Hi! Here's your quote from ${businessName} for $${total}. View it here: ${shareUrl}`
-        : `Hi! Here's your invoice from ${businessName} for $${total}. View it here: ${shareUrl}`;
+        ? `Hi! Here's your quote from ${businessName} for ${escapeHtml(total)}. View it here: ${shareUrl}`
+        : `Hi! Here's your invoice from ${businessName} for ${escapeHtml(total)}. View it here: ${shareUrl}`;
 
-      // Try to send via Twilio first
-      const twilioResult = await sendTwilioSms(recipient.phone!, smsBody);
-
-      // Update sent_at timestamp
-      if (type === 'quote') {
-        await supabase
-          .from('quotes')
-          .update({ sent_at: new Date().toISOString(), status: 'sent' })
-          .eq('id', id);
-      } else {
-        await supabase
-          .from('invoices')
-          .update({ sent_at: new Date().toISOString(), status: 'sent' })
-          .eq('id', id);
+      // SECURITY: Validate phone number exists before attempting SMS
+      if (!recipient.phone) {
+        return new Response(
+          JSON.stringify({ error: 'Phone number is required for SMS notifications' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
+      // Try to send via Twilio first
+      const twilioResult = await sendTwilioSms(recipient.phone, smsBody);
+
       if (twilioResult.success) {
+        // Only mark as sent after Twilio confirms message acceptance
+        await markDocumentSent(supabase, type, id);
         console.log('SMS sent successfully via Twilio');
         return new Response(
           JSON.stringify({
@@ -374,8 +400,10 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } else {
-        // Fallback to SMS URL for native app
-        console.log('Falling back to native SMS URL');
+        // Delivery not confirmed: do NOT mark the document as sent.
+        // The client receives a native SMS URL and is responsible for
+        // actually dispatching the message.
+        console.log('Falling back to native SMS URL; status not updated');
         return new Response(
           JSON.stringify({
             success: true,

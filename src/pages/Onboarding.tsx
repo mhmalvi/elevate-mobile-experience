@@ -106,7 +106,7 @@ export default function Onboarding() {
           .select();
       }
 
-      const { data, error } = result;
+      const { error } = result;
 
       if (error) {
         throw error;

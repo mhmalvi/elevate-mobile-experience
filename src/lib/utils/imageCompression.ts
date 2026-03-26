@@ -84,8 +84,6 @@ export async function compressImage(
                         { type: opts.mimeType, lastModified: Date.now() }
                     );
 
-                    console.log(`[Image Compression] ${file.name}: ${(file.size / 1024).toFixed(1)}KB → ${(compressedFile.size / 1024).toFixed(1)}KB (${Math.round((1 - compressedFile.size / file.size) * 100)}% saved)`);
-
                     resolve(compressedFile);
                 },
                 opts.mimeType,

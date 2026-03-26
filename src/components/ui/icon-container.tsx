@@ -34,7 +34,7 @@ export function IconContainer({
         ghost: 'bg-muted/30 border-muted-foreground/10 text-muted-foreground',
     };
 
-    const isLucideIcon = typeof Icon === 'function' || (typeof Icon === 'object' && Icon !== null && 'displayName' in Icon);
+    const isComponent = typeof Icon === 'function';
 
     return (
         <div className={cn(
@@ -43,8 +43,7 @@ export function IconContainer({
             variantStyles[variant],
             className
         )}>
-            {isLucideIcon ? (
-                // @ts-ignore - Icon is a components
+            {isComponent ? (
                 <Icon className={cn(iconSizeStyles[size])} />
             ) : (
                 Icon

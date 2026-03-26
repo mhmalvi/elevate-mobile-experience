@@ -54,16 +54,37 @@ export const secureStorage = {
 };
 
 /**
- * Helper to clear all secure storage
+ * Known key prefixes used by TradieMate in storage.
+ * Used to scope clearSecureStorage() to only TradieMate data,
+ * avoiding clearing unrelated keys from other libraries or browser extensions.
+ */
+const TRADIEMATE_KEY_PREFIXES = ['sb-', 'tradiemate_', 'offline_'];
+
+/**
+ * Helper to clear TradieMate-scoped secure storage
  * Useful for logout functionality
+ * Only clears keys matching known TradieMate prefixes to avoid
+ * wiping unrelated data from sessionStorage or Preferences.
  */
 export async function clearSecureStorage(): Promise<void> {
   if (isNativePlatform) {
-    // Clear all Capacitor Preferences
-    await Preferences.clear();
+    // Get all keys and remove only TradieMate-scoped ones
+    const { keys } = await Preferences.keys();
+    await Promise.all(
+      keys
+        .filter((key) => TRADIEMATE_KEY_PREFIXES.some((prefix) => key.startsWith(prefix)))
+        .map((key) => Preferences.remove({ key }))
+    );
   } else {
-    // Clear sessionStorage
-    sessionStorage.clear();
+    // Remove only TradieMate-scoped keys from sessionStorage
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key && TRADIEMATE_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => sessionStorage.removeItem(key));
   }
 }
 

@@ -36,6 +36,8 @@ export const SUBSCRIPTION_TIERS: TierConfig[] = [
       '5 quotes per month',
       'Basic invoicing (5/month)',
       '3 active jobs',
+      '10 clients',
+      '10 emails per month',
       '1 user',
       'Branding on documents',
       '30-day data history',

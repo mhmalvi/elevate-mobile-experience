@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 import { decryptBankDetails, EncryptedBankAccountDetails } from "../_shared/encryption.ts";
+import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
@@ -42,6 +43,15 @@ serve(async (req) => {
     }
 
     logStep('User authenticated', { userId: user.id });
+
+    // Rate limiting: 30 requests per 60 seconds per user
+    const rateLimit = await checkRateLimit(supabaseClient, user.id, 'get-payment-settings', 30, 60);
+    if (rateLimit.limited) {
+      return new Response(JSON.stringify({ error: 'Too many requests. Please try again later.' }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': String(rateLimit.retryAfterSeconds || 60) },
+      });
+    }
 
     // SECURITY: Fetch only the authenticated user's profile
     const { data: profile, error: fetchError } = await supabaseClient

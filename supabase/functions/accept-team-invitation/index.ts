@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
@@ -34,7 +34,10 @@ serve(async (req) => {
     }
 
     // Rate limiting (using token as key since get-details is unauthenticated)
-    const rateLimitKey = token;
+    // SECURITY: Hash the token before using as rate limit key to avoid storing raw secrets
+    const encoder = new TextEncoder();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(token));
+    const rateLimitKey = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
     const rateLimit = await checkRateLimit(supabase, rateLimitKey, 'accept-team-invitation', 10, 60);
     if (rateLimit.limited) {
       return new Response(
@@ -72,7 +75,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         team_name: teamName,
         role: invitation.role,
-        email: invitation.email,
         expires_at: invitation.expires_at
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

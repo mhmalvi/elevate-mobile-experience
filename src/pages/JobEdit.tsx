@@ -47,50 +47,50 @@ export default function JobEdit() {
   });
 
   useEffect(() => {
-    if (user && id) {
-      fetchClients();
-      fetchJob();
-    }
-  }, [user, id]);
+    if (!user || !id) return;
 
-  const fetchClients = async () => {
-    let query = supabase
-      .from('clients')
-      .select('*')
-      .eq('user_id', user?.id)
-      .is('deleted_at', null);
-    if (team?.id) query = query.eq('team_id', team.id);
-    const { data } = await query.order('name');
-    setClients(data || []);
-  };
+    const fetchClients = async () => {
+      let query = supabase
+        .from("clients")
+        .select("*")
+        .eq("user_id", user.id)
+        .is("deleted_at", null);
+      if (team?.id) query = query.eq("team_id", team.id);
+      const { data } = await query.order("name");
+      setClients(data || []);
+    };
 
-  const fetchJob = async () => {
-    const { data, error } = await supabase
-      .from('jobs')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const fetchJob = async () => {
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("*")
+        .eq("id", id)
+        .single();
 
-    if (error || !data) {
-      toast({ title: 'Job not found', variant: 'destructive' });
-      navigate('/jobs');
-      return;
-    }
+      if (error || !data) {
+        toast({ title: "Job not found", variant: "destructive" });
+        navigate("/jobs");
+        return;
+      }
 
-    setForm({
-      client_id: data.client_id || '',
-      title: data.title,
-      description: data.description || '',
-      site_address: data.site_address || '',
-      scheduled_date: data.scheduled_date || '',
-      status: data.status || 'approved',
-      notes: data.notes || '',
-      actual_hours: data.actual_hours || 0,
-      material_costs: data.material_costs || 0,
-      assigned_to: data.assigned_to || '',
-    });
-    setFetching(false);
-  };
+      setForm({
+        client_id: data.client_id || "",
+        title: data.title,
+        description: data.description || "",
+        site_address: data.site_address || "",
+        scheduled_date: data.scheduled_date || "",
+        status: data.status || "approved",
+        notes: data.notes || "",
+        actual_hours: data.actual_hours || 0,
+        material_costs: data.material_costs || 0,
+        assigned_to: data.assigned_to || "",
+      });
+      setFetching(false);
+    };
+
+    fetchClients();
+    fetchJob();
+  }, [user, id, team, toast, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

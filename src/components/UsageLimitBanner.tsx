@@ -24,7 +24,7 @@ export function UsageLimitBanner({ usageType, used, limit, tier, isUnlimited }: 
   const navigate = useNavigate();
   const label = usageTypeLabels[usageType];
   const remaining = limit - used;
-  const percentUsed = (used / limit) * 100;
+  const percentUsed = limit > 0 ? (used / limit) * 100 : 0;
 
   // Don't show if unlimited or plenty remaining
   if (isUnlimited || remaining > 3) return null;

@@ -64,7 +64,6 @@ export async function initializePurchases(userId?: string): Promise<void> {
 
   // Skip RevenueCat on web - web uses Stripe directly via edge functions
   if (!isNativeApp()) {
-    console.log('[RevenueCat] Skipped on web - using Stripe directly');
     return;
   }
 
@@ -84,7 +83,6 @@ export async function initializePurchases(userId?: string): Promise<void> {
     }
 
     isInitialized = true;
-    console.log('[RevenueCat] Initialized successfully on', platform);
   } catch (error) {
     console.error('[RevenueCat] Failed to initialize:', error);
     throw error;
@@ -102,7 +100,6 @@ export async function getAvailablePackages(): Promise<PurchasesPackage[]> {
     const currentOffering = offerings.current;
 
     if (!currentOffering) {
-      console.log('[RevenueCat] No current offering found');
       return [];
     }
 
@@ -237,17 +234,10 @@ async function syncSubscriptionToSupabase(customerInfo: CustomerInfo): Promise<v
       expiresAt = firstEntitlement.expirationDate;
     }
 
-    await supabase
-      .from('profiles')
-      .update({
-        subscription_tier: active ? tier : 'free',
-        subscription_provider: active ? provider : null,
-        subscription_id: active ? (customerInfo as any).originalAppUserId : null,
-        subscription_expires_at: expiresAt,
-      })
-      .eq('user_id', user.id);
+    // Subscription tier is managed by the webhook (single source of truth).
+    // We only log the sync attempt here for debugging; no DB write from client.
+    console.warn('[RevenueCat] Subscription state:', { active, tier, provider, expiresAt });
 
-    console.log('[RevenueCat] Synced subscription to Supabase:', { tier, provider });
   } catch (error) {
     console.error('[RevenueCat] Failed to sync to Supabase:', error);
   }
@@ -261,7 +251,6 @@ export async function setRevenueCatUserId(userId: string): Promise<void> {
 
   try {
     await NativePurchases.logIn({ appUserID: userId });
-    console.log('[RevenueCat] User ID set:', userId);
   } catch (error) {
     console.error('[RevenueCat] Failed to set user ID:', error);
   }
@@ -275,7 +264,6 @@ export async function logOutRevenueCat(): Promise<void> {
 
   try {
     await NativePurchases.logOut();
-    console.log('[RevenueCat] User logged out');
   } catch (error) {
     console.error('[RevenueCat] Failed to log out:', error);
   }

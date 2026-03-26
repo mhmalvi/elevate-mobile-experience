@@ -13,7 +13,11 @@ export default function JoinTeam() {
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
-  const [invitation, setInvitation] = useState<any>(null);
+  const [invitation, setInvitation] = useState<{
+    team_name?: string;
+    teams?: { name?: string } | null;
+    role?: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -162,7 +166,7 @@ export default function JoinTeam() {
     );
   }
 
-  const teamName = invitation?.team_name || (invitation?.teams as { name?: string } | null)?.name || 'the team';
+  const teamName = invitation?.team_name || invitation?.teams?.name || 'the team';
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">

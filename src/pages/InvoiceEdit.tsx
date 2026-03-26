@@ -7,27 +7,22 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, Trash2, User, ArrowLeft, Receipt, Save } from 'lucide-react';
+import { LineItemRow } from '@/components/list-items';
+import { Loader2, Plus, User, ArrowLeft, Receipt, Save } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import { generateUUID } from '@/lib/utils/uuid';
+import { updateLineItem as updateLineItemUtil, calculateLineItemTotals, type LineItem } from '@/lib/lineItems';
 
 type Client = Tables<'clients'>;
-
-interface LineItem {
-  id: string;
-  description: string;
-  quantity: number;
-  unit: string;
-  unit_price: number;
-  item_type: 'labour' | 'materials';
-}
 
 export default function InvoiceEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { team } = useTeam();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
@@ -42,60 +37,62 @@ export default function InvoiceEdit() {
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
 
   useEffect(() => {
-    if (user && id) {
-      fetchClients();
-      fetchInvoice();
-    }
-  }, [user, id]);
+    if (!user || !id) return;
 
-  const fetchClients = async () => {
-    const { data } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('user_id', user?.id)
-      .order('name');
-    setClients(data || []);
-  };
+    const fetchClients = async () => {
+      let query = supabase
+        .from("clients")
+        .select("*")
+        .eq("user_id", user.id)
+        .is("deleted_at", null);
+      if (team?.id) query = query.eq("team_id", team.id);
+      const { data } = await query.order("name");
+      setClients(data || []);
+    };
 
-  const fetchInvoice = async () => {
-    const { data: invoice, error } = await supabase
-      .from('invoices')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const fetchInvoice = async () => {
+      const { data: invoice, error } = await supabase
+        .from("invoices")
+        .select("*")
+        .eq("id", id)
+        .single();
 
-    if (error || !invoice) {
-      toast({ title: 'Invoice not found', variant: 'destructive' });
-      navigate('/invoices');
-      return;
-    }
+      if (error || !invoice) {
+        toast({ title: "Invoice not found", variant: "destructive" });
+        navigate("/invoices");
+        return;
+      }
 
-    setForm({
-      client_id: invoice.client_id || '',
-      title: invoice.title,
-      description: invoice.description || '',
-      due_date: invoice.due_date || '',
-      notes: invoice.notes || '',
-    });
+      setForm({
+        client_id: invoice.client_id || "",
+        title: invoice.title,
+        description: invoice.description || "",
+        due_date: invoice.due_date || "",
+        notes: invoice.notes || "",
+      });
 
-    const { data: items } = await supabase
-      .from('invoice_line_items')
-      .select('*')
-      .eq('invoice_id', id)
-      .order('sort_order');
+      const { data: items } = await supabase
+        .from("invoice_line_items")
+        .select("*")
+        .eq("invoice_id", id)
+        .order("sort_order");
 
-    setLineItems(
-      items?.map((item) => ({
-        id: item.id,
-        description: item.description,
-        quantity: item.quantity || 1,
-        unit: item.unit || 'each',
-        unit_price: item.unit_price,
-        item_type: (item.item_type as 'labour' | 'materials') || 'labour',
-      })) || []
-    );
-    setFetching(false);
-  };
+      setLineItems(
+        items?.map((item) => ({
+          id: item.id,
+          description: item.description,
+          quantity: item.quantity || 1,
+          unit: item.unit || "each",
+          unit_price: item.unit_price,
+          item_type: (item.item_type as "labour" | "materials") || "labour",
+        })) || []
+      );
+      setFetching(false);
+    };
+
+    fetchClients();
+    fetchInvoice();
+  }, [user, id, team, toast, navigate]);
 
   const addLineItem = () => {
     setLineItems([
@@ -110,16 +107,11 @@ export default function InvoiceEdit() {
     }
   };
 
-  const updateLineItem = (itemId: string, field: keyof LineItem, value: any) => {
-    setLineItems(lineItems.map((item) => (item.id === itemId ? { ...item, [field]: value } : item)));
+  const updateLineItem = (itemId: string, field: keyof LineItem, value: LineItem[keyof LineItem]) => {
+    updateLineItemUtil(setLineItems, itemId, field, value);
   };
 
-  const calculateTotals = () => {
-    const subtotal = lineItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
-    const gst = subtotal * 0.1;
-    const total = subtotal + gst;
-    return { subtotal, gst, total };
-  };
+  const calculateTotals = () => calculateLineItemTotals(lineItems);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -287,80 +279,15 @@ export default function InvoiceEdit() {
             </div>
 
             {lineItems.map((item, index) => (
-              <div key={item.id} className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-3 animate-fade-in" style={{ animationDelay: `${index * 0.05}s` }}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Item {index + 1}</span>
-                  {lineItems.length > 1 && (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => removeLineItem(item.id)}>
-                      <Trash2 className="w-4 h-4 text-destructive" />
-                    </Button>
-                  )}
-                </div>
-
-                <Input
-                  placeholder="Description"
-                  value={item.description}
-                  onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                  className="h-11 rounded-xl"
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                  <div>
-                    <Label className="text-xs">Qty</Label>
-                    <Input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={item.quantity}
-                      onChange={(e) => updateLineItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                      className="h-10 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Unit</Label>
-                    <Select value={item.unit} onValueChange={(v) => updateLineItem(item.id, 'unit', v)}>
-                      <SelectTrigger className="h-10 rounded-xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="each">Each</SelectItem>
-                        <SelectItem value="hour">Hour</SelectItem>
-                        <SelectItem value="sqm">m²</SelectItem>
-                        <SelectItem value="lm">Lm</SelectItem>
-                        <SelectItem value="job">Job</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Price</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.unit_price}
-                      onChange={(e) => updateLineItem(item.id, 'unit_price', parseFloat(e.target.value) || 0)}
-                      className="h-10 rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <Select
-                  value={item.item_type}
-                  onValueChange={(v: 'labour' | 'materials') => updateLineItem(item.id, 'item_type', v)}
-                >
-                  <SelectTrigger className="h-10 rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="labour">Labour</SelectItem>
-                    <SelectItem value="materials">Materials</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="text-right text-sm font-semibold text-primary">
-                  ${(item.quantity * item.unit_price).toFixed(2)}
-                </div>
-              </div>
+              <LineItemRow
+                key={item.id}
+                item={item}
+                index={index}
+                canRemove={lineItems.length > 1}
+                showItemType
+                onUpdate={updateLineItem}
+                onRemove={removeLineItem}
+              />
             ))}
           </div>
 

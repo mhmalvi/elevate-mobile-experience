@@ -291,6 +291,7 @@ export default function InvoiceDetail() {
                 <SendNotificationButton
                   type="invoice"
                   id={id!}
+                  publicToken={invoice?.public_token}
                   recipient={{
                     email: client.email,
                     phone: client.phone,

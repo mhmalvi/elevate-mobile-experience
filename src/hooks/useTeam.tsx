@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo, createContext, useContext, ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -58,11 +58,14 @@ export function TeamProvider({ children }: { children: ReactNode }) {
 
   // Persistent team selection
   const [currentTeamId, setCurrentTeamId] = useState<string | null>(() => {
-    return sessionStorage.getItem('tradie_mate_active_team_id');
+    return localStorage.getItem('tradie_mate_active_team_id');
   });
 
-  const fetchTeamData = async () => {
+  const fetchTeamData = useCallback(async () => {
     if (!user) {
+      setTeam(null);
+      setUserRole(null);
+      setTeamMembers([]);
       setLoading(false);
       return;
     }
@@ -94,7 +97,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
       }
 
       // Extract all unique teams
-      const teamsList = memberships.map((m: any) => m.teams);
+      const teamsList = memberships.map((m) => (m as unknown as { teams: Team }).teams);
       setAllTeams(teamsList);
 
       // Determine active membership
@@ -110,13 +113,13 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         // Update current ID to match the fallback
         if (activeMembership) {
           setCurrentTeamId(activeMembership.team_id);
-          sessionStorage.setItem('tradie_mate_active_team_id', activeMembership.team_id);
+          localStorage.setItem('tradie_mate_active_team_id', activeMembership.team_id);
         }
       }
 
       if (activeMembership) {
         setUserRole(activeMembership.role as TeamRole);
-        setTeam((activeMembership as any).teams);
+        setTeam((activeMembership as unknown as { teams: Team }).teams);
 
         // Fetch team members for the ACTIVE team
         const { data: members, error: membersError } = await supabase
@@ -138,17 +141,17 @@ export function TeamProvider({ children }: { children: ReactNode }) {
       setError(err instanceof Error ? err.message : 'Unknown error');
       setLoading(false);
     }
-  };
+  }, [user, currentTeamId]);
 
   useEffect(() => {
     fetchTeamData();
   }, [user, currentTeamId]); // Refetch if user or currentTeamId changes
 
-  const switchTeam = (teamId: string) => {
+  const switchTeam = useCallback((teamId: string) => {
     setCurrentTeamId(teamId);
-    sessionStorage.setItem('tradie_mate_active_team_id', teamId);
+    localStorage.setItem('tradie_mate_active_team_id', teamId);
     // The useEffect will trigger fetchTeamData
-  };
+  }, []);
 
   // Permission helpers based on role hierarchy
   const canCreate = userRole !== null && ['owner', 'admin', 'member'].includes(userRole);
@@ -156,7 +159,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
   const canDelete = userRole !== null && ['owner', 'admin'].includes(userRole);
   const canManageTeam = userRole !== null && ['owner', 'admin'].includes(userRole);
 
-  const value = {
+  const value = useMemo(() => ({
     team,
     userRole,
     teamMembers,
@@ -169,7 +172,7 @@ export function TeamProvider({ children }: { children: ReactNode }) {
     refetch: fetchTeamData,
     allTeams,
     switchTeam
-  };
+  }), [team, userRole, teamMembers, loading, error, canCreate, canEdit, canDelete, canManageTeam, fetchTeamData, allTeams, switchTeam]);
 
   return <TeamContext.Provider value={value}>{children}</TeamContext.Provider>;
 }

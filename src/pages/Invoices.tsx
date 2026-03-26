@@ -2,18 +2,15 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { EmptyState } from '@/components/ui/empty-state';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { SearchInput } from '@/components/ui/search-input';
 import { ListSkeleton } from '@/components/ui/list-skeleton';
 import { Button } from '@/components/ui/button';
 
 import { InvoiceListItem } from '@/components/list-items';
-import { Receipt, Calendar, AlertTriangle, WifiOff, ChevronRight, Plus } from 'lucide-react';
-import { format, isPast, parseISO } from 'date-fns';
+import { Receipt, WifiOff, Plus } from 'lucide-react';
+import { isPast, parseISO } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 import { useOfflineInvoices } from '@/lib/offline/offlineHooks';
-import { formatCurrency } from '@/lib/utils';
-import { cn } from '@/lib/utils';
 
 export default function Invoices() {
   const navigate = useNavigate();

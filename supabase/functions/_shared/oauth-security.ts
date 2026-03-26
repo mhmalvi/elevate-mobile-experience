@@ -130,7 +130,15 @@ export async function verifyState(stateParam: string): Promise<VerificationResul
     // Verify signature
     const expectedSignature = await generateSignature(stateB64);
 
-    if (providedSignature !== expectedSignature) {
+    // Constant-time comparison to prevent timing side-channel attacks
+    const enc = new TextEncoder();
+    const a = enc.encode(providedSignature);
+    const b = enc.encode(expectedSignature);
+    let mismatch = a.length !== b.length ? 1 : 0;
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      mismatch |= (a[i] || 0) ^ (b[i] || 0);
+    }
+    if (mismatch !== 0) {
       return {
         valid: false,
         error: 'Invalid state signature: possible CSRF attack'

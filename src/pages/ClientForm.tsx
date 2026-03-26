@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { z } from 'zod';
 import { MobileLayout } from '@/components/layout/MobileLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,15 +8,28 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
+import { useTeam } from '@/hooks/useTeam';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ArrowLeft, Users, Phone, Mail, MapPin } from 'lucide-react';
 
 const AUSTRALIAN_STATES = ['NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'ACT', 'NT'];
 
+const clientSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+  email: z.string().email('Invalid email').or(z.literal('')).optional(),
+  phone: z.string().max(20).optional(),
+  address: z.string().max(500).optional(),
+  suburb: z.string().max(100).optional(),
+  state: z.string(),
+  postcode: z.string().regex(/^\d{4}$/, 'Must be 4 digits').or(z.literal('')).optional(),
+  notes: z.string().max(2000).optional(),
+});
+
 export default function ClientForm() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { team } = useTeam();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -33,10 +47,18 @@ export default function ClientForm() {
     e.preventDefault();
     if (!user) return;
 
+    const result = clientSchema.safeParse(form);
+    if (!result.success) {
+      const firstError = result.error.errors[0];
+      toast({ title: 'Validation error', description: firstError.message, variant: 'destructive' });
+      return;
+    }
+
     setLoading(true);
     const { error } = await supabase.from('clients').insert({
       ...form,
       user_id: user.id,
+      team_id: team?.id || null,
     });
 
     if (error) {

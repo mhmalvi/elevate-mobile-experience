@@ -1,11 +1,9 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useSearchParams } from "react-router-dom";
-import { AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/layout/PageTransition";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { TeamProvider } from "@/hooks/useTeam";
@@ -52,6 +50,7 @@ const IntegrationsSettings = lazy(() => import("./pages/settings/IntegrationsSet
 const Subcontractors = lazy(() => import("./pages/Subcontractors"));
 const Timesheets = lazy(() => import("./pages/Timesheets"));
 const TimesheetDetail = lazy(() => import("./pages/TimesheetDetail"));
+const TimesheetForm = lazy(() => import("./pages/TimesheetForm"));
 const VoiceWizard = lazy(() => import("./pages/VoiceWizard"));
 const BASReport = lazy(() => import("./pages/BASReport"));
 const PublicQuote = lazy(() => import("./pages/PublicQuote"));
@@ -59,18 +58,25 @@ const PublicInvoice = lazy(() => import("./pages/PublicInvoice"));
 const JoinTeam = lazy(() => import("./pages/JoinTeam"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: (failureCount, error: unknown) => {
+        const status = (error as { status?: number })?.status;
+        if (status !== undefined && status >= 400 && status < 500) return false;
+        return failureCount < 3;
+      },
+    },
+  },
+});
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
 
   if (authLoading || profileLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!user) {
@@ -105,17 +111,13 @@ function AppRoutes() {
   const location = useLocation();
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
-    <Suspense fallback={<PageLoader />}>
-      <AnimatePresence mode="sync">
-        <Routes location={location} key={location.pathname}>
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>
+        <Routes location={location}>
           <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/auth" replace />} />
           <Route path="/auth" element={
             user ? (
@@ -163,11 +165,12 @@ function AppRoutes() {
           <Route path="/settings/subcontractors" element={<ProtectedRoute><Subcontractors /></ProtectedRoute>} />
           <Route path="/settings/bas-report" element={<ProtectedRoute><BASReport /></ProtectedRoute>} />
           <Route path="/timesheets" element={<ProtectedRoute><Timesheets /></ProtectedRoute>} />
+          <Route path="/timesheets/new" element={<ProtectedRoute><TimesheetForm /></ProtectedRoute>} />
           <Route path="/timesheets/:id" element={<ProtectedRoute><TimesheetDetail /></ProtectedRoute>} />
           <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
         </Routes>
-      </AnimatePresence>
-    </Suspense>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -178,7 +181,6 @@ const App = () => (
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
         <TooltipProvider>
           <Toaster />
-          <Sonner />
           <BrowserRouter
             future={{
               v7_startTransition: true,
@@ -188,7 +190,12 @@ const App = () => (
             <AuthProvider>
               <TeamProvider>
                 <OfflineProvider>
-                  <AppRoutes />
+                  <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-2 focus:bg-white focus:text-primary">
+                    Skip to content
+                  </a>
+                  <div id="main-content">
+                    <AppRoutes />
+                  </div>
                 </OfflineProvider>
               </TeamProvider>
             </AuthProvider>
