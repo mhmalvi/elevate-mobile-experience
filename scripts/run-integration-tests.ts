@@ -572,7 +572,7 @@ async function testTeamFeatures(auth: AuthData, testData: any): Promise<TestResu
 }
 
 async function testAccountingIntegration(auth: AuthData): Promise<TestResult[]> {
-    logSection('📊 Accounting Integration Tests (Xero/MYOB)');
+    logSection('📊 Accounting Integration Tests (Xero/QuickBooks)');
     const results: TestResult[] = [];
 
     // Xero OAuth - test 'connect' action (returns auth URL)
@@ -580,12 +580,6 @@ async function testAccountingIntegration(auth: AuthData): Promise<TestResult[]> 
     results.push(await testEdgeFunction('xero-oauth', 'Accounting', auth.token, {
         action: 'connect',
     }, { expectedStatus: [200, 400, 500] })); // 500 if XERO_CLIENT_ID not configured
-
-    // MYOB OAuth - test 'connect' action (returns auth URL)
-    // Valid actions: connect, callback, disconnect
-    results.push(await testEdgeFunction('myob-oauth', 'Accounting', auth.token, {
-        action: 'connect',
-    }, { expectedStatus: [200, 400, 500] })); // 500 if MYOB_CLIENT_ID not configured
 
     // Xero sync clients (will fail without connection)
     results.push(await testEdgeFunction('xero-sync-clients', 'Accounting', auth.token, {},

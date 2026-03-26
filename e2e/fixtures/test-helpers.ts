@@ -6,15 +6,14 @@ import { faker } from '@faker-js/faker';
  * Provides reusable functions for common test operations
  */
 
-// Test user credentials - use environment variables or defaults for testing
+// Test user credentials - MUST be provided via environment variables
 export const TEST_USER = {
-  email: process.env.TEST_USER_EMAIL || 'aethonautomation@gmail.com',
-  password: process.env.TEST_USER_PASSWORD || '90989098',
+  email: process.env.TEST_USER_EMAIL || '',
+  password: process.env.TEST_USER_PASSWORD || '',
 };
 
-// Flag to indicate if test credentials are available (always true since we have defaults)
-// Use this instead of checking process.env.TEST_USER_EMAIL directly
-export const HAS_TEST_CREDENTIALS = Boolean(TEST_USER.email && TEST_USER.password);
+// Flag to indicate if test credentials are available via environment variables
+export const HAS_TEST_CREDENTIALS = Boolean(process.env.TEST_USER_EMAIL && process.env.TEST_USER_PASSWORD);
 
 // Generate test data
 export const generateTestData = {

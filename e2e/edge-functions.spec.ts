@@ -291,17 +291,6 @@ test.describe('Edge Functions - Authentication Required', () => {
             }
         });
 
-        test('should handle MYOB OAuth flow', async ({ page }) => {
-            const ctx = createTestContext(page);
-
-            await page.goto('/settings/integrations');
-            await ctx.wait.waitForPageReady();
-
-            const myobButton = page.locator('button, a').filter({ hasText: /myob/i }).first();
-            if (await myobButton.isVisible()) {
-                await ctx.screenshot.capture('edge-function-myob-integration');
-            }
-        });
     });
 
     test.describe('Voice Commands', () => {
