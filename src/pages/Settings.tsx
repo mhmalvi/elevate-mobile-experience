@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { LogOut, User, Building2, CreditCard, ChevronRight, Sparkles, Sun, Moon, Crown, Palette, Users, Settings as SettingsIcon, Link2, HardHat, FileText, Clock } from 'lucide-react';
+import { LogOut, User, Building2, CreditCard, ChevronRight, Sparkles, Sun, Moon, Crown, Palette, Users, Settings as SettingsIcon, Link2, HardHat, FileText, Clock, Shield, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
 
@@ -133,6 +133,48 @@ export default function Settings() {
                   className="data-[state=checked]:bg-primary"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Legal */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-primary" />
+              <h3 className="font-semibold text-foreground">Legal</h3>
+            </div>
+
+            <div className="space-y-2">
+              <a
+                href="https://aethonautomation.com/privacy-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card/80 backdrop-blur-sm border border-border/50 hover:bg-card hover:border-primary/20 hover:shadow-md transition-all duration-300 active:scale-[0.98] group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
+                  <Shield className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 text-left min-w-0">
+                  <p className="font-semibold text-foreground">Privacy Policy</p>
+                  <p className="text-xs text-muted-foreground">How we handle your data</p>
+                </div>
+                <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
+              </a>
+
+              <a
+                href="https://aethonautomation.com/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center gap-3 p-4 rounded-2xl bg-card/80 backdrop-blur-sm border border-border/50 hover:bg-card hover:border-primary/20 hover:shadow-md transition-all duration-300 active:scale-[0.98] group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
+                  <FileText className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 text-left min-w-0">
+                  <p className="font-semibold text-foreground">Terms of Service</p>
+                  <p className="text-xs text-muted-foreground">Usage terms & conditions</p>
+                </div>
+                <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
+              </a>
             </div>
           </div>
 
