@@ -1,3 +1,8 @@
+<!-- repo-card -->
+![elevate-mobile-experience](docs/assets/screenshot.png)
+
+> 🔗 **Live:** [elevate-mobile-experience.vercel.app](https://elevate-mobile-experience.vercel.app)
+
 # TradieMate
 
 > Mobile-first business management platform for trade professionals — invoicing, quoting, job tracking, and voice-powered workflows with native iOS & Android support.
