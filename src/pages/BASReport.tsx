@@ -11,6 +11,8 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
+import { useProfile } from '@/hooks/useProfile';
+import { getCountry } from '@/lib/countries';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn, formatCurrency } from '@/lib/utils';
@@ -70,6 +72,7 @@ const generateQuarterOptions = (): QuarterOption[] => {
 export default function BASReport() {
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { profile } = useProfile();
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
     const [exporting, setExporting] = useState(false);
@@ -103,7 +106,7 @@ export default function BASReport() {
             // Fetch invoices for the quarter
             const { data: invoices, error } = await supabase
                 .from('invoices')
-                .select('total, gst, subtotal, status, amount_paid')
+                .select('total, tax_amount, subtotal, status, amount_paid')
                 .eq('user_id', user?.id)
                 .gte('created_at', quarter.start.toISOString())
                 .lte('created_at', quarter.end.toISOString());
@@ -114,7 +117,7 @@ export default function BASReport() {
 
             // Calculate BAS figures
             const totalSales = invoiceList.reduce((sum, inv) => sum + (Number(inv.subtotal) || 0), 0);
-            const gstCollected = invoiceList.reduce((sum, inv) => sum + (Number(inv.gst) || 0), 0);
+            const gstCollected = invoiceList.reduce((sum, inv) => sum + (Number(inv.tax_amount) || 0), 0);
 
             // For now, we'll estimate GST paid as 10% of assumed expenses (simplified)
             // In a real scenario, this would come from an expenses table
@@ -192,6 +195,26 @@ export default function BASReport() {
             setExporting(false);
         }
     };
+
+    // The BAS is an ATO filing. Reachable by direct URL even though the
+    // Settings menu hides it for non-AU businesses, so guard it here too.
+    if (profile && profile.country_code !== 'AU') {
+        return (
+            <MobileLayout>
+                <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
+                    <FileText className="w-10 h-10 text-muted-foreground mb-4" />
+                    <h1 className="text-xl font-bold text-foreground mb-2">Not available in your region</h1>
+                    <p className="text-muted-foreground text-sm max-w-sm">
+                        The BAS is an Australian Taxation Office filing. Your business is set to{' '}
+                        {getCountry(profile.country_code).name}, so this report doesn't apply.
+                    </p>
+                    <Button variant="outline" className="mt-6" onClick={() => navigate('/settings')}>
+                        Back to Settings
+                    </Button>
+                </div>
+            </MobileLayout>
+        );
+    }
 
     return (
         <MobileLayout>
@@ -347,11 +370,19 @@ export default function BASReport() {
                                 </div>
                             )}
 
-                            {/* Disclaimer */}
-                            <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-2xl">
-                                <p className="text-sm text-blue-900 dark:text-blue-100">
-                                    <strong>Note:</strong> This is a simplified GST summary. Expenses are estimated at 30% of sales.
-                                    For accurate BAS lodgement, please consult your accountant or use integrated accounting software.
+                            {/* Disclaimer — deliberately prominent. GST Paid (1B) is
+                                not derived from real expense data; it is 10% of an
+                                assumed 30%-of-sales expense figure. Anyone lodging
+                                from this number without checking would be filing an
+                                invented amount, so this warns rather than notes. */}
+                            <div className="p-4 bg-warning/10 border border-warning/40 rounded-2xl">
+                                <p className="text-sm text-foreground">
+                                    <strong className="text-warning">Estimate only — do not lodge from this.</strong>{' '}
+                                    GST Collected (1A) comes from your actual invoices. GST Paid (1B) does
+                                    <strong> not</strong> — the app has no record of your expenses, so it assumes
+                                    they equal 30% of sales. That figure is a placeholder, not your real
+                                    position. Confirm both with your accountant or accounting software before
+                                    lodging your BAS.
                                 </p>
                             </div>
 

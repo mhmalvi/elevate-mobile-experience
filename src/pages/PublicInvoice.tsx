@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Receipt, Loader2, CreditCard, CheckCircle, PartyPopper, ArrowLeft } from 'lucide-react';
 import { format, isPast, parseISO } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import { safeNumber } from '@/lib/utils';
+import { safeNumber, taxLineLabel } from '@/lib/utils';
+import { setLocaleSettings, formatCurrency } from '@/lib/money';
+import { getCountry } from '@/lib/countries';
 
 export default function PublicInvoice() {
   const { id } = useParams();
@@ -52,6 +54,19 @@ export default function PublicInvoice() {
         .eq('user_id', invoiceData.user_id)
         .single();
       setProfile(profileData);
+
+      // Publish this business's currency/tax so formatCurrency and taxLineLabel
+      // render the document the way the tradesperson issued it.
+      if (profileData) {
+        setLocaleSettings({
+          countryCode: profileData.country_code || 'AU',
+          currency: profileData.currency_code || 'AUD',
+          locale: profileData.locale || getCountry(profileData.country_code).locale,
+          taxRate: typeof profileData.tax_rate === 'number' ? profileData.tax_rate : 0,
+          taxLabel: profileData.tax_label || 'Tax',
+          taxInclusive: profileData.tax_inclusive_pricing ?? false,
+        });
+      }
 
       const { data: brandingData } = await supabase
         .from('branding_settings')
@@ -159,7 +174,10 @@ export default function PublicInvoice() {
   const showLogo = branding?.show_logo_on_documents ?? true;
   const footerText = branding?.document_footer_text || 'Thank you for your business!';
 
-  const formatCurrency = (amount: number) => `$${safeNumber(amount).toFixed(2)}`;
+  // Currency/tax come from the business's profile, published in fetch above.
+  // This page is unauthenticated, so useProfile never runs — without that call
+  // the client viewing the document would see it priced in the app default
+  // rather than the currency the tradesperson actually invoices in.
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'N/A';
     return format(new Date(dateStr), 'dd MMM yyyy');
@@ -461,8 +479,8 @@ export default function PublicInvoice() {
                   <span>{formatCurrency(invoice.subtotal)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 10px', fontSize: 13, color: '#6b7280', borderBottom: '1px solid #e5e7eb', marginBottom: 6 }}>
-                  <span>GST (10%)</span>
-                  <span>{formatCurrency(invoice.gst)}</span>
+                  <span>{taxLineLabel()}</span>
+                  <span>{formatCurrency(invoice.tax_amount)}</span>
                 </div>
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',

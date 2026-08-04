@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Timer } from '@/components/ui/timer';
 import { VoiceRecorder } from '@/components/ui/voice-recorder';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { cn, safeNumber } from '@/lib/utils';
+import { cn, safeNumber, formatCurrency } from '@/lib/utils';
 import { compressImages } from '@/lib/utils/imageCompression';
 import {
   AlertDialog,
@@ -227,7 +227,7 @@ export default function JobDetail() {
     const invoiceNumber = `INV${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
     const total = job.quotes?.total || 0;
     const subtotal = total / 1.1;
-    const gst = total - subtotal;
+    const tax = total - subtotal;
 
     const { data: invoice, error } = await supabase.from('invoices').insert({
       user_id: user?.id,
@@ -238,7 +238,7 @@ export default function JobDetail() {
       title: job.title,
       description: job.description,
       subtotal,
-      gst,
+      tax_amount: tax,
       total,
       status: 'draft',
     }).select().single();
@@ -445,7 +445,7 @@ export default function JobDetail() {
                 >
                   <Receipt className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm font-medium">Link: Quote {job.quotes.quote_number}</span>
-                  <span className="ml-auto font-bold">${safeNumber(job.quotes.total).toLocaleString()}</span>
+                  <span className="ml-auto font-bold">{formatCurrency(safeNumber(job.quotes.total))}</span>
                 </button>
               )}
             </div>
@@ -566,15 +566,15 @@ export default function JobDetail() {
                 <div className="space-y-3 text-sm relative z-10">
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground font-medium">Quoted Total</span>
-                    <span className="font-bold">${costing.quotedTotal.toFixed(2)}</span>
+                    <span className="font-bold">{formatCurrency(costing.quotedTotal)}</span>
                   </div>
                   <div className="flex justify-between items-center text-destructive/80 font-medium">
                     <span>Labour ({job.actual_hours?.toFixed(1) || 0}h × $85)</span>
-                    <span>-${costing.labourCost.toFixed(2)}</span>
+                    <span>-{formatCurrency(costing.labourCost)}</span>
                   </div>
                   <div className="flex justify-between items-center text-destructive/80 font-medium">
                     <span>Material Costs</span>
-                    <span>-${costing.materialsCost.toFixed(2)}</span>
+                    <span>-{formatCurrency(costing.materialsCost)}</span>
                   </div>
                   <div className="pt-3 border-t border-border/60 flex justify-between items-end">
                     <div className="space-y-0.5">

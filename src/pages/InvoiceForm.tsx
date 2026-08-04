@@ -17,6 +17,7 @@ import { Tables } from '@/integrations/supabase/types';
 import { addDays, addMonths, format } from 'date-fns';
 import { RecurringInvoiceToggle } from '@/components/invoices/RecurringInvoiceToggle';
 import { generateUUID } from '@/lib/utils/uuid';
+import { calculateTax, taxLineLabel, formatCurrency } from '@/lib/money';
 
 type Client = Tables<'clients'>;
 
@@ -98,9 +99,10 @@ export default function InvoiceForm() {
 
   const calculateTotals = () => {
     const subtotal = lineItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-    const gst = subtotal * 0.1;
-    const total = subtotal + gst;
-    return { subtotal, gst, total };
+    // Rate and inclusive/exclusive convention come from the business profile
+    // rather than a hardcoded 10% Australian GST.
+    const { tax, total } = calculateTax(subtotal);
+    return { subtotal, gst: tax, total };
   };
 
   const generateInvoiceNumber = () => {
@@ -137,7 +139,7 @@ export default function InvoiceForm() {
         due_date: form.due_date,
         notes: form.notes,
         subtotal,
-        gst,
+        tax_amount: gst,
         total,
         status: 'draft',
         is_recurring: form.is_recurring,
@@ -363,8 +365,7 @@ export default function InvoiceForm() {
                   </div>
                 </div>
 
-                <div className="text-right text-sm font-semibold text-primary">
-                  ${(item.quantity * item.unit_price).toFixed(2)}
+                <div className="text-right text-sm font-semibold text-primary">{formatCurrency((item.quantity * item.unit_price))}
                 </div>
               </div>
             ))}
@@ -374,15 +375,15 @@ export default function InvoiceForm() {
           <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
-              <span>${subtotal.toFixed(2)}</span>
+              <span>{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">GST (10%)</span>
-              <span>${gst.toFixed(2)}</span>
+              <span className="text-muted-foreground">{taxLineLabel()}</span>
+              <span>{formatCurrency(gst)}</span>
             </div>
             <div className="flex justify-between font-bold text-lg pt-2 border-t border-border/50">
               <span>Total</span>
-              <span className="text-primary">${total.toFixed(2)}</span>
+              <span className="text-primary">{formatCurrency(total)}</span>
             </div>
           </div>
 

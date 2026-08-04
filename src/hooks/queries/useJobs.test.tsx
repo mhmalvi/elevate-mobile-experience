@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useJobs, useJob, useDeleteJob, useUpdateJobStatus } from './useJobs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { thenable } from '@/__tests__/mocks/supabaseChain';
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
@@ -14,6 +15,26 @@ vi.mock('@/integrations/supabase/client', () => ({
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }));
+
+// The query hooks call useTeam() to scope results to the active team. These
+// suites mocked useAuth but not useTeam, so every hook render threw
+// "useTeam must be used within a TeamProvider". Mocked with no team, which
+// exercises the solo-user path the assertions below actually describe.
+vi.mock('@/hooks/useTeam', () => ({
+  useTeam: () => ({
+    team: null,
+    userRole: null,
+    teamMembers: [],
+    loading: false,
+    error: null,
+    canCreate: true,
+    canEdit: true,
+    canDelete: true,
+    canManageTeam: true,
+    refetch: vi.fn(),
+  }),
+}));
+
 
 describe('Job Management - useJobs Hook', () => {
   let queryClient: QueryClient;
@@ -80,7 +101,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useJobs(1), { wrapper });
 
@@ -112,7 +133,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useJobs(1), { wrapper });
 
@@ -138,7 +159,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       renderHook(() => useJobs(1), { wrapper });
 
@@ -186,7 +207,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useJob('job-1'), { wrapper });
 
@@ -218,7 +239,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useJob('job-1'), { wrapper });
 
@@ -249,7 +270,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useJob('job-1'), { wrapper });
 
@@ -270,7 +291,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useDeleteJob(), { wrapper });
 
@@ -294,7 +315,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
@@ -317,7 +338,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useUpdateJobStatus(), { wrapper });
 
@@ -341,7 +362,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useUpdateJobStatus(), { wrapper });
 
@@ -362,7 +383,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useUpdateJobStatus(), { wrapper });
 
@@ -383,7 +404,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
@@ -405,7 +426,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useUpdateJobStatus(), { wrapper });
 
@@ -438,7 +459,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useJob('job-1'), { wrapper });
 
@@ -468,7 +489,7 @@ describe('Job Management - useJobs Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useJob('job-1'), { wrapper });
 

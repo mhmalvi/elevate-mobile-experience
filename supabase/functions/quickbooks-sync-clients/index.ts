@@ -4,6 +4,15 @@ import { decryptToken } from "../_shared/encryption.ts";
 import { getCorsHeaders, createCorsResponse } from "../_shared/cors.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 
+/** ISO code -> country name, for accounting systems that want a full name. */
+const COUNTRY_NAME: Record<string, string> = {
+  AU: "Australia", NZ: "New Zealand", GB: "United Kingdom", IE: "Ireland",
+  US: "United States", CA: "Canada", IN: "India", ZA: "South Africa",
+  SG: "Singapore", AE: "United Arab Emirates", DE: "Germany",
+  FR: "France", NL: "Netherlands",
+};
+
+
 function getQBApiBase(): string {
   const env = Deno.env.get("QUICKBOOKS_ENVIRONMENT") || "production";
   if (env === "sandbox" || env === "development") {
@@ -58,7 +67,7 @@ serve(async (req) => {
     // Get QuickBooks credentials
     const { data: profile } = await supabase
       .from("profiles")
-      .select("qb_realm_id, qb_access_token, qb_refresh_token, qb_token_expires_at, qb_sync_enabled")
+      .select("qb_realm_id, qb_access_token, qb_refresh_token, qb_token_expires_at, qb_sync_enabled, country_code")
       .eq("user_id", user.id)
       .single();
 
@@ -189,7 +198,8 @@ serve(async (req) => {
         if (client.address) {
           qbCustomer.BillAddr = {
             Line1: client.address,
-            Country: "Australia",
+            // Was hardcoded "Australia" on every synced customer record.
+            Country: COUNTRY_NAME[(profile?.country_code || "AU").toUpperCase()] || "Australia",
           };
 
           if (client.suburb) qbCustomer.BillAddr.City = client.suburb;

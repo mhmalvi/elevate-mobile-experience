@@ -77,7 +77,6 @@ ALWAYS respond with valid JSON only. No other text.
 - "create_client" - Ready to add new client (have client_name, optionally phone/email/address)
 - "schedule_job" - Create a new job (have title and either client_name or site_address)
 - "find_client" - Search for client (have search_name)
-- "add_job_note" - Add note to current job (have note text)
 - "mark_paid" - Mark an invoice as paid (have client_name or invoice_number)
 - "complete_job" - Mark a job as completed (have client_name or job_title)
 - "update_status" - Update status of a job or invoice (have entity_type, new_status, and client_name or entity details)
@@ -140,11 +139,6 @@ IMPORTANT RULES FOR ACTIONS:
 ### Search Data (for find_client):
 {
   "search_name": "Name to find"
-}
-
-### Job Note Data (for add_job_note):
-{
-  "note": "The content of the note"
 }
 
 ### Mark Paid Data (for mark_paid):
@@ -246,12 +240,9 @@ User: "Mark the roof job complete"
 User: "Update Tom's job to in progress"
 → {"speak": "Tom's job is now in progress.", "action": "update_status", "data": {"entity_type": "job", "new_status": "in_progress", "client_name": "Tom"}}
 
-### Job Notes:
-User: "Add a note: replaced the hot water system, old one had a major leak"
-→ {"speak": "Noted! That's on the record.", "action": "add_job_note", "data": {"note": "Replaced the hot water system, old one had a major leak"}}
-
-User: "Note: client requested extra coat of paint"
-→ {"speak": "Got it, added to the job notes.", "action": "add_job_note", "data": {"note": "Client requested extra coat of paint"}}
+### Job Notes (NOT SUPPORTED — say so, never claim it worked):
+User: "Add a note: replaced the hot water system"
+→ {"speak": "I can't add job notes by voice yet — open the job and add it there.", "action": "general_reply", "data": {}}
 
 ### Scheduling Jobs:
 User: "Schedule a job for tomorrow at Dave's place to fix the ceiling fan"
@@ -349,6 +340,22 @@ serve(async (req) => {
         }
 
         console.log(`Processing voice command for user ${user.id}. Query length: ${query.length}`);
+
+        // Fail fast and legibly. Without this the request fell through to an
+        // OpenRouter call with an empty bearer token, surfacing to the user as a
+        // generic "Something went wrong" that gave no clue the key was missing.
+        if (!OPENROUTER_API_KEY) {
+            console.error("OPENROUTER_API_KEY is not configured — cannot process voice commands");
+            return new Response(JSON.stringify({
+                error: "Voice assistant is not configured on this server (missing OPENROUTER_API_KEY).",
+                speak: "The voice assistant isn't set up yet. Please try again later.",
+                action: "general_reply",
+                data: {}
+            }), {
+                status: 503,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+        }
 
         // Build conversation messages
         const messages = [

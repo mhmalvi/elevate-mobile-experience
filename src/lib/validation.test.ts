@@ -169,7 +169,7 @@ describe('Bank Account Number Validation', () => {
     ];
 
     validAccounts.forEach(account => {
-      const result = validateBankAccountNumber(account);
+      const result = validateBankAccountNumber(account, 'AU');
       expect(result.valid).toBe(true);
       expect(result.error).toBeUndefined();
     });
@@ -183,7 +183,7 @@ describe('Bank Account Number Validation', () => {
     ];
 
     invalidAccounts.forEach(account => {
-      const result = validateBankAccountNumber(account);
+      const result = validateBankAccountNumber(account, 'AU');
       expect(result.valid).toBe(false);
       expect(result.error).toBeDefined();
     });
@@ -294,7 +294,7 @@ describe('Postcode Validation', () => {
     ];
 
     validPostcodes.forEach(postcode => {
-      const result = validatePostcode(postcode);
+      const result = validatePostcode(postcode, 'AU');
       expect(result.valid).toBe(true);
       expect(result.error).toBeUndefined();
     });
@@ -310,16 +310,16 @@ describe('Postcode Validation', () => {
     ];
 
     invalidPostcodes.forEach(postcode => {
-      const result = validatePostcode(postcode);
+      const result = validatePostcode(postcode, 'AU');
       expect(result.valid).toBe(false);
       expect(result.error).toBeDefined();
     });
   });
 
   it('should validate boundary postcodes', () => {
-    expect(validatePostcode('0200').valid).toBe(true); // Minimum valid
-    expect(validatePostcode('9999').valid).toBe(true); // Maximum valid
-    expect(validatePostcode('0199').valid).toBe(false); // Below minimum
+    expect(validatePostcode('0200', 'AU').valid).toBe(true); // Minimum valid
+    expect(validatePostcode('9999', 'AU').valid).toBe(true); // Maximum valid
+    expect(validatePostcode('0199', 'AU').valid).toBe(false); // Below minimum
   });
 });
 

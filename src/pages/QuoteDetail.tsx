@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { User, FileText, Send, Receipt, Download, Share2, Loader2, Briefcase, ArrowLeft, Edit, Camera, Trash2, Image } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils/clipboard';
-import { safeNumber } from '@/lib/utils';
+import { safeNumber, taxLineLabel, formatCurrency } from '@/lib/utils';
 import { compressImages } from '@/lib/utils/imageCompression';
 
 const QUOTE_STATUSES = ['draft', 'sent', 'viewed', 'accepted', 'declined'] as const;
@@ -156,7 +156,7 @@ export default function QuoteDetail() {
       title: quote.title,
       description: quote.description,
       subtotal: quote.subtotal,
-      gst: quote.gst,
+      tax_amount: quote.tax_amount,
       total: quote.total,
       status: 'draft',
     }).select().single();
@@ -296,11 +296,11 @@ export default function QuoteDetail() {
                 >
                   <div className="flex justify-between items-start gap-3">
                     <span className="font-semibold text-foreground flex-1">{item.description}</span>
-                    <span className="font-bold text-lg text-primary">${safeNumber(item.total).toFixed(2)}</span>
+                    <span className="font-bold text-lg text-primary">{formatCurrency(safeNumber(item.total))}</span>
                   </div>
                   <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="px-2 py-0.5 bg-muted/40 rounded-md">
-                      {item.quantity} × ${safeNumber(item.unit_price).toFixed(2)} / {item.unit}
+                      {item.quantity} × {formatCurrency(safeNumber(item.unit_price))} / {item.unit}
                     </span>
                     <span className="capitalize px-2 py-0.5 bg-primary/5 text-primary/70 rounded-md font-medium">
                       {item.item_type}
@@ -319,15 +319,15 @@ export default function QuoteDetail() {
             <div className="space-y-3 relative z-10">
               <div className="flex justify-between text-sm font-medium opacity-80">
                 <span>Subtotal</span>
-                <span>${safeNumber(quote.subtotal).toFixed(2)}</span>
+                <span>{formatCurrency(safeNumber(quote.subtotal))}</span>
               </div>
               <div className="flex justify-between text-sm font-medium opacity-80">
-                <span>GST (10%)</span>
-                <span>${safeNumber(quote.gst).toFixed(2)}</span>
+                <span>{taxLineLabel()}</span>
+                <span>{formatCurrency(quote.tax_amount)}</span>
               </div>
               <div className="flex justify-between items-end pt-3 border-t border-white/20 mt-3">
                 <span className="font-bold text-lg uppercase tracking-wider">Total Amount</span>
-                <span className="text-4xl font-black">${safeNumber(quote.total).toFixed(2)}</span>
+                <span className="text-4xl font-black">{formatCurrency(safeNumber(quote.total))}</span>
               </div>
             </div>
           </div>

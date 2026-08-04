@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useClients, useClient, useDeleteClient, useClientSearch } from './useClients';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { thenable } from '@/__tests__/mocks/supabaseChain';
 
 // Mock the supabase client
 vi.mock('@/integrations/supabase/client', () => ({
@@ -16,6 +17,26 @@ vi.mock('@/integrations/supabase/client', () => ({
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }));
+
+// The query hooks call useTeam() to scope results to the active team. These
+// suites mocked useAuth but not useTeam, so every hook render threw
+// "useTeam must be used within a TeamProvider". Mocked with no team, which
+// exercises the solo-user path the assertions below actually describe.
+vi.mock('@/hooks/useTeam', () => ({
+  useTeam: () => ({
+    team: null,
+    userRole: null,
+    teamMembers: [],
+    loading: false,
+    error: null,
+    canCreate: true,
+    canEdit: true,
+    canDelete: true,
+    canManageTeam: true,
+    refetch: vi.fn(),
+  }),
+}));
+
 
 describe('Client Management - useClients Hook', () => {
   let queryClient: QueryClient;
@@ -77,7 +98,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useClients(1), { wrapper });
 
@@ -102,7 +123,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useClients(2), { wrapper });
 
@@ -141,7 +162,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useClients(1), { wrapper });
 
@@ -163,7 +184,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       renderHook(() => useClients(1), { wrapper });
 
@@ -195,7 +216,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useClient('client-1'), { wrapper });
 
@@ -217,7 +238,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useClient('nonexistent'), { wrapper });
 
@@ -234,7 +255,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useDeleteClient(), { wrapper });
 
@@ -258,7 +279,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useDeleteClient(), { wrapper });
 
@@ -289,7 +310,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useClientSearch('john'), { wrapper });
 
@@ -314,7 +335,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       renderHook(() => useClientSearch('example.com'), { wrapper });
 
@@ -345,7 +366,7 @@ describe('Client Management - useClients Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       renderHook(() => useClientSearch('smith'), { wrapper });
 

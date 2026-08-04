@@ -240,7 +240,7 @@ export default function ClientDetail() {
                     <DollarSign className="w-3 h-3 text-success" />
                     <p className="text-[10px] font-black uppercase tracking-widest text-success/60">Lifetime</p>
                   </div>
-                  <p className="text-2xl font-black text-success tracking-tight">${totalRevenue.toLocaleString()}</p>
+                  <p className="text-2xl font-black text-success tracking-tight">{formatCurrency(totalRevenue)}</p>
                 </div>
                 <div className="p-4 bg-warning/5 border border-warning/20 rounded-2xl overflow-hidden relative group">
                   <div className="absolute -bottom-4 -right-4 w-12 h-12 bg-warning/10 rounded-full blur-xl group-hover:scale-150 transition-transform" />
@@ -248,7 +248,7 @@ export default function ClientDetail() {
                     <DollarSign className="w-3 h-3 text-warning" />
                     <p className="text-[10px] font-black uppercase tracking-widest text-warning/60">Due</p>
                   </div>
-                  <p className="text-2xl font-black text-warning tracking-tight">${outstandingAmount.toLocaleString()}</p>
+                  <p className="text-2xl font-black text-warning tracking-tight">{formatCurrency(outstandingAmount)}</p>
                 </div>
               </div>
             </div>

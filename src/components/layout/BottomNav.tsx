@@ -6,163 +6,157 @@ import {
   Receipt,
   FileText,
   Settings,
-  Mic
+  Mic,
+  type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { useState, useEffect } from 'react';
 import { VoiceCommandSheet } from '@/components/VoiceCommandSheet';
+
+/**
+ * LAYOUT NOTE
+ *
+ * The previous version split the bar into two 42%-wide groups either side of an
+ * inline FAB. On a 360px phone that left roughly 137px of track for three 48px
+ * targets, so the items collided at the low end of the device range — and to
+ * make room, labels were rendered at `opacity-0` unless the tab was active.
+ * Six unlabelled icons is not navigable: `FileText` (Quotes) and `Receipt`
+ * (Invoices) are near-identical glyphs for the app's two most confusable
+ * concepts.
+ *
+ * The FAB now floats ABOVE the bar rather than sitting inside it. That frees
+ * the full width for six evenly-spaced items with permanent labels, and keeps
+ * every destination reachable — this bar is the app's only navigation, so
+ * nothing can simply be dropped.
+ */
+
+interface NavItemDef {
+  path: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+const NAV_ITEMS: NavItemDef[] = [
+  { path: '/dashboard', label: 'Home', icon: LayoutDashboard },
+  { path: '/quotes', label: 'Quotes', icon: FileText },
+  { path: '/jobs', label: 'Jobs', icon: Briefcase },
+  { path: '/invoices', label: 'Invoices', icon: Receipt },
+  { path: '/clients', label: 'Clients', icon: Users },
+  { path: '/settings', label: 'Settings', icon: Settings },
+];
 
 export function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState(location.pathname);
 
-  // Sync state with location
-  useEffect(() => {
-    setActiveTab(location.pathname);
-  }, [location.pathname]);
-
-  const navItems = [
-    { path: '/dashboard', label: 'Home', icon: LayoutDashboard },
-    { path: '/quotes', label: 'Quotes', icon: FileText },
-    { path: '/jobs', label: 'Jobs', icon: Briefcase },
-    { path: '/invoices', label: 'Invoices', icon: Receipt },
-    { path: '/clients', label: 'Clients', icon: Users },
-    { path: '/settings', label: 'Settings', icon: Settings },
-  ];
+  // Derive directly from the router rather than mirroring it into state — the
+  // duplicate `useState`/`useEffect` pair only created a frame where the
+  // highlight lagged the actual route.
+  const isActive = (path: string) =>
+    path === '/dashboard'
+      ? location.pathname === path
+      : location.pathname.startsWith(path);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up pb-safe-bottom">
-      <div className="relative h-[80px] w-full max-w-lg mx-auto flex items-end mb-safe-bottom">
+    // `safe-bottom` is applied here ONLY. It used to be set on both this
+    // wrapper (pb-safe-bottom) and the inner container (mb-safe-bottom), so the
+    // inset was counted twice — about 68px of dead space on a gesture-nav phone.
+    <div className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up safe-bottom pointer-events-none">
+      <div className="relative w-full max-w-lg mx-auto px-4 pb-2 pointer-events-none">
 
-        {/* Glassmorphism Background Container */}
-        <div className="absolute inset-x-4 bottom-4 h-[72px] bg-card/90 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-[2.5rem] overflow-hidden">
-          {/* Subtle internal gradient/shine */}
-          <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent opacity-50 pointer-events-none" />
-          <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-70" />
-        </div>
-
-        {/* Floating Action Button (FAB) - Centered & Floating */}
-        <div className="absolute bottom-[28px] left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-          <div className="relative pointer-events-auto group animate-float">
-            {/* Deep Glow/Shadow */}
+        {/* Voice FAB — floats above the bar so the bar keeps its full width. */}
+        <div className="flex justify-center pointer-events-none">
+          <div className="relative pointer-events-auto group mb-3">
             <div className="absolute inset-0 rounded-full bg-primary/40 blur-2xl animate-pulse-glow" />
-
-            {/* Main Button wrapped in VoiceCommandSheet */}
             <VoiceCommandSheet>
               <Button
                 size="icon"
-                className="relative w-16 h-16 rounded-full bg-primary hover:bg-primary-hover shadow-glow-lg transition-all duration-500 hover:scale-110 active:scale-90 border-[4px] border-[#F5F5F5] dark:border-[#121212] group-hover:rotate-3"
+                aria-label="Voice assistant"
+                className={cn(
+                  'relative w-14 h-14 rounded-full bg-primary hover:bg-primary-hover',
+                  'shadow-glow-lg transition-all duration-300 hover:scale-105 active:scale-90',
+                  // Ring uses the theme token instead of the previous hardcoded
+                  // #F5F5F5 / #121212 — the dark hex did not match the actual
+                  // dark background (#002420) and left a visible seam.
+                  'border-4 border-background',
+                )}
               >
-                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/20 to-transparent opacity-100" />
-                <Mic className="w-7 h-7 text-primary-foreground drop-shadow-md transition-transform duration-500 group-hover:scale-110 group-active:scale-90" />
+                <div className="absolute inset-0 rounded-full bg-white/20 to-transparent opacity-100" />
+                <Mic className="w-6 h-6 text-primary-foreground drop-shadow-md" />
               </Button>
             </VoiceCommandSheet>
           </div>
         </div>
 
-        {/* Nav Items Container */}
-        <div className="absolute inset-x-4 bottom-4 h-[72px] flex items-center justify-between px-2 z-20">
+        {/* Nav bar */}
+        <nav
+          aria-label="Main"
+          className={cn(
+            'pointer-events-auto relative flex items-stretch justify-between',
+            'h-[64px] px-1 rounded-[1.75rem] overflow-hidden',
+            'bg-card/90 backdrop-blur-2xl border border-border/60',
+            'shadow-[0_8px_32px_hsl(var(--shadow-color))]',
+          )}
+        >
+          <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent opacity-50 pointer-events-none" />
 
-          {/* Left Group */}
-          <div className="flex items-center justify-between w-[42%] h-full pl-1">
+          {NAV_ITEMS.map((item) => (
             <NavItem
-              item={navItems[0]}
-              isActive={activeTab === navItems[0].path}
-              onClick={() => navigate(navItems[0].path)}
+              key={item.path}
+              item={item}
+              isActive={isActive(item.path)}
+              onClick={() => navigate(item.path)}
             />
-            <NavItem
-              item={navItems[1]}
-              isActive={activeTab.startsWith(navItems[1].path)}
-              onClick={() => navigate(navItems[1].path)}
-            />
-            <NavItem
-              item={navItems[2]}
-              isActive={activeTab.startsWith(navItems[2].path)}
-              onClick={() => navigate(navItems[2].path)}
-            />
-          </div>
-
-          {/* Spacer for FAB */}
-          <div className="w-16 shrink-0" />
-
-          {/* Right Group */}
-          <div className="flex items-center justify-between w-[42%] h-full pr-1">
-            <NavItem
-              item={navItems[3]}
-              isActive={activeTab.startsWith(navItems[3].path)}
-              onClick={() => navigate(navItems[3].path)}
-            />
-            <NavItem
-              item={navItems[4]}
-              isActive={activeTab.startsWith(navItems[4].path)}
-              onClick={() => navigate(navItems[4].path)}
-            />
-            <NavItem
-              item={navItems[5]}
-              isActive={activeTab.startsWith(navItems[5].path)}
-              onClick={() => navigate(navItems[5].path)}
-            />
-          </div>
-        </div>
+          ))}
+        </nav>
       </div>
     </div>
   );
 }
 
-function NavItem({ item, isActive, onClick }: { item: any, isActive: boolean, onClick: () => void }) {
+function NavItem({
+  item,
+  isActive,
+  onClick,
+}: {
+  item: NavItemDef;
+  isActive: boolean;
+  onClick: () => void;
+}) {
   const Icon = item.icon;
-  const [isAnimating, setIsAnimating] = useState(false);
-
-  useEffect(() => {
-    if (isActive) {
-      setIsAnimating(true);
-      const timer = setTimeout(() => setIsAnimating(false), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [isActive]);
 
   return (
     <button
       onClick={onClick}
+      aria-current={isActive ? 'page' : undefined}
       className={cn(
-        "relative flex flex-col items-center justify-center h-12 w-12 rounded-2xl transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-        isActive ? "text-primary -translate-y-3" : "text-muted-foreground/60 hover:text-foreground active:scale-95"
+        'relative z-10 flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5',
+        'rounded-2xl transition-colors duration-200',
+        // 48px is the minimum comfortable touch target; flex-1 keeps the six
+        // items evenly distributed instead of overflowing a fixed-width group.
+        'min-h-[48px] active:scale-95',
+        isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
       )}
     >
-      {/* Active Indicator Background Pill */}
       {isActive && (
-        <span className="absolute inset-0 bg-primary/10 rounded-2xl animate-scale-in border border-primary/5" />
+        <span className="absolute inset-x-1 inset-y-1 bg-primary/10 rounded-2xl border border-primary/20" />
       )}
 
-      {/* Icon Wrapper for transforms */}
-      <div className={cn(
-        "relative z-10 p-2 transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-        isActive ? "scale-110" : "group-hover:scale-105"
-      )}>
-        <Icon
-          className={cn(
-            "w-6 h-6 transition-all duration-500",
-            isActive && "fill-current drop-shadow-[0_2px_8px_rgba(var(--primary),0.3)]",
-            isAnimating && "animate-wiggle"
-          )}
-          strokeWidth={isActive ? 2.5 : 2}
-        />
+      <Icon
+        className={cn('relative w-5 h-5 shrink-0 transition-transform duration-200',
+          isActive && 'scale-110')}
+        strokeWidth={isActive ? 2.5 : 2}
+      />
 
-        {/* Active Glow Dot */}
-        {isActive && (
-          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full shadow-[0_0_8px_currentColor] animate-fade-in" />
+      {/* Always visible. Previously `opacity-0` unless active, which left the
+          user looking at six unlabelled icons. */}
+      <span
+        className={cn(
+          'relative text-[10px] leading-none font-semibold tracking-tight',
+          'max-w-full truncate px-0.5',
+          isActive ? 'text-primary' : 'text-muted-foreground',
         )}
-      </div>
-
-      {/* Label - fades in/out on selection */}
-      <span className={cn(
-        "absolute -bottom-5 text-[9px] font-bold tracking-tight transition-all duration-300 ease-out whitespace-nowrap",
-        isActive
-          ? "opacity-100 translate-y-0 text-primary"
-          : "opacity-0 -translate-y-2 pointer-events-none"
-      )}>
+      >
         {item.label}
       </span>
     </button>

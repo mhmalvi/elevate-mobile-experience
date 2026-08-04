@@ -26,15 +26,49 @@ export function generateProfessionalPDFHTML(data: {
   const docNumber = isQuote ? document.quote_number : document.invoice_number;
   const docTitle = isQuote ? "QUOTE" : "INVOICE";
 
-  const formatCurrency = (amount: number) => `$${(amount || 0).toFixed(2)}`;
+  // Currency and date format follow the issuing business, not a hardcoded
+  // `$` / "en-AU" — this is the document the client receives.
+  const currency = profile?.currency_code || "AUD";
+  const locale = profile?.locale || ({
+    AUD: "en-AU", NZD: "en-NZ", GBP: "en-GB", USD: "en-US", CAD: "en-CA",
+    EUR: "en-IE", INR: "en-IN", ZAR: "en-ZA", SGD: "en-SG", AED: "en-AE",
+  } as Record<string, string>)[currency] || "en-US";
+
+  const formatCurrency = (amount: number) => {
+    try {
+      return new Intl.NumberFormat(locale, {
+        style: "currency", currency,
+        minimumFractionDigits: 2, maximumFractionDigits: 2,
+      }).format(amount || 0);
+    } catch {
+      return `${currency} ${(amount || 0).toFixed(2)}`;
+    }
+  };
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "N/A";
-    return new Date(dateStr).toLocaleDateString("en-AU", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    try {
+      return new Intl.DateTimeFormat(locale, {
+        day: "2-digit", month: "short", year: "numeric",
+      }).format(new Date(dateStr));
+    } catch {
+      return new Date(dateStr).toDateString();
+    }
   };
+
+  // "ABN" and "GST (10%)" were hardcoded onto every document. These are legal
+  // documents — printing an Australian identifier on a UK invoice is wrong.
+  const businessNumberLabel = ({
+    AU: "ABN", NZ: "NZBN", GB: "Company No.", IE: "VAT No.",
+    US: "EIN", CA: "Business No.", IN: "GSTIN", ZA: "VAT No.",
+    SG: "UEN", AE: "TRN", DE: "USt-IdNr.", FR: "SIRET", NL: "BTW-nummer",
+  } as Record<string, string>)[(profile?.country_code || "").toUpperCase()] || "Business No.";
+
+  const taxLabelText = (() => {
+    const label = profile?.tax_label || "Tax";
+    const rate = typeof profile?.tax_rate === "number" ? profile.tax_rate : 0;
+    if (!rate) return label;
+    return `${label} (${parseFloat((rate * 100).toFixed(2))}%)`;
+  })();
 
   return `
 <!DOCTYPE html>
@@ -558,7 +592,7 @@ export function generateProfessionalPDFHTML(data: {
         <p><strong>Date:</strong> ${formatDate(document.created_at)}</p>
         ${isQuote && document.valid_until ? `<p><strong>Valid Until:</strong> ${formatDate(document.valid_until)}</p>` : ''}
         ${!isQuote && document.due_date ? `<p><strong>Due Date:</strong> ${formatDate(document.due_date)}</p>` : ''}
-        ${profile?.abn ? `<p><strong>ABN:</strong> ${profile.abn}</p>` : ''}
+        ${profile?.business_number ? `<p><strong>${businessNumberLabel}:</strong> ${profile.business_number}</p>` : ''}
       </div>
     </div>
 
@@ -599,8 +633,8 @@ export function generateProfessionalPDFHTML(data: {
           <span>${formatCurrency(document.subtotal || 0)}</span>
         </div>
         <div class="total-line tax">
-          <span>GST (10%)</span>
-          <span>${formatCurrency(document.gst || 0)}</span>
+          <span>${taxLabelText}</span>
+          <span>${formatCurrency(document.tax_amount || 0)}</span>
         </div>
         <div class="total-line grand">
           <span>Total ${document.currency || 'AUD'}</span>
@@ -675,7 +709,7 @@ export function generateProfessionalPDFHTML(data: {
     <div class="footer">
       <div class="footer-message">${footerText}</div>
       <div class="footer-details">
-        ${profile?.abn ? `<p><strong>ABN:</strong> ${profile.abn}</p>` : ''}
+        ${profile?.business_number ? `<p><strong>${businessNumberLabel}:</strong> ${profile.business_number}</p>` : ''}
         ${(profile as any)?.license_number ? `<p><strong>License:</strong> ${(profile as any).license_number}</p>` : ''}
         ${profile?.phone ? `<p><strong>Phone:</strong> ${profile.phone}</p>` : ''}
         ${profile?.email ? `<p><strong>Email:</strong> ${profile.email}</p>` : ''}

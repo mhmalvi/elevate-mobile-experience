@@ -1,4 +1,4 @@
-project_id = "rucuomtojzifrvplhwja"
+project_id = "ovadozckflqtqyttthwv"
 
 # Security Configuration:
 # - verify_jwt = true: Gateway validates JWT before the function runs.

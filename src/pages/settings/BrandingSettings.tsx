@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatCurrency } from '@/lib/money';
 
 // Mock Data for Preview
 const PREVIEW_DATA = {
@@ -262,13 +263,12 @@ export default function BrandingSettings() {
               <div key={i} className="grid grid-cols-4 px-4 py-3 border-t border-gray-100">
                 <div className="col-span-2 text-gray-800">{item.desc}</div>
                 <div className="text-right text-gray-600">1</div>
-                <div className="text-right text-gray-900">${item.amount.toFixed(2)}</div>
+                <div className="text-right text-gray-900">{formatCurrency(item.amount)}</div>
               </div>
             ))}
             <div className="flex justify-between items-center px-4 py-3 bg-gray-50/50 border-t">
               <span className="font-bold text-gray-800 text-sm">Total</span>
-              <span className="font-bold text-lg" style={{ color: form.primary_color }}>
-                ${PREVIEW_DATA.total.toFixed(2)}
+              <span className="font-bold text-lg" style={{ color: form.primary_color }}>{formatCurrency(PREVIEW_DATA.total)}
               </span>
             </div>
           </div>
@@ -308,7 +308,7 @@ export default function BrandingSettings() {
 
         <div className="space-y-3 text-gray-600 leading-relaxed">
           <p>Hi {PREVIEW_DATA.client.name},</p>
-          <p>Here's invoice #INV-001 for ${PREVIEW_DATA.total.toFixed(2)}.</p>
+          <p>Here's invoice #INV-001 for {formatCurrency(PREVIEW_DATA.total)}.</p>
           <p>The amount is due on {PREVIEW_DATA.date}.</p>
 
           <div className="my-4">

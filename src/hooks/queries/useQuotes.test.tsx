@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useQuotes, useQuote, useDeleteQuote, useUpdateQuoteStatus } from './useQuotes';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { thenable } from '@/__tests__/mocks/supabaseChain';
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
@@ -14,6 +15,26 @@ vi.mock('@/integrations/supabase/client', () => ({
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }));
+
+// The query hooks call useTeam() to scope results to the active team. These
+// suites mocked useAuth but not useTeam, so every hook render threw
+// "useTeam must be used within a TeamProvider". Mocked with no team, which
+// exercises the solo-user path the assertions below actually describe.
+vi.mock('@/hooks/useTeam', () => ({
+  useTeam: () => ({
+    team: null,
+    userRole: null,
+    teamMembers: [],
+    loading: false,
+    error: null,
+    canCreate: true,
+    canEdit: true,
+    canDelete: true,
+    canManageTeam: true,
+    refetch: vi.fn(),
+  }),
+}));
+
 
 describe('Quote Management - useQuotes Hook', () => {
   let queryClient: QueryClient;
@@ -82,7 +103,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useQuotes(1), { wrapper });
 
@@ -107,7 +128,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useQuotes(1), { wrapper });
 
@@ -129,7 +150,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       renderHook(() => useQuotes(1), { wrapper });
 
@@ -184,7 +205,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useQuote('quote-1'), { wrapper });
 
@@ -215,7 +236,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useQuote('quote-1'), { wrapper });
 
@@ -236,7 +257,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useDeleteQuote(), { wrapper });
 
@@ -260,7 +281,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
@@ -283,7 +304,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useUpdateQuoteStatus(), { wrapper });
 
@@ -305,7 +326,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useUpdateQuoteStatus(), { wrapper });
 
@@ -324,7 +345,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useUpdateQuoteStatus(), { wrapper });
 
@@ -343,7 +364,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
@@ -365,7 +386,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useUpdateQuoteStatus(), { wrapper });
 
@@ -398,7 +419,7 @@ describe('Quote Management - useQuotes Hook', () => {
         }),
       };
 
-      vi.mocked(supabase.from).mockReturnValue(mockSupabaseChain as any);
+      vi.mocked(supabase.from).mockReturnValue(thenable(mockSupabaseChain) as any);
 
       const { result } = renderHook(() => useQuote('quote-1'), { wrapper });
 

@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { copyToClipboard } from '@/lib/utils/clipboard';
-import { cn, safeNumber } from '@/lib/utils';
+import { cn, safeNumber, taxLineLabel, formatCurrency } from '@/lib/utils';
 import { Phone, Mail, DollarSign, Download, Share2, Loader2, Bell, RefreshCw, User, Clock, ArrowLeft, Edit, Receipt } from 'lucide-react';
 import { Tables } from '@/integrations/supabase/types';
 import {
@@ -199,7 +199,7 @@ export default function InvoiceDetail() {
     } else {
       toast({
         title: 'Payment recorded',
-        description: isPaidInFull ? 'Invoice marked as paid in full.' : `$${amount.toFixed(2)} recorded.`
+        description: isPaidInFull ? 'Invoice marked as paid in full.' : `${formatCurrency(amount)} recorded.`
       });
       setPaymentAmount('');
       fetchInvoice();
@@ -379,11 +379,11 @@ export default function InvoiceDetail() {
                 >
                   <div className="flex justify-between items-start gap-3">
                     <span className="font-semibold text-foreground flex-1">{item.description}</span>
-                    <span className="font-bold text-lg text-primary">${safeNumber(item.total).toFixed(2)}</span>
+                    <span className="font-bold text-lg text-primary">{formatCurrency(safeNumber(item.total))}</span>
                   </div>
                   <div className="mt-2 text-sm text-muted-foreground font-medium">
                     <span className="px-2 py-0.5 bg-muted/40 rounded-md">
-                      {item.quantity} × ${safeNumber(item.unit_price).toFixed(2)}
+                      {item.quantity} × {formatCurrency(safeNumber(item.unit_price))}
                     </span>
                   </div>
                 </div>
@@ -398,28 +398,27 @@ export default function InvoiceDetail() {
             <div className="space-y-3 relative z-10 font-medium">
               <div className="flex justify-between text-sm opacity-80">
                 <span>Subtotal</span>
-                <span>${safeNumber(invoice.subtotal).toFixed(2)}</span>
+                <span>{formatCurrency(safeNumber(invoice.subtotal))}</span>
               </div>
               <div className="flex justify-between text-sm opacity-80">
-                <span>GST (10%)</span>
-                <span>${safeNumber(invoice.gst).toFixed(2)}</span>
+                <span>{taxLineLabel()}</span>
+                <span>{formatCurrency(invoice.tax_amount)}</span>
               </div>
               <div className="flex justify-between items-end pt-3 border-t border-muted/20 mt-3">
                 <span className="font-bold text-lg uppercase tracking-wider">Total Amount</span>
-                <span className="text-4xl font-black">${safeNumber(invoice.total).toFixed(2)}</span>
+                <span className="text-4xl font-black">{formatCurrency(safeNumber(invoice.total))}</span>
               </div>
 
               {invoice.amount_paid > 0 && (
                 <div className="pt-4 mt-2 space-y-2 border-t border-muted/20">
                   <div className="flex justify-between text-sm text-success font-bold">
                     <span>Amount Paid</span>
-                    <span>-${safeNumber(invoice.amount_paid).toFixed(2)}</span>
+                    <span>-{formatCurrency(safeNumber(invoice.amount_paid))}</span>
                   </div>
                   <div className="flex justify-between items-end">
                     <div className="space-y-0.5">
                       <span className="text-[10px] font-black uppercase tracking-wider opacity-60">Balance Due</span>
-                      <div className={cn("text-2xl font-black", balance > 0 ? 'text-destructive' : 'text-success')}>
-                        ${balance.toFixed(2)}
+                      <div className={cn("text-2xl font-black", balance > 0 ? 'text-destructive' : 'text-success')}>{formatCurrency(balance)}
                       </div>
                     </div>
                     {balance <= 0 && (
@@ -537,7 +536,7 @@ export default function InvoiceDetail() {
                 <Input
                   type="number"
                   step="0.01"
-                  placeholder={`Amount (max $${balance.toFixed(2)})`}
+                  placeholder={`Amount (max ${formatCurrency(balance)})`}
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
                   className="h-12 rounded-xl bg-background/50 border-border/40"

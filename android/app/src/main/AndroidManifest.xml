@@ -56,4 +56,19 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Voice commands: the speech recogniser captures audio. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--
+      Android 11 (API 30) package visibility. Without this <queries> block the
+      app cannot see any installed RecognitionService, so
+      SpeechRecognizer.isRecognitionAvailable() returns false and voice input
+      reports itself as unsupported even on devices that fully support it.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 </manifest>

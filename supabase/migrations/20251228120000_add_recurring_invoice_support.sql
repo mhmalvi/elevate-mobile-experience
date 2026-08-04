@@ -14,18 +14,21 @@ CREATE INDEX IF NOT EXISTS idx_invoices_parent_id
   WHERE parent_invoice_id IS NOT NULL;
 
 -- Function to calculate next due date based on interval
+-- NOTE: the parameter was originally named `current_date`, which is a reserved
+-- SQL keyword and fails to parse on PostgreSQL 17. Renamed to `from_date`.
+-- Results are cast back to `date` since `date + interval` yields a timestamp.
 CREATE OR REPLACE FUNCTION calculate_next_due_date(
-  current_date date,
+  from_date date,
   interval_type text
 ) RETURNS date AS $$
 BEGIN
   RETURN CASE interval_type
-    WHEN 'weekly' THEN current_date + INTERVAL '7 days'
-    WHEN 'fortnightly' THEN current_date + INTERVAL '14 days'
-    WHEN 'monthly' THEN current_date + INTERVAL '1 month'
-    WHEN 'quarterly' THEN current_date + INTERVAL '3 months'
-    WHEN 'yearly' THEN current_date + INTERVAL '1 year'
-    ELSE current_date + INTERVAL '1 month' -- Default to monthly
+    WHEN 'weekly' THEN (from_date + INTERVAL '7 days')::date
+    WHEN 'fortnightly' THEN (from_date + INTERVAL '14 days')::date
+    WHEN 'monthly' THEN (from_date + INTERVAL '1 month')::date
+    WHEN 'quarterly' THEN (from_date + INTERVAL '3 months')::date
+    WHEN 'yearly' THEN (from_date + INTERVAL '1 year')::date
+    ELSE (from_date + INTERVAL '1 month')::date -- Default to monthly
   END;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;

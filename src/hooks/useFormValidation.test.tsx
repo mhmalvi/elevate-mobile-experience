@@ -251,7 +251,7 @@ describe('Form Validation Hook - useFormValidation', () => {
     it('should validate Australian postcodes', () => {
       const initialValues = { postcode: '' };
       const config: FormValidationConfig = {
-        postcode: { validate: validatePostcode, required: true },
+        postcode: { validate: (v: string) => validatePostcode(v, 'AU'), required: true },
       };
 
       const { result } = renderHook(() => useFormValidation(initialValues, config));
@@ -270,7 +270,7 @@ describe('Form Validation Hook - useFormValidation', () => {
     it('should reject invalid postcodes', () => {
       const initialValues = { postcode: '' };
       const config: FormValidationConfig = {
-        postcode: { validate: validatePostcode, required: true },
+        postcode: { validate: (v: string) => validatePostcode(v, 'AU'), required: true },
       };
 
       const { result } = renderHook(() => useFormValidation(initialValues, config));
@@ -480,7 +480,7 @@ describe('Form Validation Hook - useFormValidation', () => {
         name: { validate: () => ({ valid: true }), required: true },
         email: { validate: validateEmail, required: false },
         phone: { validate: validateAustralianPhone, required: false },
-        postcode: { validate: validatePostcode, required: false },
+        postcode: { validate: (v: string) => validatePostcode(v, 'AU'), required: false },
       };
 
       const { result } = renderHook(() => useFormValidation(initialValues, config));
@@ -528,7 +528,7 @@ describe('Form Validation Hook - useFormValidation', () => {
         name: { validate: () => ({ valid: true }), required: true },
         email: { validate: validateEmail, required: true },
         phone: { validate: validateAustralianPhone, required: true },
-        postcode: { validate: validatePostcode, required: true },
+        postcode: { validate: (v: string) => validatePostcode(v, 'AU'), required: true },
       };
 
       const { result } = renderHook(() => useFormValidation(initialValues, config));

@@ -8,6 +8,7 @@ import { ArrowLeft, Mic, ChevronRight, CheckCircle, User, Briefcase, ListPlus } 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { speakText, cancelSpeech } from '@/lib/speech';
 
 type WizardStep = 'intro' | 'client' | 'job_details' | 'items' | 'review';
 
@@ -31,14 +32,10 @@ export default function VoiceQuoteWizard() {
     const [currentItem, setCurrentItem] = useState<Partial<QuoteItem>>({});
 
     const speak = (text: string) => {
-        if ('speechSynthesis' in window) {
-            setIsSpeaking(true);
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 1.1;
-            utterance.pitch = 1.0;
-            utterance.onend = () => setIsSpeaking(false);
-            window.speechSynthesis.speak(utterance);
-        }
+        setIsSpeaking(true);
+        // Routed through speakText so the voice matches the user's device locale
+        // instead of whatever the platform happens to default to.
+        speakText(text, { onEnd: () => setIsSpeaking(false) });
     };
 
     useEffect(() => {
@@ -49,7 +46,7 @@ export default function VoiceQuoteWizard() {
     }, []);
 
     const handleNext = () => {
-        window.speechSynthesis.cancel();
+        cancelSpeech();
         if (step === 'intro') {
             setStep('client');
             speak("Who is this quote for? Say the client's name or type it.");

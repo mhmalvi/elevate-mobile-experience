@@ -11,6 +11,10 @@ import {
   Trees, Wind, Home, Grid3X3, Wrench,
   ArrowRight, ArrowLeft, Check, Sparkles
 } from 'lucide-react';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { COUNTRIES, getCountry, guessCountryCode } from '@/lib/countries';
 
 type TradeType = 'electrician' | 'plumber' | 'carpenter' | 'builder' | 'painter' | 'landscaper' | 'hvac' | 'roofer' | 'tiler' | 'other';
 
@@ -32,10 +36,16 @@ export default function Onboarding() {
   const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  // Country is preselected from the device locale rather than defaulting
+  // everyone to Australia. It drives currency, tax rate, tax label and the
+  // labels/placeholders for the business-number and phone fields below.
+  const [countryCode, setCountryCode] = useState<string>(() => guessCountryCode());
+  const country = getCountry(countryCode);
+
   const [formData, setFormData] = useState({
     trade_type: '' as TradeType | '',
     business_name: '',
-    abn: '',
+    business_number: '',
     phone: '',
   });
 
@@ -85,9 +95,17 @@ export default function Onboarding() {
       const profileData = {
         trade_type: formData.trade_type || null,
         business_name: formData.business_name || null,
-        abn: formData.abn || null,
+        business_number: formData.business_number || null,
         phone: formData.phone || null,
         onboarding_completed: true,
+        // Locale settings derived from the chosen country. Stored explicitly
+        // so a later change to the reference data can't silently reprice
+        // anyone's existing quotes and invoices.
+        country_code: country.code === 'ZZ' ? 'AU' : country.code,
+        currency_code: country.currency,
+        tax_rate: country.taxRate,
+        tax_label: country.taxLabel,
+        tax_inclusive_pricing: country.taxInclusivePricing,
       };
 
       let result;
@@ -290,12 +308,36 @@ export default function Onboarding() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="abn">ABN (optional)</Label>
+                <Label htmlFor="country">Country</Label>
+                <Select value={countryCode} onValueChange={setCountryCode}>
+                  <SelectTrigger id="country" className="h-12">
+                    <SelectValue placeholder="Select your country" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNTRIES.map((c) => (
+                      <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Sets your currency ({country.currency})
+                  {country.taxRate > 0
+                    ? ` and ${country.taxLabel} at ${+(country.taxRate * 100).toFixed(2)}%`
+                    : ''}
+                  . You can change this later.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {/* Label and placeholder follow the country: ABN, EIN, GSTIN… */}
+                <Label htmlFor="businessNumber">{country.businessNumberLabel} (optional)</Label>
                 <Input
-                  id="abn"
-                  placeholder="e.g. 12 345 678 901"
-                  value={formData.abn}
-                  onChange={(e) => setFormData(prev => ({ ...prev, abn: e.target.value }))}
+                  id="businessNumber"
+                  placeholder={country.businessNumberPlaceholder
+                    ? `e.g. ${country.businessNumberPlaceholder}`
+                    : ''}
+                  value={formData.business_number}
+                  onChange={(e) => setFormData(prev => ({ ...prev, business_number: e.target.value }))}
                   className="h-12"
                 />
               </div>
@@ -305,7 +347,7 @@ export default function Onboarding() {
                 <Input
                   id="phone"
                   type="tel"
-                  placeholder="e.g. 0412 345 678"
+                  placeholder={country.phonePlaceholder ? `e.g. ${country.phonePlaceholder}` : ''}
                   value={formData.phone}
                   onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                   className="h-12"

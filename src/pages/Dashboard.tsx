@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -307,8 +307,7 @@ export default function Dashboard() {
                   <h3 className="font-bold text-destructive">
                     {overdueStats.count} Overdue Invoice{overdueStats.count !== 1 ? 's' : ''}
                   </h3>
-                  <p className="text-2xl font-bold mt-1 text-foreground">
-                    ${overdueStats.total.toLocaleString()}
+                  <p className="text-2xl font-bold mt-1 text-foreground">{formatCurrency(overdueStats.total)}
                   </p>
                   <p className="text-sm text-muted-foreground mt-0.5">
                     Outstanding payments past due date
@@ -385,7 +384,7 @@ export default function Dashboard() {
               <div className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
                 <StatCard
                   label="Outstanding"
-                  value={`$${stats.outstandingInvoices.toLocaleString()}`}
+                  value={formatCurrency(stats.outstandingInvoices)}
                   icon={<DollarSign className="w-5 h-5" />}
                   variant="warning"
                 />
@@ -409,7 +408,7 @@ export default function Dashboard() {
               <div className="animate-fade-in" style={{ animationDelay: '0.25s' }}>
                 <StatCard
                   label="This Month"
-                  value={`$${stats.monthlyRevenue.toLocaleString()}`}
+                  value={formatCurrency(stats.monthlyRevenue)}
                   icon={<TrendingUp className="w-5 h-5" />}
                   variant="success"
                 />
@@ -451,7 +450,7 @@ export default function Dashboard() {
                     </div>
                     <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Revenue</p>
-                      <p className="text-2xl font-black text-primary">${memberStats.revenue.toLocaleString()}</p>
+                      <p className="text-2xl font-black text-primary">{formatCurrency(memberStats.revenue)}</p>
                     </div>
                     <div className="p-4 bg-card/80 backdrop-blur-sm rounded-2xl border border-border/50">
                       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Completion</p>
@@ -528,13 +527,16 @@ export default function Dashboard() {
           </div>
 
           {/* Pro Tip Card */}
-          <div className="animate-fade-in p-4 rounded-2xl bg-gradient-to-br from-secondary/20 via-secondary/10 to-transparent border border-secondary/30 backdrop-blur-sm" style={{ animationDelay: '0.5s' }}>
+          <div className="animate-fade-in p-4 rounded-2xl bg-gradient-to-br from-accent/20 via-accent/10 to-transparent border border-accent/30 backdrop-blur-sm" style={{ animationDelay: '0.5s' }}>
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-xl bg-secondary/20 shrink-0">
-                <CheckCircle2 className="w-5 h-5 text-secondary" />
+              <div className="p-2 rounded-xl bg-accent/20 shrink-0">
+                {/* --accent, not --secondary: secondary is a *surface* token
+                    (dark teal in dark mode) and rendered this heading at
+                    1.54:1 against the card — effectively invisible. */}
+                <CheckCircle2 className="w-5 h-5 text-accent" />
               </div>
               <div>
-                <h3 className="font-bold text-secondary">Pro Tip</h3>
+                <h3 className="font-bold text-accent">Pro Tip</h3>
                 <p className="text-sm text-muted-foreground mt-1">
                   Use the voice button at the bottom to quickly create quotes and manage your jobs hands-free!
                 </p>

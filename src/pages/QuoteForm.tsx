@@ -17,6 +17,7 @@ import { Loader2, Plus, Trash2, User, FileText, Sparkles, Calendar, ArrowLeft } 
 import { Tables } from '@/integrations/supabase/types';
 import { format, addDays } from 'date-fns';
 import { generateUUID } from '@/lib/utils/uuid';
+import { calculateTax, taxLineLabel, formatCurrency } from '@/lib/money';
 
 type Client = Tables<'clients'>;
 type QuoteTemplate = Tables<'quote_templates'>;
@@ -141,9 +142,10 @@ export default function QuoteForm() {
 
   const calculateTotals = () => {
     const subtotal = lineItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-    const gst = subtotal * 0.1;
-    const total = subtotal + gst;
-    return { subtotal, gst, total };
+    // Rate and inclusive/exclusive convention come from the business profile
+    // rather than a hardcoded 10% Australian GST.
+    const { tax, total } = calculateTax(subtotal);
+    return { subtotal, gst: tax, total };
   };
 
   const generateQuoteNumber = () => {
@@ -187,7 +189,7 @@ export default function QuoteForm() {
         notes: form.notes,
         valid_until: form.valid_until || null,
         subtotal,
-        gst,
+        tax_amount: gst,
         total,
         status: 'draft',
       })
@@ -519,8 +521,7 @@ export default function QuoteForm() {
                   </SelectContent>
                 </Select>
 
-                <div className="text-right text-sm font-semibold text-foreground">
-                  ${(item.quantity * item.unit_price).toFixed(2)}
+                <div className="text-right text-sm font-semibold text-foreground">{formatCurrency((item.quantity * item.unit_price))}
                 </div>
               </div>
             ))}
@@ -530,15 +531,15 @@ export default function QuoteForm() {
           <div className="p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
-              <span className="text-foreground">${subtotal.toFixed(2)}</span>
+              <span className="text-foreground">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">GST (10%)</span>
-              <span className="text-foreground">${gst.toFixed(2)}</span>
+              <span className="text-muted-foreground">{taxLineLabel()}</span>
+              <span className="text-foreground">{formatCurrency(gst)}</span>
             </div>
             <div className="flex justify-between font-bold text-lg pt-2 border-t border-border/50">
               <span className="text-foreground">Total</span>
-              <span className="text-primary">${total.toFixed(2)}</span>
+              <span className="text-primary">{formatCurrency(total)}</span>
             </div>
           </div>
 

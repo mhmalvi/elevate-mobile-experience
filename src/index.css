@@ -1,13 +1,34 @@
-/* Font imports handled in index.html */
+/* Self-hosted fonts, bundled into the build.
+   Previously loaded from fonts.googleapis.com, which failed on a cold offline
+   start and in the Capacitor WebView — silently dropping the whole app to
+   system-ui in a product that advertises offline support.
+   Only the weights actually used are imported (see tailwind.config.ts:
+   heading = Montserrat 600/700/800, body = Open Sans 400/500/600). */
+@import '@fontsource/open-sans/400.css';
+@import '@fontsource/open-sans/500.css';
+@import '@fontsource/open-sans/600.css';
+@import '@fontsource/montserrat/600.css';
+@import '@fontsource/montserrat/700.css';
+@import '@fontsource/montserrat/800.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ============================================
-   Design System v3.0 - "Industrial Premium"
-   Deep Navy + Metallic Gold + Turquoise
+   Design System v3.1 - "Industrial Premium"
+   Amber Orange + Deep Teal + Turquoise
    Target: Tradespeople (Strong, Reliable, Premium)
+
+   ACCESSIBILITY CONTRACT — do not change these values casually.
+   Every semantic colour below is tuned per theme so that BOTH:
+     (a) `text-<token>` reads on that theme's --background AND --card
+         at >= 4.5:1 (WCAG AA body text), and
+     (b) `text-<token>-foreground` on `bg-<token>` reads at >= 4.5:1.
+   A single lightness cannot satisfy both themes, which is why the
+   light and dark blocks carry different L values for the same hue.
+   Hue and saturation are the brand; lightness is the accessibility knob.
+   If you restyle, re-run the contrast check before shipping.
    ============================================ */
 
 @layer base {
@@ -24,39 +45,41 @@
     --popover: 0 0% 100%;
     --popover-foreground: 174 100% 7%;
 
-    /* Primary - Orange/Gold */
-    --primary: 33 100% 50%;
-    /* #FF8C00 */
+    /* Primary - Amber Orange (darkened for light surfaces: 4.55:1 on bg) */
+    --primary: 33 100% 33%;
+    /* #A85D00 */
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 33 100% 45%;
-    /* #E67E00 */
+    --primary-hover: 33 100% 28%;
 
     /* Secondary - Dark Teal */
     --secondary: 171 100% 15%;
     /* #004D40 */
     --secondary-foreground: 0 0% 100%;
 
-    /* Accent - Orange/Gold */
-    --accent: 33 100% 50%;
+    /* Accent - Turquoise (distinct from primary, was a duplicate orange) */
+    --accent: 174 62% 30%;
+    /* #1D7C72 */
     --accent-foreground: 0 0% 100%;
 
     --muted: 0 0% 90%;
     --muted-foreground: 171 100% 15%;
 
-    --destructive: 4 90% 58%;
-    /* #F44336 */
+    --destructive: 4 80% 47.5%;
+    /* #DA2518 */
     --destructive-foreground: 0 0% 100%;
 
-    --success: 122 39% 49%;
-    /* #4CAF50 */
+    --success: 142 60% 31.5%;
+    /* #208143 */
     --success-foreground: 0 0% 100%;
 
-    --warning: 33 100% 50%;
+    /* Warning - Amber (distinct from primary, was a duplicate orange) */
+    --warning: 45 96% 28%;
+    /* #8C6A03 */
     --warning-foreground: 0 0% 100%;
 
     --border: 171 20% 85%;
     --input: 171 20% 85%;
-    --ring: 33 100% 50%;
+    --ring: 33 100% 33%;
 
     --radius: 0.75rem;
     /* 12px */
@@ -64,22 +87,28 @@
     /* Sidebar */
     --sidebar-background: 0 0% 96%;
     --sidebar-foreground: 174 100% 7%;
-    --sidebar-primary: 33 100% 50%;
+    --sidebar-primary: 33 100% 33%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 0 0% 90%;
     --sidebar-accent-foreground: 174 100% 7%;
     --sidebar-border: 171 20% 85%;
-    --sidebar-ring: 33 100% 50%;
+    --sidebar-ring: 33 100% 33%;
 
-    /* Custom TradieMate tokens */
+    /* Brand effect tokens */
     --glass: 0 0% 100% / 0.9;
-    --glass-border: 33 100% 50% / 0.1;
-    --glass-subtle: 33 100% 50% / 0.05;
+    --glass-border: 33 100% 33% / 0.1;
+    --glass-subtle: 33 100% 33% / 0.05;
     --shadow-color: 174 100% 7% / 0.1;
-    --shadow-primary: 33 100% 50% / 0.25;
-    --gradient-start: 33 100% 50%;
-    --gradient-end: 33 100% 45%;
-    --glow-primary: 33 100% 50% / 0.3;
+    --shadow-primary: 33 100% 33% / 0.25;
+    --gradient-start: 33 100% 38%;
+    --gradient-end: 33 100% 30%;
+    --glow-primary: 33 100% 33% / 0.3;
+
+    /* Brand chrome — single source of truth for the app shell colour.
+       index.html theme-color, capacitor splash/status bar and the
+       BottomNav FAB ring must all match these. */
+    --brand-chrome: 0 0% 96%;
+    /* #F5F5F5 */
   }
 
   .dark {
@@ -96,55 +125,67 @@
     --popover: 171 100% 15%;
     --popover-foreground: 0 0% 96%;
 
-    /* Primary */
-    --primary: 33 100% 50%;
-    /* #FF8C00 */
-    --primary-foreground: 0 0% 100%;
+    /* Primary — the brand orange, +4% L so it also clears 4.5:1 as text on --card */
+    --primary: 33 100% 54%;
+    /* #FF9514 */
+    --primary-foreground: 174 100% 7%;
+    /* ink, 7.55:1 — was white at 2.33:1 */
+    --primary-hover: 33 100% 48%;
 
     /* Secondary */
     --secondary: 173 100% 21%;
     /* Secondary Light #00695C */
     --secondary-foreground: 0 0% 100%;
 
-    /* Accent */
-    --accent: 33 100% 50%;
-    --accent-foreground: 0 0% 100%;
+    /* Accent - Turquoise (distinct from primary, was a duplicate orange) */
+    --accent: 174 62% 47.5%;
+    /* #2EC4B5 */
+    --accent-foreground: 174 100% 7%;
 
     --muted: 171 50% 20%;
     --muted-foreground: 171 30% 70%;
 
-    --destructive: 4 90% 58%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 4 80% 76%;
+    /* #F39791 — light red, required to clear 4.5:1 on the teal card */
+    --destructive-foreground: 174 100% 7%;
 
-    --success: 122 39% 49%;
-    --success-foreground: 0 0% 100%;
+    --success: 142 60% 49%;
+    /* #32C869 */
+    --success-foreground: 174 100% 7%;
 
-    --warning: 33 100% 50%;
-    --warning-foreground: 0 0% 100%;
+    /* Warning - Amber (distinct from primary, was a duplicate orange) */
+    --warning: 45 96% 50%;
+    /* #FABD05 */
+    --warning-foreground: 174 100% 7%;
 
     --border: 171 50% 25%;
     --input: 171 50% 25%;
-    --ring: 33 100% 50%;
+    --ring: 33 100% 54%;
 
     /* Sidebar Dark */
     --sidebar-background: 174 100% 7%;
     --sidebar-foreground: 0 0% 96%;
-    --sidebar-primary: 33 100% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-primary: 33 100% 54%;
+    --sidebar-primary-foreground: 174 100% 7%;
     --sidebar-accent: 171 100% 15%;
     --sidebar-accent-foreground: 0 0% 96%;
     --sidebar-border: 171 50% 25%;
-    --sidebar-ring: 33 100% 50%;
+    --sidebar-ring: 33 100% 54%;
 
-    /* Custom TradieMate tokens - Dark */
+    /* Brand effect tokens - Dark */
     --glass: 171 100% 15% / 0.7;
-    --glass-border: 33 100% 50% / 0.2;
-    --glass-subtle: 33 100% 50% / 0.1;
+    --glass-border: 33 100% 54% / 0.2;
+    --glass-subtle: 33 100% 54% / 0.1;
     --shadow-color: 0 0% 0% / 0.5;
-    --shadow-primary: 33 100% 50% / 0.25;
+    --shadow-primary: 33 100% 54% / 0.25;
     --gradient-start: 174 100% 7%;
     --gradient-end: 171 100% 15%;
-    --glow-primary: 33 100% 50% / 0.4;
+    --glow-primary: 33 100% 54% / 0.4;
+
+    /* Brand chrome — matches --background so splash/status bar/FAB ring
+       do not seam against the app shell. */
+    --brand-chrome: 174 100% 7%;
+    /* #002420 */
   }
 }
 
@@ -160,8 +201,15 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Default to dark mode for TradieMate premium look */
+  /* Tell the browser which theme to render native UI (scrollbars, form
+     controls, autofill) in. This MUST follow the active theme — hardcoding
+     `dark` meant light-mode users got dark native controls. next-themes
+     sets `class="dark"` on <html>. */
   html {
+    color-scheme: light;
+  }
+
+  html.dark {
     color-scheme: dark;
   }
 
@@ -222,9 +270,11 @@
     background: radial-gradient(ellipse at top, hsl(var(--primary) / 0.15), transparent 70%);
   }
 
-  /* Metallic Gold Text */
+  /* Premium brand text — follows the theme-tuned primary token rather than a
+     hardcoded orange, so it stays legible in light mode (the literal
+     #FF8C00 was 2.13:1 on the light background). */
   .text-premium-gold {
-    background: linear-gradient(135deg, hsl(33 100% 50%), hsl(33 100% 40%));
+    background: linear-gradient(135deg, hsl(var(--gradient-start)), hsl(var(--gradient-end)));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -685,4 +735,36 @@
       hsl(var(--muted)) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
+}
+
+/* ============================================
+   Reduced motion
+
+   The shell runs several infinite animations (pulse-glow 2.5s, float 4s,
+   shimmer 1.5s) layered over backdrop-filter blur. That combination is a
+   vestibular trigger for some users and a continuous GPU cost on mid-range
+   Android. Honour the OS-level preference: kill looping motion, keep
+   one-shot entrance transitions short rather than removing them entirely
+   so the UI still reads as responsive.
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+
+  .animate-pulse-glow,
+  .animate-float,
+  .animate-shimmer,
+  .animate-gradient,
+  .animate-wiggle,
+  .skeleton-shimmer {
+    animation: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -2,37 +2,23 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from '@/components/ui/sheet';
 import { Mic, MicOff, Sparkles, Loader2, Volume2, Send } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import {
+    startListening,
+    isSpeechAvailable,
+    speakText,
+    cancelSpeech,
+    type SpeechSession,
+    type SpeechErrorCode,
+} from '@/lib/speech';
 
 interface VoiceCommandSheetProps {
     children: React.ReactNode;
 }
-
-declare global {
-    interface Window {
-        SpeechRecognition: any;
-        webkitSpeechRecognition: any;
-    }
-}
-
-// Voice selection for text-to-speech
-const getPreferredVoice = (): SpeechSynthesisVoice | null => {
-    const voices = window.speechSynthesis.getVoices();
-    const priority = ['Karen', 'Catherine', 'Tessa', 'Moira', 'Samantha', 'Victoria'];
-
-    for (const name of priority) {
-        const found = voices.find(v => v.name.includes(name));
-        if (found) return found;
-    }
-
-    return voices.find(v => v.lang.includes('en-AU')) ||
-        voices.find(v => v.lang.includes('en-GB') && v.name.toLowerCase().includes('female')) ||
-        voices.find(v => v.lang.startsWith('en')) || null;
-};
 
 type VoiceStatus = 'idle' | 'listening' | 'processing' | 'speaking' | 'success' | 'error';
 
@@ -55,22 +41,24 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     const [conversationHistory, setConversationHistory] = useState<any[]>([]);
     const [accumulatedData, setAccumulatedData] = useState<any>({});
 
-    const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+    const [speechSupported, setSpeechSupported] = useState(true);
 
     // Refs
-    const recognitionRef = useRef<any>(null);
+    const sessionRef = useRef<SpeechSession | null>(null);
     const timerRef = useRef<any>(null);
     const silenceTimerRef = useRef<any>(null);
     const lastSpeechRef = useRef<number>(0);
     const hasSpeechRef = useRef<boolean>(false);
     const sendMessageRef = useRef<(() => void) | null>(null);
 
-    // Load voices
+    // Probe the engine once so the UI can explain itself instead of failing at
+    // the moment the user taps the mic.
     useEffect(() => {
-        const loadVoices = () => setSelectedVoice(getPreferredVoice());
-        loadVoices();
-        window.speechSynthesis.onvoiceschanged = loadVoices;
-        return () => { window.speechSynthesis.onvoiceschanged = null; };
+        let cancelled = false;
+        void isSpeechAvailable().then(ok => {
+            if (!cancelled) setSpeechSupported(ok);
+        });
+        return () => { cancelled = true; };
     }, []);
 
     // Handle sheet open/close
@@ -104,12 +92,11 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     }, [status]);
 
     const cleanup = () => {
-        if (recognitionRef.current) {
-            try { recognitionRef.current.stop(); } catch (e) { }
-        }
+        sessionRef.current?.stop();
+        sessionRef.current = null;
         if (timerRef.current) clearInterval(timerRef.current);
         if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
-        window.speechSynthesis.cancel();
+        cancelSpeech();
     };
 
     const resetConversation = () => {
@@ -121,84 +108,79 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         setRecordingTime(0);
     };
 
-    const startRecording = useCallback(() => {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            toast({ title: "Voice not supported", description: "Use Chrome or Safari", variant: "destructive" });
-            return;
-        }
-
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-AU';
-        recognition.maxAlternatives = 1;
-
+    const startRecording = useCallback(async () => {
         // Reset silence tracking
         hasSpeechRef.current = false;
         lastSpeechRef.current = 0;
         if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
 
-        recognition.onstart = () => {
-            setStatus('listening');
-            setTranscript('');
+        // Any previous session must be torn down before starting another,
+        // or the native recogniser's auto-restart loop keeps running.
+        sessionRef.current?.stop();
+        sessionRef.current = null;
 
-            // Start silence detection: auto-send after 3s of silence (once speech has started)
-            silenceTimerRef.current = setInterval(() => {
-                if (hasSpeechRef.current && lastSpeechRef.current > 0) {
-                    const silenceDuration = Date.now() - lastSpeechRef.current;
-                    if (silenceDuration > 3000) {
-                        // Auto-send after 3 seconds of silence
-                        if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
-                        sendMessageRef.current?.();
-                    }
-                }
-            }, 500);
-        };
+        setStatus('listening');
+        setTranscript('');
 
-        recognition.onresult = (event: any) => {
-            let interim = '';
-            let final = '';
-
-            for (let i = 0; i < event.results.length; i++) {
-                const result = event.results[i];
-                if (result.isFinal) {
-                    final += result[0].transcript + ' ';
-                } else {
-                    interim += result[0].transcript;
+        // Auto-send after 3s of silence, once the user has actually said something.
+        silenceTimerRef.current = setInterval(() => {
+            if (hasSpeechRef.current && lastSpeechRef.current > 0) {
+                const silenceDuration = Date.now() - lastSpeechRef.current;
+                if (silenceDuration > 3000) {
+                    if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+                    sendMessageRef.current?.();
                 }
             }
+        }, 500);
 
-            // Track speech activity for silence detection
-            lastSpeechRef.current = Date.now();
-            if (interim || final) hasSpeechRef.current = true;
-
-            setTranscript(interim);
-            if (final) {
-                setFullTranscript(prev => prev + final);
+        const describeError = (code: SpeechErrorCode): string | null => {
+            switch (code) {
+                case 'not-supported':
+                    return "This device can't do voice input. You can still type or use the forms.";
+                case 'permission-denied':
+                    return 'I need microphone access to hear you. Enable it in your device settings.';
+                case 'network':
+                    return 'Voice recognition needs a connection and I could not reach it.';
+                // no-speech / aborted are normal end-of-utterance signals, not failures.
+                case 'no-speech':
+                case 'aborted':
+                    return null;
+                default:
+                    return 'Voice input error. Please try again.';
             }
         };
 
-        recognition.onerror = (event: any) => {
-            console.error('Speech error:', event.error);
-            if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        sessionRef.current = await startListening({
+            onPartial: (text) => {
+                lastSpeechRef.current = Date.now();
+                hasSpeechRef.current = true;
+                setTranscript(text);
+            },
+            onFinal: (text) => {
+                lastSpeechRef.current = Date.now();
+                hasSpeechRef.current = true;
+                setTranscript('');
+                setFullTranscript(prev => prev + text + ' ');
+            },
+            onError: (code) => {
+                const message = describeError(code);
+                if (!message) return;
+                console.error('Speech error:', code);
                 setStatus('error');
-                setAiMessage('Voice input error. Please try again.');
-            }
-        };
-
-        recognition.onend = () => {
-            if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
-        };
-
-        recognitionRef.current = recognition;
-        recognition.start();
+                setAiMessage(message);
+                // Leaving status on 'listening' after a fatal error was why the
+                // button kept showing "Tap to Send" while nothing was captured.
+                if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+            },
+            onEnd: () => {
+                if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+            },
+        });
     }, []);
 
     const stopRecording = useCallback(() => {
-        if (recognitionRef.current) {
-            try { recognitionRef.current.stop(); } catch (e) { }
-        }
+        sessionRef.current?.stop();
+        sessionRef.current = null;
         setStatus('idle');
     }, []);
 
@@ -219,30 +201,18 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
         setFullTranscript('');
 
         try {
-            // Try multiple sources for auth token (sessionStorage, localStorage, then Supabase client)
-            const storageKey = `sb-${import.meta.env.VITE_SUPABASE_URL.split('//')[1].split('.')[0]}-auth-token`;
+            // Ask the Supabase client for the session rather than reaching into
+            // web storage directly. secureStorage routes native platforms to
+            // Capacitor Preferences (Keychain / EncryptedSharedPreferences), so
+            // the old sessionStorage/localStorage probes found nothing on device
+            // and only worked because of this fallback anyway. getSession also
+            // refreshes an expired token, which the raw reads never did.
             let accessToken: string | null = null;
-
-            // Try sessionStorage first
-            const sessionRaw = sessionStorage.getItem(storageKey);
-            if (sessionRaw) {
-                try { accessToken = JSON.parse(sessionRaw)?.access_token; } catch { }
-            }
-
-            // Fallback: try localStorage (some browsers/configs use this)
-            if (!accessToken) {
-                const localRaw = localStorage.getItem(storageKey);
-                if (localRaw) {
-                    try { accessToken = JSON.parse(localRaw)?.access_token; } catch { }
-                }
-            }
-
-            // Final fallback: use Supabase client getSession
-            if (!accessToken) {
-                try {
-                    const { data: sessionData } = await supabase.auth.getSession();
-                    accessToken = sessionData?.session?.access_token || null;
-                } catch { }
+            try {
+                const { data: sessionData } = await supabase.auth.getSession();
+                accessToken = sessionData?.session?.access_token || null;
+            } catch (e) {
+                console.error('Voice: failed to read session', e);
             }
 
             if (!accessToken) {
@@ -397,49 +367,131 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 }
                 break;
 
-            case 'mark_paid':
+            case 'mark_paid': {
                 setStatus('processing');
                 try {
-                    if (data.invoice_number || data.invoice_id) {
-                        const query = supabase.from('invoices').update({ status: 'paid' }).eq('user_id', user?.id || '');
-                        if (data.invoice_id) {
-                            await query.eq('id', data.invoice_id);
+                    // Resolve to ONE concrete invoice before writing anything.
+                    //
+                    // The previous implementation issued
+                    //   .update({status:'paid'}).ilike('invoice_number', `%${n}%`)
+                    // with no limit, so "mark invoice 12 as paid" silently also
+                    // marked INV-120, INV-1234 and INV-3120 as paid in the same
+                    // statement. Marking money received is not reversible from
+                    // the user's point of view, so this path now reads first,
+                    // refuses to guess when ambiguous, and names what it changed.
+                    const unpaid = () => supabase
+                        .from('invoices')
+                        .select('id, invoice_number, total, status')
+                        .eq('user_id', user?.id || '')
+                        .is('deleted_at', null)
+                        .neq('status', 'paid');
+
+                    let candidates: Array<{ id: string; invoice_number: string; total: number | null; status: string | null }> = [];
+
+                    if (data.invoice_id) {
+                        const { data: rows } = await unpaid().eq('id', data.invoice_id);
+                        candidates = rows || [];
+                    } else if (data.invoice_number) {
+                        // Exact match wins outright; only widen if it finds nothing.
+                        const { data: exact } = await unpaid().eq('invoice_number', data.invoice_number);
+                        if (exact && exact.length > 0) {
+                            candidates = exact;
                         } else {
-                            await query.ilike('invoice_number', `%${data.invoice_number}%`);
+                            const { data: fuzzy } = await unpaid()
+                                .ilike('invoice_number', `%${data.invoice_number}%`)
+                                .limit(10);
+                            candidates = fuzzy || [];
                         }
-                        setStatus('success');
-                        speakThenDo(responseText, () => {
-                            navigate('/invoices');
-                            setOpen(false);
-                        });
                     } else if (data.client_name) {
-                        // Find most recent unpaid invoice for this client
                         const { data: clients } = await supabase
-                            .from('clients').select('id').eq('user_id', user?.id || '')
-                            .ilike('name', `%${data.client_name}%`).limit(1);
-                        if (clients?.[0]) {
-                            const { data: inv } = await supabase
-                                .from('invoices').select('id').eq('client_id', clients[0].id)
-                                .in('status', ['sent', 'draft', 'overdue']).order('created_at', { ascending: false }).limit(1);
-                            if (inv?.[0]) {
-                                await supabase.from('invoices').update({ status: 'paid' }).eq('id', inv[0].id);
-                                setStatus('success');
-                                speakThenDo(responseText, () => { navigate('/invoices'); setOpen(false); });
-                            } else {
-                                setStatus('error');
-                                setAiMessage(`No unpaid invoices found for ${data.client_name}.`);
-                                speak(`Couldn't find any unpaid invoices for ${data.client_name}.`, true);
-                            }
+                            .from('clients').select('id, name').eq('user_id', user?.id || '')
+                            .ilike('name', `%${data.client_name}%`).limit(5);
+
+                        if (!clients || clients.length === 0) {
+                            setStatus('error');
+                            setAiMessage(`No client found matching "${data.client_name}".`);
+                            speak(`I couldn't find a client called ${data.client_name}.`, true);
+                            break;
                         }
+
+                        const { data: rows } = await unpaid()
+                            .in('client_id', clients.map(c => c.id))
+                            .order('created_at', { ascending: false })
+                            .limit(10);
+                        candidates = rows || [];
                     } else {
                         speak(responseText, true);
+                        break;
                     }
-                } catch {
+
+                    if (candidates.length === 0) {
+                        // Distinguish "doesn't exist" from "already paid" — the
+                        // query above deliberately excludes paid invoices.
+                        let alreadyPaid = false;
+                        if (data.invoice_number) {
+                            const { data: paid } = await supabase
+                                .from('invoices').select('id')
+                                .eq('user_id', user?.id || '')
+                                .eq('status', 'paid')
+                                .ilike('invoice_number', `%${data.invoice_number}%`)
+                                .limit(1);
+                            alreadyPaid = !!paid?.length;
+                        }
+                        setStatus('error');
+                        const msg = alreadyPaid
+                            ? `That invoice is already marked as paid.`
+                            : `I couldn't find an unpaid invoice matching that.`;
+                        setAiMessage(msg);
+                        speak(msg, true);
+                        break;
+                    }
+
+                    if (candidates.length > 1) {
+                        // Never guess which invoice got paid. Hand the choice back.
+                        const list = candidates.slice(0, 3).map(c => c.invoice_number).join(', ');
+                        setStatus('error');
+                        setAiMessage(
+                            `That matches ${candidates.length} unpaid invoices (${list}). ` +
+                            `Which one? Say the full invoice number.`
+                        );
+                        speak(
+                            `I found ${candidates.length} unpaid invoices matching that. ` +
+                            `Which one did you mean?`,
+                            true
+                        );
+                        break;
+                    }
+
+                    const target = candidates[0];
+                    const { error: payErr } = await supabase
+                        .from('invoices')
+                        .update({
+                            status: 'paid',
+                            // Keep the record internally consistent: status alone
+                            // left amount_paid and paid_at stale.
+                            amount_paid: target.total ?? 0,
+                            paid_at: new Date().toISOString(),
+                        })
+                        .eq('id', target.id); // primary key — exactly one row
+
+                    if (payErr) throw payErr;
+
+                    setStatus('success');
+                    const confirmation =
+                        `Marked ${target.invoice_number} as paid — ${formatCurrency(target.total)}.`;
+                    setAiMessage(confirmation);
+                    speakThenDo(confirmation, () => {
+                        navigate('/invoices');
+                        setOpen(false);
+                    });
+                } catch (err) {
+                    console.error('mark_paid error:', err);
                     setStatus('error');
                     setAiMessage('Failed to update invoice.');
                     speak("Sorry, had trouble marking that invoice as paid.", true);
                 }
                 break;
+            }
 
             case 'complete_job':
                 setStatus('processing');
@@ -454,7 +506,17 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                             const { data: clients } = await supabase
                                 .from('clients').select('id').eq('user_id', user?.id || '')
                                 .ilike('name', `%${data.client_name}%`).limit(1);
-                            if (clients?.[0]) jobQuery = jobQuery.eq('client_id', clients[0].id);
+                            if (clients?.[0]) {
+                                jobQuery = jobQuery.eq('client_id', clients[0].id);
+                            } else {
+                                // Bail out rather than silently dropping the filter —
+                                // otherwise "complete Tom's job" with no client named
+                                // Tom completes the most recent job for ANYONE.
+                                setStatus('error');
+                                setAiMessage(`No client found matching "${data.client_name}".`);
+                                speak(`I couldn't find a client called ${data.client_name}.`, true);
+                                break;
+                            }
                         }
                         if (data.job_title) jobQuery = jobQuery.ilike('title', `%${data.job_title}%`);
                         const { data: jobs } = await jobQuery.order('created_at', { ascending: false }).limit(1);
@@ -593,7 +655,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 setOpen(false);
                 toast({
                     title: "Quote Created! ✨",
-                    description: `${data.client_name ? `For ${data.client_name} - ` : ''}$${data.total || 0}`
+                    description: `${data.client_name ? `For ${data.client_name} - ` : ''}${formatCurrency(data.total || 0)}`
                 });
                 navigate(`/quotes/${quote.id}`);
             }
@@ -720,45 +782,32 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     };
 
     const speak = (text: string, autoListen: boolean) => {
-        window.speechSynthesis.cancel();
-
-        if (!('speechSynthesis' in window) || !text) {
-            // No speech synthesis - just handle the auto-listen directly
-            if (autoListen && open) {
-                setTimeout(() => startRecording(), 500);
-            }
-            return;
-        }
-
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.95;
-        utterance.pitch = 1.05;
-        utterance.volume = 1.0;
-        if (selectedVoice) utterance.voice = selectedVoice;
+        cancelSpeech();
 
         let ended = false;
         const onComplete = () => {
             if (ended) return;
             ended = true;
+            setStatus('idle');
             if (autoListen && open) {
-                setStatus('idle');
-                setTimeout(() => startRecording(), 500);
-            } else {
-                setStatus('idle');
+                setTimeout(() => { void startRecording(); }, 500);
             }
         };
 
-        utterance.onstart = () => setStatus('speaking');
-        utterance.onend = onComplete;
-        utterance.onerror = onComplete;
+        if (!text) {
+            onComplete();
+            return;
+        }
 
-        // Fallback: if onend never fires (common in mobile/emulated browsers), force complete
-        // Use word count (~150 wpm = ~400ms/word) instead of char length for better accuracy
+        setStatus('speaking');
+        // speakText picks a voice matching the device locale rather than the old
+        // hardcoded en-AU / Apple-voice-name list.
+        speakText(text, { onEnd: onComplete });
+
+        // Fallback: onend is unreliable in mobile WebViews. ~150wpm => ~400ms/word.
         const wordCount = text.split(/\s+/).length;
         const estimatedDuration = Math.max(1500, wordCount * 400 + 500);
         setTimeout(onComplete, estimatedDuration);
-
-        window.speechSynthesis.speak(utterance);
     };
 
     const formatTime = (seconds: number) => {
@@ -904,24 +953,30 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                         ) : (
                             <Button
                                 size="lg"
-                                onClick={startRecording}
+                                onClick={() => { void startRecording(); }}
+                                disabled={!speechSupported}
                                 className={cn(
                                     "rounded-full h-24 w-24 p-0 shadow-2xl transition-all duration-300 group relative",
                                     "bg-gradient-to-b from-primary to-primary/90 hover:scale-105 active:scale-95",
-                                    "border-[6px] border-background ring-1 ring-border"
+                                    "border-[6px] border-background ring-1 ring-border",
+                                    "disabled:opacity-40 disabled:hover:scale-100"
                                 )}
                             >
                                 <div className="absolute inset-0 rounded-full bg-white/20 animate-ping opacity-0 group-hover:opacity-20" />
-                                <Mic className="w-10 h-10 text-primary-foreground drop-shadow-md" />
+                                {speechSupported
+                                    ? <Mic className="w-10 h-10 text-primary-foreground drop-shadow-md" />
+                                    : <MicOff className="w-10 h-10 text-primary-foreground drop-shadow-md" />}
                             </Button>
                         )}
                     </div>
 
                     {/* Helper Text */}
                     <p className="text-center text-xs font-medium text-muted-foreground/70 mt-6 tracking-wide">
-                        {status === 'listening'
-                            ? "Speak naturally. I'll send automatically when you pause."
-                            : "Tap the mic to start speaking"}
+                        {!speechSupported
+                            ? "Voice input isn't available on this device — you can still type or use the forms."
+                            : status === 'listening'
+                                ? "Speak naturally. I'll send automatically when you pause."
+                                : "Tap the mic to start speaking"}
                     </p>
                 </div>
             </SheetContent>

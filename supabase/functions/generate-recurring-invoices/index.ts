@@ -118,7 +118,7 @@ serve(async (req) => {
             title: template.title,
             description: template.description,
             subtotal: template.subtotal,
-            gst: template.gst,
+            tax_amount: template.tax_amount,
             total: template.total,
             due_date: newDueDate,
             notes: template.notes,

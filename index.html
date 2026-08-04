@@ -2,10 +2,18 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <!-- `user-scalable=no` was removed: it blocks pinch-to-zoom, which fails
+         WCAG 2.1 SC 1.4.4 (Resize Text) and is flagged by Play Store
+         accessibility guidance. This app's users are frequently outdoors, in
+         gloves, or over 40 — zoom matters. `maximum-scale` is likewise omitted
+         because iOS treats it as a zoom lock. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#0f1419" />
+    <!-- Matches --background in the dark theme (index.css). Previously #0f1419,
+         which matched nothing in the app and seamed against the real shell. -->
+    <meta name="theme-color" content="#002420" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f5f5" media="(prefers-color-scheme: light)" />
     <link rel="manifest" href="/manifest.webmanifest" />
 
     <title>TradieMate - Job Management for Trades</title>
@@ -22,10 +30,14 @@
     <meta name="twitter:site" content="@TradieMate" />
     <meta name="twitter:image" content="/og-image.png" />
 
-    <!-- Preconnect for faster font loading -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Fonts are bundled locally via @fontsource (imported at the top of
+         src/index.css), not fetched from the Google Fonts CDN.
+
+         This app ships a full offline layer and tells users on the onboarding
+         screen that it "works offline". Webfonts loaded over the network break
+         that promise silently: on a cold offline start the request fails and
+         the entire typographic identity falls back to system-ui. In a Capacitor
+         WebView there is also no guarantee of connectivity at all. -->
   </head>
 
   <body>

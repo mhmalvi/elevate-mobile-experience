@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch';
 import { LogOut, User, Building2, CreditCard, ChevronRight, Sparkles, Sun, Moon, Crown, Palette, Users, Settings as SettingsIcon, Link2, HardHat, FileText, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from 'next-themes';
+import { getCountry } from '@/lib/countries';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -18,17 +19,31 @@ export default function Settings() {
     navigate('/auth');
   };
 
+  const country = getCountry(profile?.country_code);
+
   const menuItems = [
     { icon: Crown, label: 'Subscription & Usage', description: 'Plan, limits & billing', path: '/settings/subscription' },
     { icon: User, label: 'Profile', description: 'Your personal details', path: '/settings/profile' },
-    { icon: Building2, label: 'Business Details', description: 'ABN, logo & contact info', path: '/settings/business' },
+    {
+      icon: Building2, label: 'Business Details',
+      description: `${country.businessNumberLabel}, logo & contact info`,
+      path: '/settings/business',
+    },
     { icon: Palette, label: 'Branding', description: 'Colors, logos & templates', path: '/settings/branding' },
     { icon: Users, label: 'Team', description: 'Manage team members & roles', path: '/settings/team' },
     { icon: HardHat, label: 'Subcontractors', description: 'Manage your subbies network', path: '/settings/subcontractors' },
     { icon: Clock, label: 'Timesheets', description: 'Staff hours & weekly timesheets', path: '/timesheets' },
     { icon: CreditCard, label: 'Payment Details', description: 'Bank account for invoices', path: '/settings/payments' },
     { icon: Link2, label: 'Integrations', description: 'Connect Xero, QuickBooks & more', path: '/settings/integrations' },
-    { icon: FileText, label: 'BAS Report', description: 'Quarterly GST summary', path: '/settings/bas-report' },
+    // The BAS is an Australian Taxation Office filing with ATO-specific field
+    // codes (1A/1B). It is meaningless in every other market, so it is only
+    // offered to Australian businesses.
+    ...(country.code === 'AU'
+      ? [{
+        icon: FileText, label: 'BAS Report',
+        description: 'Quarterly GST summary', path: '/settings/bas-report',
+      }]
+      : []),
   ];
 
   return (

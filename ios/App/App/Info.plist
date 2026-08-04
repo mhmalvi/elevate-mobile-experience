@@ -73,6 +73,12 @@
 	<!-- Photo Library Permission -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>TradieMate needs photo library access to attach images to invoices and quotes.</string>
+	<!-- Voice Commands: both keys are required. iOS rejects the app at launch
+	     if speech recognition is used without NSSpeechRecognitionUsageDescription. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TradieMate uses your microphone so you can create quotes, invoices and jobs by speaking instead of typing.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>TradieMate converts your speech to text so it can act on voice commands like creating a quote or finding a client.</string>
 	<!-- Push Notifications -->
 	<key>UIBackgroundModes</key>
 	<array>

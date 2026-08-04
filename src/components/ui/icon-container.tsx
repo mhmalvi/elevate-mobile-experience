@@ -28,7 +28,9 @@ export function IconContainer({
 
     const variantStyles = {
         primary: 'bg-gradient-to-br from-primary/20 to-primary/5 border-primary/10 text-primary shadow-sm',
-        secondary: 'bg-gradient-to-br from-secondary/20 to-secondary/5 border-secondary/10 text-secondary shadow-sm',
+        // `text-secondary-foreground`, not `text-secondary`: --secondary is a
+        // surface token (dark teal in dark mode) and scored 1.54:1 as text.
+        secondary: 'bg-gradient-to-br from-secondary/20 to-secondary/5 border-secondary/10 text-secondary-foreground shadow-sm',
         accent: 'bg-gradient-to-br from-accent/20 to-accent/5 border-accent/10 text-accent shadow-sm',
         glass: 'glass-subtle border-white/10 text-foreground shadow-premium',
         ghost: 'bg-muted/30 border-muted-foreground/10 text-muted-foreground',

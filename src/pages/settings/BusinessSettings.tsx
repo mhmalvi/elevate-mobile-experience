@@ -18,20 +18,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-// import { Constants } from '@/integrations/supabase/types';
+import { Constants } from '@/integrations/supabase/types';
+import { COUNTRIES, getCountry } from '@/lib/countries';
 
-const tradeTypes = [
-  'electrician',
-  'plumber',
-  'carpenter',
-  'builder',
-  'painter',
-  'landscaper',
-  'hvac',
-  'tiler',
-  'cleaner',
-  'other'
-] as const;
+/**
+ * Derived from the generated types rather than hand-maintained.
+ *
+ * The previous hardcoded list had drifted from the database enum in both
+ * directions: it offered 'cleaner', which is not a valid `trade_type` value so
+ * saving it failed, and it omitted 'roofer', which onboarding does offer — so
+ * a roofer opening this page saw their trade blank and could not restore it.
+ */
+const tradeTypes = Constants.public.Enums.trade_type;
 
 export default function BusinessSettings() {
   const navigate = useNavigate();
@@ -42,31 +40,58 @@ export default function BusinessSettings() {
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
     business_name: '',
-    abn: '',
+    business_number: '',
     trade_type: 'other' as typeof tradeTypes[number],
     phone: '',
     email: '',
     address: '',
     default_hourly_rate: 85,
     license_number: '',
-    gst_registered: true,
+    tax_registered: true,
+    country_code: 'AU',
+    currency_code: 'AUD',
+    tax_rate: 0.1,
+    tax_label: 'GST',
   });
 
   useEffect(() => {
     if (profile) {
       setForm({
         business_name: profile.business_name || '',
-        abn: profile.abn || '',
+        business_number: profile.business_number || '',
         trade_type: profile.trade_type || 'other',
         phone: profile.phone || '',
         email: profile.email || '',
         address: profile.address || '',
         default_hourly_rate: profile.default_hourly_rate || 85,
-        license_number: (profile as any).license_number || '',
-        gst_registered: (profile as any).gst_registered ?? true,
+        license_number: profile.license_number || '',
+        tax_registered: profile.tax_registered ?? true,
+        country_code: profile.country_code || 'AU',
+        currency_code: profile.currency_code || 'AUD',
+        tax_rate: typeof profile.tax_rate === 'number' ? profile.tax_rate : 0.1,
+        tax_label: profile.tax_label || 'GST',
       });
     }
   }, [profile]);
+
+  /** Reference data for the currently selected country. */
+  const country = getCountry(form.country_code);
+
+  /**
+   * Changing country re-derives currency and tax, since those are what the
+   * country is actually for. The user can still override each afterwards —
+   * this only moves them off the previous country's values.
+   */
+  const handleCountryChange = (code: string) => {
+    const next = getCountry(code);
+    setForm(prev => ({
+      ...prev,
+      country_code: next.code,
+      currency_code: next.currency,
+      tax_rate: next.taxRate,
+      tax_label: next.taxLabel,
+    }));
+  };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -247,14 +272,34 @@ export default function BusinessSettings() {
               </div>
 
               <div>
-                <Label htmlFor="abn" className="text-sm font-medium">ABN</Label>
+                <Label htmlFor="country" className="text-sm font-medium">Country</Label>
+                <Select value={form.country_code} onValueChange={handleCountryChange}>
+                  <SelectTrigger id="country" className="mt-1.5 rounded-xl">
+                    <SelectValue placeholder="Select your country" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNTRIES.map((c) => (
+                      <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  Sets your currency, tax and number formats.
+                </p>
+              </div>
+
+              <div>
+                {/* Label follows the country: ABN, EIN, GSTIN, Company number… */}
+                <Label htmlFor="businessNumber" className="text-sm font-medium">
+                  {country.businessNumberLabel}
+                </Label>
                 <div className="relative mt-1.5">
                   <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    id="abn"
-                    value={form.abn}
-                    onChange={(e) => setForm({ ...form, abn: e.target.value })}
-                    placeholder="00 000 000 000"
+                    id="businessNumber"
+                    value={form.business_number}
+                    onChange={(e) => setForm({ ...form, business_number: e.target.value })}
+                    placeholder={country.businessNumberPlaceholder}
                     className="pl-10 rounded-xl"
                   />
                 </div>
@@ -374,15 +419,68 @@ export default function BusinessSettings() {
 
               <div className="flex items-center justify-between p-3 bg-background/50 rounded-xl">
                 <div className="space-y-0.5">
-                  <Label htmlFor="gstRegistered" className="font-medium">GST Registered</Label>
-                  <p className="text-xs text-muted-foreground">Toggle off if not registered for GST</p>
+                  <Label htmlFor="taxRegistered" className="font-medium">
+                    Registered for {form.tax_label}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Turn off if you don't charge {form.tax_label} on your work
+                  </p>
                 </div>
                 <Switch
-                  id="gstRegistered"
-                  checked={form.gst_registered}
-                  onCheckedChange={(checked) => setForm({ ...form, gst_registered: checked })}
+                  id="taxRegistered"
+                  checked={form.tax_registered}
+                  onCheckedChange={(checked) => setForm({
+                    ...form,
+                    tax_registered: checked,
+                    // Unregistering must actually stop tax being added, not just
+                    // flip a label — the rate is what the calculations read.
+                    tax_rate: checked ? (form.tax_rate || country.taxRate) : 0,
+                  })}
                 />
               </div>
+
+              {form.tax_registered && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="taxLabel" className="text-sm font-medium">Tax name</Label>
+                    <Input
+                      id="taxLabel"
+                      value={form.tax_label}
+                      onChange={(e) => setForm({ ...form, tax_label: e.target.value })}
+                      placeholder="GST"
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="taxRate" className="text-sm font-medium">Rate (%)</Label>
+                    <Input
+                      id="taxRate"
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={+(form.tax_rate * 100).toFixed(2)}
+                      onChange={(e) => {
+                        const pct = parseFloat(e.target.value);
+                        setForm({
+                          ...form,
+                          tax_rate: isNaN(pct) ? 0 : Math.min(Math.max(pct, 0), 100) / 100,
+                        });
+                      }}
+                      className="mt-1.5 rounded-xl"
+                    />
+                  </div>
+                  {country.taxRateIsAdvisory && (
+                    <p className="col-span-2 text-xs text-warning">
+                      In {country.name}, {country.taxLabel.toLowerCase()} varies by
+                      {country.code === 'US' ? ' state and county' :
+                        country.code === 'CA' ? ' province' : ' category of work'}.
+                      Please confirm the rate that applies to you — this is a starting point, not advice.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

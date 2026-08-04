@@ -89,14 +89,33 @@ serve(async (req) => {
       );
     }
 
-    // Fetch profile for business name only (no Stripe Connect required)
+    // Fetch profile for business name and billing currency
     const { data: profile } = await supabase
       .from("profiles")
-      .select("business_name")
+      .select("business_name, currency_code")
       .eq("user_id", invoice.user_id)
       .single();
 
     const businessName = profile?.business_name || "Your Business";
+
+    // Charge in the currency the business actually invoices in.
+    //
+    // This was hardcoded to "aud", so a UK plumber invoicing £500 had their
+    // client charged AUD 500 — the wrong amount, in the wrong currency, with an
+    // FX conversion nobody agreed to. Falls back to AUD only when the profile
+    // has no currency set, which preserves behaviour for existing accounts.
+    const currency = (profile?.currency_code || "AUD").toLowerCase();
+
+    // Stripe expects the minor unit. Most currencies have 2 decimal places, but
+    // zero-decimal currencies (JPY, KRW, VND…) must NOT be multiplied by 100 or
+    // the customer is charged 100x. Three-decimal currencies round to 0 too.
+    const ZERO_DECIMAL = new Set([
+      "bif", "clp", "djf", "gnf", "jpy", "kmf", "krw",
+      "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf", "xof", "xpf",
+    ]);
+    const unitAmount = ZERO_DECIMAL.has(currency)
+      ? Math.round(balance)
+      : Math.round(balance * 100);
     const baseUrl = success_url?.split('/i/')[0] || Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
 
     console.log(`Creating Checkout session for platform account, invoice: ${invoice.invoice_number}, balance: $${balance}`);
@@ -110,12 +129,12 @@ serve(async (req) => {
       line_items: [
         {
           price_data: {
-            currency: "aud",
+            currency,
             product_data: {
               name: `Invoice ${invoice.invoice_number}`,
               description: invoice.title || "Invoice payment",
             },
-            unit_amount: Math.round(balance * 100), // Stripe uses cents
+            unit_amount: unitAmount,
           },
           quantity: 1,
         },
