@@ -56,6 +56,7 @@ export default function Quotes() {
             <div className="absolute top-8 right-4 flex items-center gap-3">
               <button
                 onClick={() => navigate('/quotes/new')}
+                aria-label="Create quote"
                 className="p-2.5 rounded-full bg-primary shadow-premium hover:bg-primary/90 transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 <Plus className="w-6 h-6 text-primary-foreground" />

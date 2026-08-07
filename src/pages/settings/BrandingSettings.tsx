@@ -356,8 +356,9 @@ export default function BrandingSettings() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Back to Settings"
                 onClick={() => navigate('/settings')}
-                className="h-8 w-8 -ml-2 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
+                className="h-11 w-11 -ml-2 rounded-full hover:bg-primary/10 hover:text-primary transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
@@ -407,7 +408,7 @@ export default function BrandingSettings() {
                             <>
                               <img src={form.logo_url} alt="Logo" className="w-full h-full object-contain p-2" />
                               <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button size="sm" variant="destructive" onClick={handleRemoveLogo} className="h-8 w-8 p-0 rounded-full">
+                                <Button size="sm" variant="destructive" aria-label="Remove logo" onClick={handleRemoveLogo} className="h-11 w-11 p-0 rounded-full">
                                   <X className="w-4 h-4" />
                                 </Button>
                               </div>
@@ -431,7 +432,7 @@ export default function BrandingSettings() {
                                 key={pos}
                                 type="button"
                                 onClick={() => setForm({ ...form, logo_position: pos as any })}
-                                className={`p-2 rounded-lg border text-xs font-medium capitalize transition-all ${form.logo_position === pos
+                                className={`min-h-[44px] px-2 rounded-lg border text-xs font-medium capitalize transition-all ${form.logo_position === pos
                                     ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/20'
                                     : 'border-border hover:bg-muted'
                                   }`}
@@ -486,6 +487,7 @@ export default function BrandingSettings() {
                         <p className="text-xs text-muted-foreground">Display logo on generated PDFs</p>
                       </div>
                       <Switch
+                        aria-label="Show logo on generated PDFs"
                         checked={form.show_logo_on_documents}
                         onCheckedChange={(c) => setForm({ ...form, show_logo_on_documents: c })}
                       />

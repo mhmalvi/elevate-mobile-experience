@@ -91,7 +91,7 @@ export default function ClientDetail() {
             <div className="relative px-4 pt-8 pb-6">
               <button
                 onClick={() => navigate('/clients')}
-                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors -ml-2 px-2 py-3 -mt-3 mb-1 rounded-lg"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span className="text-sm font-medium">Back to Clients</span>
@@ -349,7 +349,7 @@ export default function ClientDetail() {
           <div className="pt-6">
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="ghost" className="w-full text-destructive/40 hover:text-destructive hover:bg-destructive/10 h-10 text-[10px] font-black uppercase tracking-[0.2em] rounded-xl">
+                <Button variant="ghost" className="w-full text-destructive/40 hover:text-destructive hover:bg-destructive/10 h-11 text-[10px] font-black uppercase tracking-[0.2em] rounded-xl">
                   Remove Client Record
                 </Button>
               </AlertDialogTrigger>

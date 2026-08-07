@@ -134,7 +134,7 @@ export default function VoiceQuoteWizard() {
 
                 {/* Header */}
                 <div className="relative px-4 pt-6 pb-2 flex items-center gap-2 z-10">
-                    <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-full">
+                    <Button variant="ghost" size="icon" aria-label="Go back" onClick={() => navigate(-1)} className="rounded-full">
                         <ArrowLeft className="w-5 h-5" />
                     </Button>
                     <h1 className="text-xl font-bold">Voice Wizard</h1>

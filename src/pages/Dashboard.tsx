@@ -21,7 +21,8 @@ import {
   Clock,
   CheckCircle2,
   ArrowUpRight,
-  Users
+  Users,
+  Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -271,11 +272,17 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              {/* Team Switcher */}
-              {allTeams.length > 1 && (
-                <div className="shrink-0 ml-4 mt-2">
+              {/*
+                Header controls. Settings lives here rather than in the bottom
+                bar: it was the sixth item there, which pushed the bar past the
+                3–5 destinations the platforms allow and left each item under
+                the 48dp touch minimum on a 320dp phone. Home is one tap from
+                anywhere, so this is two taps from any screen.
+              */}
+              <div className="shrink-0 ml-4 mt-2 flex items-center gap-2">
+                {allTeams.length > 1 && (
                   <Select value={team?.id} onValueChange={switchTeam}>
-                    <SelectTrigger className="w-[140px] h-10 bg-background/50 backdrop-blur-md border-primary/20 rounded-xl shadow-sm hover:bg-background/80 transition-all">
+                    <SelectTrigger className="w-[140px] h-11 bg-background/50 backdrop-blur-md border-primary/20 rounded-xl shadow-sm hover:bg-background/80 transition-all">
                       <div className="flex items-center gap-2 truncate">
                         <Users className="w-4 h-4 text-primary shrink-0" />
                         <span className="truncate text-sm font-medium">{team?.name}</span>
@@ -289,8 +296,18 @@ export default function Dashboard() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              )}
+                )}
+
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Settings"
+                  onClick={() => navigate('/settings')}
+                  className="h-11 w-11 shrink-0 rounded-xl bg-background/50 backdrop-blur-md border-primary/20 shadow-sm hover:bg-background/80 transition-all"
+                >
+                  <Settings className="w-5 h-5 text-primary" />
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -425,7 +442,7 @@ export default function Dashboard() {
               </div>
               <div className="space-y-3">
                 <Select value={selectedMember || 'none'} onValueChange={(v) => setSelectedMember(v === 'none' ? '' : v)}>
-                  <SelectTrigger className="h-10 rounded-xl bg-card/80 border-border/50">
+                  <SelectTrigger className="h-11 rounded-xl bg-card/80 border-border/50">
                     <SelectValue placeholder="Select team member" />
                   </SelectTrigger>
                   <SelectContent>

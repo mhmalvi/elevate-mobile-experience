@@ -5,7 +5,6 @@ import {
   Users,
   Receipt,
   FileText,
-  Settings,
   Mic,
   type LucideIcon,
 } from 'lucide-react';
@@ -24,10 +23,30 @@ import { VoiceCommandSheet } from '@/components/VoiceCommandSheet';
  * (Invoices) are near-identical glyphs for the app's two most confusable
  * concepts.
  *
- * The FAB now floats ABOVE the bar rather than sitting inside it. That frees
- * the full width for six evenly-spaced items with permanent labels, and keeps
- * every destination reachable — this bar is the app's only navigation, so
- * nothing can simply be dropped.
+ * The FAB floats ABOVE the bar rather than sitting inside it: voice is an
+ * action, not a destination, and mixing the two is what cramped the bar in the
+ * first place.
+ *
+ * WHY FIVE ITEMS, NOT SIX
+ *
+ * Six was over both platform guidelines (Material 3 says 3–5 destinations, iOS
+ * HIG tops out near 5), and it broke down on small phones. Each item gets
+ * `(screenWidth - 40) / n` of track:
+ *
+ *          six items      five items
+ *   411dp   61.8px         74.2px
+ *   360dp   53.3px         64.0px
+ *   320dp   46.7px         56.0px
+ *
+ * The widest label ("Invoices", "Settings") needs 45px, so at 320dp six items
+ * left under 2px of gutter between adjacent labels — and 46.7px is below the
+ * 48dp minimum touch target.
+ *
+ * Settings was the item to drop: it is the lowest-frequency destination here
+ * and it is the only one with no day-to-day workflow behind it. It now lives in
+ * the dashboard header, two taps from anywhere via Home — the same place most
+ * apps put it. Every other destination stays reachable in one tap, which
+ * matters because this bar is the app's only navigation.
  */
 
 interface NavItemDef {
@@ -42,7 +61,6 @@ const NAV_ITEMS: NavItemDef[] = [
   { path: '/jobs', label: 'Jobs', icon: Briefcase },
   { path: '/invoices', label: 'Invoices', icon: Receipt },
   { path: '/clients', label: 'Clients', icon: Users },
-  { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function BottomNav() {
@@ -132,7 +150,7 @@ function NavItem({
       className={cn(
         'relative z-10 flex-1 min-w-0 flex flex-col items-center justify-center gap-0.5',
         'rounded-2xl transition-colors duration-200',
-        // 48px is the minimum comfortable touch target; flex-1 keeps the six
+        // 48px is the minimum comfortable touch target; flex-1 keeps the five
         // items evenly distributed instead of overflowing a fixed-width group.
         'min-h-[48px] active:scale-95',
         isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground',

@@ -128,7 +128,7 @@ export default function JobEdit() {
             <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
             <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
             <div className="relative px-4 pt-8 pb-6">
-              <button onClick={() => navigate('/jobs')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4">
+              <button onClick={() => navigate('/jobs')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors -ml-2 px-2 py-3 -mt-3 mb-1 rounded-lg">
                 <ArrowLeft className="w-4 h-4" />
                 <span className="text-sm font-medium">Back to Jobs</span>
               </button>
@@ -155,7 +155,7 @@ export default function JobEdit() {
           <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
           <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
           <div className="relative px-4 pt-8 pb-6">
-            <button onClick={() => navigate(`/jobs/${id}`)} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4">
+            <button onClick={() => navigate(`/jobs/${id}`)} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors -ml-2 px-2 py-3 -mt-3 mb-1 rounded-lg">
               <ArrowLeft className="w-4 h-4" />
               <span className="text-sm font-medium">Back to Job</span>
             </button>

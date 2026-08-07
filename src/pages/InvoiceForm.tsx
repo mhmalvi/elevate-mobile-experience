@@ -191,7 +191,7 @@ export default function InvoiceForm() {
             <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
             <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
             <div className="relative px-4 pt-8 pb-6">
-              <button onClick={() => navigate('/invoices')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4">
+              <button onClick={() => navigate('/invoices')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors -ml-2 px-2 py-3 -mt-3 mb-1 rounded-lg">
                 <ArrowLeft className="w-4 h-4" />
                 <span className="text-sm font-medium">Back to Invoices</span>
               </button>
@@ -216,7 +216,7 @@ export default function InvoiceForm() {
           <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
           <div className="absolute top-0 right-0 w-48 h-48 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
           <div className="relative px-4 pt-8 pb-6">
-            <button onClick={() => navigate('/invoices')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4">
+            <button onClick={() => navigate('/invoices')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors -ml-2 px-2 py-3 -mt-3 mb-1 rounded-lg">
               <ArrowLeft className="w-4 h-4" />
               <span className="text-sm font-medium">Back to Invoices</span>
             </button>
@@ -334,13 +334,13 @@ export default function InvoiceForm() {
                       step="0.01"
                       value={item.quantity}
                       onChange={(e) => updateLineItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
-                      className="h-10 rounded-xl"
+                      className="h-11 rounded-xl"
                     />
                   </div>
                   <div>
                     <Label className="text-xs">Unit</Label>
                     <Select value={item.unit} onValueChange={(v) => updateLineItem(item.id, 'unit', v)}>
-                      <SelectTrigger className="h-10 rounded-xl">
+                      <SelectTrigger className="h-11 rounded-xl">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -360,7 +360,7 @@ export default function InvoiceForm() {
                       step="0.01"
                       value={item.unit_price}
                       onChange={(e) => updateLineItem(item.id, 'unit_price', parseFloat(e.target.value) || 0)}
-                      className="h-10 rounded-xl"
+                      className="h-11 rounded-xl"
                     />
                   </div>
                 </div>

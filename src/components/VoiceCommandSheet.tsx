@@ -50,6 +50,9 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
     const lastSpeechRef = useRef<number>(0);
     const hasSpeechRef = useRef<boolean>(false);
     const sendMessageRef = useRef<(() => void) | null>(null);
+    // Mirrors `status` for callbacks that fire outside React's update cycle
+    // (the speech engine's onEnd arrives from a native listener or a timer).
+    const statusRef = useRef<VoiceStatus>('idle');
 
     // Probe the engine once so the UI can explain itself instead of failing at
     // the moment the user taps the mic.
@@ -74,6 +77,7 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
 
     // Recording timer
     useEffect(() => {
+        statusRef.current = status;
         if (status === 'listening') {
             timerRef.current = setInterval(() => {
                 setRecordingTime(prev => {
@@ -172,8 +176,28 @@ export function VoiceCommandSheet({ children }: VoiceCommandSheetProps) {
                 // button kept showing "Tap to Send" while nothing was captured.
                 if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
             },
-            onEnd: () => {
+            onEnd: (reason) => {
                 if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+
+                // The engine can end a session on its own — it finished, it
+                // failed, or the OS recogniser went away. If the UI is still on
+                // 'listening' at that point the mic animation is running over a
+                // microphone that is already closed, which is what left the
+                // sheet counting up to the two-minute cap after the recogniser
+                // had quietly died. Nothing here applies when the user asked us
+                // to stop: stopRecording/sendMessage own the state in that case.
+                if (reason === 'requested') return;
+                if (statusRef.current !== 'listening') return;
+
+                if (hasSpeechRef.current) {
+                    // We heard something before the engine gave up — send it
+                    // rather than discarding what the user already said.
+                    sendMessageRef.current?.();
+                    return;
+                }
+
+                setAiMessage("I didn't hear anything. Please try again.");
+                setStatus('idle');
             },
         });
     }, []);

@@ -165,7 +165,7 @@ export default function Timesheets() {
           <div className="relative px-4 pt-8 pb-6">
             <button
               onClick={() => navigate('/settings')}
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors -ml-2 px-2 py-3 -mt-3 mb-1 rounded-lg"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="text-sm font-medium">Back to Settings</span>
@@ -184,6 +184,7 @@ export default function Timesheets() {
             <div className="absolute top-8 right-4">
               <button
                 onClick={handleCreateTimesheet}
+                aria-label="Create timesheet"
                 className="p-2.5 rounded-full bg-primary shadow-premium hover:bg-primary/90 transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 <Plus className="w-6 h-6 text-primary-foreground" />
@@ -198,7 +199,7 @@ export default function Timesheets() {
             <div className="flex gap-2">
               {canManageTeam && teamMembers.length > 1 && (
                 <Select value={filterMember} onValueChange={setFilterMember}>
-                  <SelectTrigger className="flex-1 rounded-xl h-10">
+                  <SelectTrigger className="flex-1 rounded-xl h-11">
                     <SelectValue placeholder="All Members" />
                   </SelectTrigger>
                   <SelectContent>
@@ -212,7 +213,7 @@ export default function Timesheets() {
                 </Select>
               )}
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="flex-1 rounded-xl h-10">
+                <SelectTrigger className="flex-1 rounded-xl h-11">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>

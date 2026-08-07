@@ -79,6 +79,7 @@ export default function Jobs() {
             <div className="absolute top-8 right-4 flex items-center gap-3">
               <button
                 onClick={() => navigate('/jobs/new')}
+                aria-label="Create job"
                 className="p-2.5 rounded-full bg-primary shadow-premium hover:bg-primary/90 transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 <Plus className="w-6 h-6 text-primary-foreground" />
@@ -102,7 +103,7 @@ export default function Jobs() {
             <button
               onClick={() => setViewMode('list')}
               className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all duration-300",
+                "flex-1 flex items-center justify-center gap-2 min-h-[44px] rounded-xl font-medium text-sm transition-all duration-300",
                 viewMode === 'list'
                   ? "bg-primary text-primary-foreground shadow-md"
                   : "text-muted-foreground hover:text-foreground hover:bg-primary/5"
@@ -114,7 +115,7 @@ export default function Jobs() {
             <button
               onClick={() => setViewMode('calendar')}
               className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium text-sm transition-all duration-300",
+                "flex-1 flex items-center justify-center gap-2 min-h-[44px] rounded-xl font-medium text-sm transition-all duration-300",
                 viewMode === 'calendar'
                   ? "bg-primary text-primary-foreground shadow-md"
                   : "text-muted-foreground hover:text-foreground hover:bg-primary/5"
@@ -128,7 +129,7 @@ export default function Jobs() {
           {/* Member Filter */}
           {teamMembers.length > 1 && (
             <Select value={filterMember || 'all'} onValueChange={(v) => setFilterMember(v === 'all' ? '' : v)}>
-              <SelectTrigger className="h-10 rounded-xl bg-card/80 border-border/50">
+              <SelectTrigger className="h-11 rounded-xl bg-card/80 border-border/50">
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-primary" />
                   <SelectValue placeholder="All team members" />

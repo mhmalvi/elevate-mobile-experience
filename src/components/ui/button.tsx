@@ -20,7 +20,12 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-11 px-5 py-2.5",
-        sm: "h-9 rounded-lg px-4",
+        // `sm` was h-9 (36px), under both the 44pt (Apple) and 48dp (Material)
+        // touch minimums. It is used for most of the app's action buttons —
+        // Create Quote, Create Job, Add Item, Save — so the shortfall was
+        // everywhere at once. It stays visually smaller than `default` through
+        // the tighter padding and radius, but no longer below the target floor.
+        sm: "h-11 rounded-lg px-4",
         lg: "h-12 rounded-xl px-8 text-base",
         icon: "h-11 w-11",
       },

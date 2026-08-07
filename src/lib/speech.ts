@@ -24,6 +24,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import { SpeechRecognition as NativeSpeech } from '@capacitor-community/speech-recognition';
+import { TextToSpeech as NativeTts } from '@capacitor-community/text-to-speech';
 
 declare global {
   interface Window {
@@ -40,6 +41,17 @@ export type SpeechErrorCode =
   | 'network'
   | 'unknown';
 
+/**
+ * Why a session ended.
+ *
+ * `requested` — the caller invoked `stop()`.
+ * `engine`    — the recogniser ended on its own (finished, failed, or went away).
+ *
+ * The UI needs to tell these apart: an engine-side end while nothing was heard
+ * deserves an explanation to the user, whereas the user tapping Cancel does not.
+ */
+export type SpeechEndReason = 'requested' | 'engine';
+
 export interface SpeechCallbacks {
   /** Fires with the in-progress utterance (not yet finalised). */
   onPartial?: (text: string) => void;
@@ -48,7 +60,7 @@ export interface SpeechCallbacks {
   /** Fires on a real error. `no-speech` and `aborted` are reported but are not fatal. */
   onError?: (code: SpeechErrorCode, raw?: unknown) => void;
   /** Fires once when the session has fully ended and no more callbacks will run. */
-  onEnd?: () => void;
+  onEnd?: (reason: SpeechEndReason) => void;
 }
 
 export interface SpeechSession {
@@ -135,13 +147,13 @@ export async function startListening(
 
   if (!(await isSpeechAvailable())) {
     opts.onError?.('not-supported');
-    opts.onEnd?.();
+    opts.onEnd?.('engine');
     return { stop: () => { } };
   }
 
   if (!(await ensureSpeechPermission())) {
     opts.onError?.('permission-denied');
-    opts.onEnd?.();
+    opts.onEnd?.('engine');
     return { stop: () => { } };
   }
 
@@ -152,67 +164,145 @@ export async function startListening(
 
 // ---------------------------------------------------------------- native path
 
+/**
+ * How long we wait for ANY sign of life from the native recogniser before
+ * treating the utterance as dead.
+ *
+ * The plugin gives us no error channel in `partialResults` mode. It calls
+ * `call.resolve()` the instant it hands the intent to the OS, so when the
+ * recogniser later fails, `onError` rejects an already-settled call and the
+ * bridge drops the rejection — and that path emits no `listeningState` event
+ * either. Verified on device: the recogniser opened the mic, closed it 5.3s
+ * later with NO_SPEECH_DETECTED followed by a client-side error, and the
+ * WebView was told nothing at all. Without a watchdog the UI counts
+ * "Listening" over a microphone that is already shut, for the full two-minute
+ * cap, and never restarts or reports anything.
+ *
+ * Android's own silence timeout is ~5s, so a working recogniser always reports
+ * something well inside this window.
+ */
+const NATIVE_ACTIVITY_TIMEOUT_MS = 12_000;
+
+/**
+ * Consecutive dead cycles before we give up rather than restart again.
+ * One dead cycle is ordinary (a user who has not spoken yet); a second means
+ * the recogniser is not coming back and the user needs to be told.
+ */
+const NATIVE_SILENT_CYCLE_LIMIT = 2;
+
 async function startNative(lang: string, opts: SpeechCallbacks): Promise<SpeechSession> {
   let stopped = false;
   let ended = false;
   let lastPartial = '';
+  let watchdog: ReturnType<typeof setTimeout> | null = null;
+  let silentCycles = 0;
 
-  const finish = () => {
+  const clearWatchdog = () => {
+    if (watchdog === null) return;
+    clearTimeout(watchdog);
+    watchdog = null;
+  };
+
+  const finish = (reason: SpeechEndReason) => {
     if (ended) return;
     ended = true;
+    clearWatchdog();
     void NativeSpeech.removeAllListeners();
-    opts.onEnd?.();
+    opts.onEnd?.(reason);
   };
+
+  const armWatchdog = () => {
+    clearWatchdog();
+    watchdog = setTimeout(onDeadCycle, NATIVE_ACTIVITY_TIMEOUT_MS);
+  };
+
+  /** Hand up whatever the recogniser gave us before the utterance closed. */
+  const commitPartial = () => {
+    if (!lastPartial.trim()) return;
+    opts.onFinal?.(lastPartial.trim());
+    lastPartial = '';
+  };
+
+  const beginUtterance = () => {
+    armWatchdog();
+    return NativeSpeech.start({
+      language: lang,
+      partialResults: true,
+      popup: false,
+    });
+  };
+
+  /** The recogniser said nothing for a whole window — assume it is gone. */
+  function onDeadCycle() {
+    watchdog = null;
+    if (stopped || ended) return;
+
+    silentCycles += 1;
+    commitPartial();
+
+    if (silentCycles >= NATIVE_SILENT_CYCLE_LIMIT) {
+      // Report as no-speech rather than a hard error: silence is by far the
+      // likeliest cause, and it is the truthful description of what we saw.
+      opts.onError?.('no-speech');
+      finish('engine');
+      return;
+    }
+
+    void beginUtterance().catch(() => finish('engine'));
+  }
 
   await NativeSpeech.removeAllListeners();
 
   await NativeSpeech.addListener('partialResults', (data) => {
     const text = data?.matches?.[0] ?? '';
     if (!text) return;
+    // Real audio is coming through: the session is healthy, so reset both the
+    // watchdog and the dead-cycle tally.
+    silentCycles = 0;
+    armWatchdog();
     lastPartial = text;
     opts.onPartial?.(text);
   });
 
   await NativeSpeech.addListener('listeningState', (data) => {
-    if (data.status !== 'stopped') return;
-
-    // The native recogniser ended this utterance. Commit whatever it had.
-    if (lastPartial.trim()) {
-      opts.onFinal?.(lastPartial.trim());
-      lastPartial = '';
+    if (data.status !== 'stopped') {
+      // 'started' — the recogniser heard speech begin. Still alive.
+      silentCycles = 0;
+      armWatchdog();
+      return;
     }
 
+    // The native recogniser ended this utterance. Commit whatever it had.
+    commitPartial();
+
     if (stopped) {
-      finish();
+      finish('requested');
       return;
     }
 
     // Emulate continuous listening: the caller has not asked us to stop, so
     // begin another utterance. Guarded by `stopped` so stop() always wins.
-    void NativeSpeech.start({
-      language: lang,
-      partialResults: true,
-      popup: false,
-    }).catch(() => finish());
+    void beginUtterance().catch(() => finish('engine'));
   });
 
   try {
-    await NativeSpeech.start({
-      language: lang,
-      partialResults: true,
-      popup: false,
-    });
+    await beginUtterance();
   } catch (err) {
     opts.onError?.('unknown', err);
-    finish();
+    finish('engine');
   }
 
   return {
     stop: () => {
       stopped = true;
-      NativeSpeech.stop()
-        .catch(() => { /* already stopped */ })
-        .finally(() => finish());
+      clearWatchdog();
+      // The plugin's stop() never settles: SpeechRecognition.java posts the
+      // work to the WebView thread and returns without ever calling resolve()
+      // or reject() on any path. Hanging finish() off that promise — as this
+      // did — meant onEnd was silently lost on every explicit stop, so the
+      // caller's cleanup never ran. Fire and forget, and end the session here.
+      void NativeSpeech.stop().catch(() => { /* already stopped */ });
+      finish('requested');
     },
   };
 }
@@ -228,10 +318,11 @@ function startWeb(lang: string, opts: SpeechCallbacks): SpeechSession {
   recognition.maxAlternatives = 1;
 
   let ended = false;
-  const finish = () => {
+  let stopRequested = false;
+  const finish = (reason: SpeechEndReason) => {
     if (ended) return;
     ended = true;
-    opts.onEnd?.();
+    opts.onEnd?.(reason);
   };
 
   // Track how many results we have already finalised so a `continuous` session
@@ -258,21 +349,22 @@ function startWeb(lang: string, opts: SpeechCallbacks): SpeechSession {
     opts.onError?.(mapWebError(event?.error), event);
   };
 
-  recognition.onend = () => finish();
+  recognition.onend = () => finish(stopRequested ? 'requested' : 'engine');
 
   try {
     recognition.start();
   } catch (err) {
     opts.onError?.('unknown', err);
-    finish();
+    finish('engine');
   }
 
   return {
     stop: () => {
+      stopRequested = true;
       try {
         recognition.stop();
       } catch {
-        finish();
+        finish('requested');
       }
     },
   };
@@ -281,7 +373,17 @@ function startWeb(lang: string, opts: SpeechCallbacks): SpeechSession {
 // ------------------------------------------------------------ text to speech
 
 /**
- * Speak a response. Picks a voice matching the user's locale rather than the
+ * Speak a response.
+ *
+ * Two engines, for the same reason as recognition:
+ * `window.speechSynthesis` is **undefined** in the Android System WebView.
+ * Verified on device (Android 16, WebView/Chrome 150): both `speechSynthesis`
+ * and `SpeechSynthesisUtterance` report `undefined`, so every spoken reply the
+ * assistant makes would have been silent in the Play Store build — it would
+ * have degraded to text-only without saying so.
+ *
+ * Native platforms therefore go through the Capacitor TTS plugin; the web keeps
+ * the Web Speech API. Picks a voice matching the user's locale rather than the
  * previous hardcoded list of macOS/iOS Australian and Irish voice names
  * (Karen, Moira, Tessa…), which existed on no Android device at all.
  */
@@ -289,12 +391,30 @@ export function speakText(
   text: string,
   opts: { lang?: string; onEnd?: () => void } = {},
 ): void {
+  const lang = resolveSpeechLocale(opts.lang);
+
+  if (isNative()) {
+    // The plugin resolves when playback finishes, so the promise IS the
+    // end-of-speech signal. Failures must still call onEnd or the caller's
+    // state machine stays stuck in 'speaking'.
+    NativeTts.speak({
+      text,
+      lang,
+      rate: 1.0,
+      pitch: 1.0,
+      volume: 1.0,
+      category: 'ambient',
+    })
+      .catch((e) => console.error('TTS: native speak failed', e))
+      .finally(() => opts.onEnd?.());
+    return;
+  }
+
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     opts.onEnd?.();
     return;
   }
 
-  const lang = resolveSpeechLocale(opts.lang);
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = lang;
   utterance.rate = 1.05;
@@ -329,6 +449,10 @@ function pickVoiceForLocale(lang: string): SpeechSynthesisVoice | null {
 }
 
 export function cancelSpeech(): void {
+  if (isNative()) {
+    void NativeTts.stop().catch(() => { /* nothing was playing */ });
+    return;
+  }
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }

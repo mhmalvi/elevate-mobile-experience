@@ -254,7 +254,7 @@ export default function SubscriptionSettings() {
           <div className="relative px-4 pt-8 pb-6">
             <button
               onClick={() => navigate('/settings')}
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors -ml-2 px-2 py-3 -mt-3 mb-1 rounded-lg"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="text-sm font-medium">Back to Settings</span>
@@ -375,7 +375,7 @@ export default function SubscriptionSettings() {
               <div className="relative flex items-center bg-muted/80 rounded-2xl p-1 border border-border/50">
                 <button
                   onClick={() => setBillingPeriod('monthly')}
-                  className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                  className={`relative z-10 px-5 min-h-[44px] rounded-xl text-sm font-semibold transition-all duration-300 ${
                     billingPeriod === 'monthly'
                       ? 'bg-foreground text-background shadow-lg'
                       : 'text-muted-foreground hover:text-foreground'
@@ -385,7 +385,7 @@ export default function SubscriptionSettings() {
                 </button>
                 <button
                   onClick={() => setBillingPeriod('annual')}
-                  className={`relative z-10 px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-300 flex items-center gap-1.5 ${
+                  className={`relative z-10 px-5 min-h-[44px] rounded-xl text-sm font-semibold transition-all duration-300 flex items-center justify-center gap-1.5 ${
                     billingPeriod === 'annual'
                       ? 'bg-foreground text-background shadow-lg'
                       : 'text-muted-foreground hover:text-foreground'

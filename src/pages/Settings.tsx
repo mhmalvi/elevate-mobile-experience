@@ -143,6 +143,7 @@ export default function Settings() {
                   </div>
                 </div>
                 <Switch
+                  aria-label="Dark mode"
                   checked={theme === 'dark'}
                   onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
                   className="data-[state=checked]:bg-primary"

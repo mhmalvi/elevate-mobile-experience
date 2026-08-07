@@ -338,7 +338,7 @@ export default function TimesheetDetail() {
           <div className="relative px-4 pt-8 pb-6">
             <button
               onClick={() => navigate('/timesheets')}
-              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-4"
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors -ml-2 px-2 py-3 -mt-3 mb-1 rounded-lg"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="text-sm font-medium">Back to Timesheets</span>
@@ -575,7 +575,7 @@ export default function TimesheetDetail() {
             {isEditable && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="ghost" className="w-full rounded-xl h-10 text-destructive hover:text-destructive hover:bg-destructive/10">
+                  <Button variant="ghost" className="w-full rounded-xl h-11 text-destructive hover:text-destructive hover:bg-destructive/10">
                     <Trash2 className="w-4 h-4 mr-2" />
                     Delete Timesheet
                   </Button>
