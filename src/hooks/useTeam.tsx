@@ -128,7 +128,10 @@ export function TeamProvider({ children }: { children: ReactNode }) {
         if (membersError) {
           console.error('Error fetching team members:', membersError);
         } else {
-          setTeamMembers(members || []);
+          // team_members.role is a text column, so it arrives as `string` and
+          // has to be narrowed to TeamRole at this boundary — the same cast
+          // already applied to activeMembership.role above.
+          setTeamMembers((members || []) as TeamMember[]);
         }
       }
 

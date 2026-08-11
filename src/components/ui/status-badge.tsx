@@ -7,7 +7,18 @@ type StatusType =
   | 'submitted' | 'rejected';
 
 interface StatusBadgeProps {
-  status: StatusType;
+  /**
+   * Accepts any string, not just StatusType.
+   *
+   * The component already falls back to a neutral badge for unrecognised
+   * values, so the narrow type was claiming a strictness the implementation
+   * never had — while forcing every call site passing a DB column (which is
+   * `string | null` after the enum widens through PostgREST) into a cast.
+   *
+   * `StatusType | (string & {})` keeps editor autocomplete for the known
+   * statuses while still accepting arbitrary strings.
+   */
+  status: StatusType | (string & {}) | null | undefined;
   className?: string;
 }
 
@@ -117,8 +128,8 @@ const statusConfig: Record<StatusType, { label: string; className: string; dotCo
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusConfig[status] || {
-    label: status,
+  const config = statusConfig[status as StatusType] || {
+    label: status ?? '—',
     className: 'bg-muted text-muted-foreground border-muted-foreground/20',
     dotColor: 'bg-muted-foreground'
   };

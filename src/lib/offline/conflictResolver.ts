@@ -81,7 +81,14 @@ export function resolveConflict<T extends { updated_at: string }>(
  * Merge two data objects intelligently
  * Uses server data as base and applies non-conflicting local changes
  */
-function mergeData<T extends Record<string, any>>(localData: T, serverData: T): T {
+// The constraint has to name updated_at explicitly. A bare
+// `Record<string, any>` satisfies index access but not dot access on a generic,
+// so `localData.updated_at` below was an error even though every caller passes a
+// row that has the column.
+function mergeData<T extends Record<string, any> & { updated_at?: string | null }>(
+  localData: T,
+  serverData: T,
+): T {
   const merged = { ...serverData };
 
   // For each field in local data

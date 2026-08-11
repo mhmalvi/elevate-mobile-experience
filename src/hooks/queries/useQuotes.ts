@@ -1,7 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useTeam } from '@/hooks/useTeam';
+
+type QuoteStatus = Database['public']['Enums']['quote_status'];
 
 const PAGE_SIZE = 20;
 
@@ -90,7 +93,7 @@ export function useUpdateQuoteStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status }: { id: string; status: QuoteStatus }) => {
       const { error } = await supabase
         .from('quotes')
         .update({ status })

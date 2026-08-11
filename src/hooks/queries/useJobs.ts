@@ -1,7 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/hooks/useAuth';
 import { useTeam } from '@/hooks/useTeam';
+
+type JobStatus = Database['public']['Enums']['job_status'];
 
 const PAGE_SIZE = 20;
 
@@ -90,7 +93,7 @@ export function useUpdateJobStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status }: { id: string; status: JobStatus }) => {
       const { error } = await supabase
         .from('jobs')
         .update({ status })

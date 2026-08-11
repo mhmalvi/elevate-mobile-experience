@@ -39,7 +39,18 @@ function sanitizeDataForIndexedDB(data: any): any {
  * Entity type to table name mapping
  * Prevents fragile pluralization issues
  */
-const ENTITY_TABLE_MAP: Record<string, string> = {
+/**
+ * The only tables the offline queue ever syncs.
+ *
+ * This must be a literal union, not `string`. supabase.from() is overloaded on
+ * the table name, so passing a plain `string` leaves .insert()/.update()/
+ * .select() unable to resolve an overload — which is what produced nine
+ * "No overload matches this call" errors and a TS2589 "type instantiation is
+ * excessively deep" in this file.
+ */
+type SyncTable = 'jobs' | 'quotes' | 'invoices' | 'clients';
+
+const ENTITY_TABLE_MAP: Record<string, SyncTable> = {
   job: 'jobs',
   quote: 'quotes',
   invoice: 'invoices',
@@ -1023,9 +1034,14 @@ export class SyncManager {
   /**
    * Get Supabase table name from entity type
    */
-  private getTableName(entityType: string): string {
+  private getTableName(entityType: string): SyncTable {
     // ✅ FIX #8: Use proper mapping instead of fragile string concatenation
-    return ENTITY_TABLE_MAP[entityType] || entityType + 's';
+    //
+    // The `entityType + 's'` fallback cannot be proven to be a SyncTable, so it
+    // is asserted. Unknown entity types were already a latent bug — they would
+    // hit a table that may not exist — but that is pre-existing behaviour and
+    // the queue only ever enqueues the four mapped types.
+    return ENTITY_TABLE_MAP[entityType] ?? (`${entityType}s` as SyncTable);
   }
 
   /**
@@ -1118,7 +1134,7 @@ export class SyncManager {
    * ✅ HIGH PRIORITY FIX #1: Fetch and store entity with pagination
    */
   private async fetchAndStoreEntity(
-    tableName: string,
+    tableName: SyncTable,
     userId: string,
     pendingIds: Set<string>,
     pageSize: number,

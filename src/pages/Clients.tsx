@@ -48,11 +48,17 @@ export default function Clients() {
   useEffect(() => {
     if (filteredClients.length === 0 && search.trim() && clients.length > 0 && isOnline && user?.id) {
       setFuzzyLoading(true);
-      supabase.rpc('search_clients_fuzzy', {
-        p_user_id: user.id,
-        p_search_term: search,
-        p_limit: 5
-      }).then(({ data }) => {
+      // Supabase's builder is a thenable, not a real Promise — it has .then but
+      // no .catch, so chaining .catch directly was a type error and would have
+      // thrown at runtime. Promise.resolve adopts the thenable and gives back a
+      // genuine Promise, so rejections are actually handled.
+      Promise.resolve(
+        supabase.rpc('search_clients_fuzzy', {
+          p_user_id: user.id,
+          p_search_term: search,
+          p_limit: 5
+        })
+      ).then(({ data }) => {
         setFuzzyResults(data || []);
         setFuzzyLoading(false);
       }).catch(() => {

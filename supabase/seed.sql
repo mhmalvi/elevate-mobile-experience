@@ -1,597 +1,153 @@
--- TradieMate Seed Data for Testing
--- This script creates demo data for testing all features
+-- ============================================================================
+-- TradieMate demo seed
+--
+-- Rewritten 2026-08-11. The previous version had drifted badly from the schema
+-- and failed on its first statement:
+--
+--   * profiles.abn was renamed business_number during the internationalisation
+--     work; city / state / postcode / primary_color / secondary_color /
+--     subscription_status no longer exist on profiles at all
+--   * it INSERTed into public.payments, which does not exist
+--   * it INSERTed a profiles row for a user_id with no matching auth.users row,
+--     so even with correct columns the FK would have failed
+--
+-- Verified against the live schema (19 public tables, PostgreSQL 17.6) by
+-- executing inside a transaction and rolling back.
+--
+-- Idempotent: safe to run repeatedly. Re-running refreshes the demo rows rather
+-- than duplicating them.
+--
+-- Run via:  npx supabase db reset --linked
+-- ============================================================================
 
--- First, let's create a test user profile
--- NOTE: You need to create this user in Supabase Auth first
--- For now, we'll use a placeholder user_id that you should replace
-
--- Insert a test profile (replace with your actual user_id from Supabase Auth)
-INSERT INTO profiles (
-  user_id,
-  email,
-  business_name,
-  abn,
-  phone,
-  address,
-  city,
-  state,
-  postcode,
-  logo_url,
-  primary_color,
-  secondary_color,
-  subscription_tier,
-  subscription_status,
-  created_at
-) VALUES (
-  '00000000-0000-0000-0000-000000000001', -- Replace with real user_id
-  'demo@tradiemate.com',
-  'Demo Plumbing Services',
-  '12345678901',
-  '+61412345678',
-  '123 Demo Street',
-  'Sydney',
-  'NSW',
-  '2000',
-  NULL,
-  '#2563eb', -- Blue
-  '#3b82f6', -- Light Blue
-  'pro',
-  'active',
-  NOW()
-) ON CONFLICT (user_id) DO UPDATE SET
-  business_name = EXCLUDED.business_name,
-  abn = EXCLUDED.abn,
-  phone = EXCLUDED.phone,
-  address = EXCLUDED.address,
-  city = EXCLUDED.city,
-  state = EXCLUDED.state,
-  postcode = EXCLUDED.postcode,
-  subscription_tier = EXCLUDED.subscription_tier,
-  subscription_status = EXCLUDED.subscription_status;
-
--- Insert test clients
-INSERT INTO clients (
-  id,
-  user_id,
-  name,
-  email,
-  phone,
-  address,
-  city,
-  state,
-  postcode,
-  notes,
-  created_at
-) VALUES
-(
-  'c0000001-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'Acme Corporation',
-  'john@acme.com',
-  '+61298765432',
-  '456 Business Ave',
-  'Sydney',
-  'NSW',
-  '2000',
-  'Regular client - prefers email communication',
-  NOW() - INTERVAL '30 days'
-),
-(
-  'c0000002-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'Smith Residence',
-  'sarah.smith@gmail.com',
-  '+61411223344',
-  '789 Residential Rd',
-  'Melbourne',
-  'VIC',
-  '3000',
-  'Repeat customer - bathroom renovation project',
-  NOW() - INTERVAL '15 days'
-),
-(
-  'c0000003-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'Tech Startup Pty Ltd',
-  'admin@techstartup.com.au',
-  '+61287654321',
-  '321 Innovation Hub',
-  'Brisbane',
-  'QLD',
-  '4000',
-  'New office fit-out - fast payment',
-  NOW() - INTERVAL '7 days'
-)
-ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
-  email = EXCLUDED.email,
-  phone = EXCLUDED.phone;
-
--- Insert test quotes
-INSERT INTO quotes (
-  id,
-  user_id,
-  client_id,
-  quote_number,
-  status,
-  issue_date,
-  valid_until,
-  subtotal,
-  gst,
-  total,
-  notes,
-  terms,
-  created_at
-) VALUES
-(
-  'q0000001-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'c0000001-0000-0000-0000-000000000001',
-  'QT-2025-001',
-  'sent',
-  CURRENT_DATE - INTERVAL '5 days',
-  CURRENT_DATE + INTERVAL '25 days',
-  2500.00,
-  250.00,
-  2750.00,
-  'Kitchen plumbing installation - includes all materials and labor',
-  'Quote valid for 30 days. 50% deposit required to commence work.',
-  NOW() - INTERVAL '5 days'
-),
-(
-  'q0000002-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'c0000002-0000-0000-0000-000000000001',
-  'QT-2025-002',
-  'accepted',
-  CURRENT_DATE - INTERVAL '10 days',
-  CURRENT_DATE + INTERVAL '20 days',
-  4800.00,
-  480.00,
-  5280.00,
-  'Complete bathroom renovation including fixtures and tiling',
-  'Payment due within 7 days of completion.',
-  NOW() - INTERVAL '10 days'
-)
-ON CONFLICT (id) DO UPDATE SET
-  status = EXCLUDED.status,
-  subtotal = EXCLUDED.subtotal,
-  gst = EXCLUDED.gst,
-  total = EXCLUDED.total;
-
--- Insert quote line items
-INSERT INTO quote_line_items (
-  id,
-  quote_id,
-  description,
-  quantity,
-  unit_price,
-  total,
-  item_order
-) VALUES
--- Quote 1 items
-(
-  'ql000001-0000-0000-0000-000000000001',
-  'q0000001-0000-0000-0000-000000000001',
-  'Kitchen sink installation (premium stainless steel)',
-  1,
-  800.00,
-  800.00,
-  1
-),
-(
-  'ql000002-0000-0000-0000-000000000001',
-  'q0000001-0000-0000-0000-000000000001',
-  'Water supply pipe replacement (copper pipes, 15m)',
-  15,
-  45.00,
-  675.00,
-  2
-),
-(
-  'ql000003-0000-0000-0000-000000000001',
-  'q0000001-0000-0000-0000-000000000001',
-  'Dishwasher connection and installation',
-  1,
-  350.00,
-  350.00,
-  3
-),
-(
-  'ql000004-0000-0000-0000-000000000001',
-  'q0000001-0000-0000-0000-000000000001',
-  'Labor and materials',
-  1,
-  675.00,
-  675.00,
-  4
-),
--- Quote 2 items
-(
-  'ql000005-0000-0000-0000-000000000001',
-  'q0000002-0000-0000-0000-000000000001',
-  'Toilet suite removal and installation (Caroma dual flush)',
-  1,
-  950.00,
-  950.00,
-  1
-),
-(
-  'ql000006-0000-0000-0000-000000000001',
-  'q0000002-0000-0000-0000-000000000001',
-  'Shower screen installation (frameless glass 1800x900mm)',
-  1,
-  1200.00,
-  1200.00,
-  2
-),
-(
-  'ql000007-0000-0000-0000-000000000001',
-  'q0000002-0000-0000-0000-000000000001',
-  'Vanity unit with basin (1200mm)',
-  1,
-  850.00,
-  850.00,
-  3
-),
-(
-  'ql000008-0000-0000-0000-000000000001',
-  'q0000002-0000-0000-0000-000000000001',
-  'Tiling work (walls and floor, 10sqm)',
-  10,
-  120.00,
-  1200.00,
-  4
-),
-(
-  'ql000009-0000-0000-0000-000000000001',
-  'q0000002-0000-0000-0000-000000000001',
-  'Plumbing and waterproofing',
-  1,
-  600.00,
-  600.00,
-  5
-)
-ON CONFLICT (id) DO NOTHING;
-
--- Insert test invoices
-INSERT INTO invoices (
-  id,
-  user_id,
-  client_id,
-  invoice_number,
-  status,
-  issue_date,
-  due_date,
-  subtotal,
-  gst,
-  total,
-  amount_paid,
-  notes,
-  terms,
-  is_recurring,
-  created_at
-) VALUES
-(
-  'i0000001-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'c0000001-0000-0000-0000-000000000001',
-  'INV-2025-001',
-  'sent',
-  CURRENT_DATE - INTERVAL '7 days',
-  CURRENT_DATE + INTERVAL '7 days',
-  1500.00,
-  150.00,
-  1650.00,
-  0.00,
-  'Emergency leak repair - completed 7 days ago',
-  'Payment due within 14 days. Late fees apply after due date.',
-  false,
-  NOW() - INTERVAL '7 days'
-),
-(
-  'i0000002-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'c0000002-0000-0000-0000-000000000001',
-  'INV-2025-002',
-  'paid',
-  CURRENT_DATE - INTERVAL '30 days',
-  CURRENT_DATE - INTERVAL '16 days',
-  3200.00,
-  320.00,
-  3520.00,
-  3520.00,
-  'Hot water system replacement - paid in full',
-  'Thank you for your business!',
-  false,
-  NOW() - INTERVAL '30 days'
-),
-(
-  'i0000003-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'c0000003-0000-0000-0000-000000000001',
-  'INV-2025-003',
-  'overdue',
-  CURRENT_DATE - INTERVAL '25 days',
-  CURRENT_DATE - INTERVAL '11 days',
-  5600.00,
-  560.00,
-  6160.00,
-  0.00,
-  'Commercial bathroom installation - OVERDUE',
-  'Payment overdue. Please contact us immediately.',
-  false,
-  NOW() - INTERVAL '25 days'
-),
-(
-  'i0000004-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'c0000001-0000-0000-0000-000000000001',
-  'INV-2025-004',
-  'partially_paid',
-  CURRENT_DATE - INTERVAL '10 days',
-  CURRENT_DATE + INTERVAL '4 days',
-  4000.00,
-  400.00,
-  4400.00,
-  2200.00,
-  'Office plumbing upgrade - 50% deposit received',
-  'Remaining balance due on completion.',
-  false,
-  NOW() - INTERVAL '10 days'
-)
-ON CONFLICT (id) DO UPDATE SET
-  status = EXCLUDED.status,
-  amount_paid = EXCLUDED.amount_paid;
-
--- Insert invoice line items
-INSERT INTO invoice_line_items (
-  id,
-  invoice_id,
-  description,
-  quantity,
-  unit_price,
-  total,
-  item_order
-) VALUES
--- Invoice 1 items
-(
-  'il000001-0000-0000-0000-000000000001',
-  'i0000001-0000-0000-0000-000000000001',
-  'Emergency callout fee (after hours)',
-  1,
-  250.00,
-  250.00,
-  1
-),
-(
-  'il000002-0000-0000-0000-000000000001',
-  'i0000001-0000-0000-0000-000000000001',
-  'Pipe repair and replacement',
-  1,
-  800.00,
-  800.00,
-  2
-),
-(
-  'il000003-0000-0000-0000-000000000001',
-  'i0000001-0000-0000-0000-000000000001',
-  'Materials and fittings',
-  1,
-  450.00,
-  450.00,
-  3
-),
--- Invoice 2 items
-(
-  'il000004-0000-0000-0000-000000000001',
-  'i0000002-0000-0000-0000-000000000001',
-  'Rheem hot water system (315L)',
-  1,
-  2200.00,
-  2200.00,
-  1
-),
-(
-  'il000005-0000-0000-0000-000000000001',
-  'i0000002-0000-0000-0000-000000000001',
-  'Installation and old unit removal',
-  1,
-  800.00,
-  800.00,
-  2
-),
-(
-  'il000006-0000-0000-0000-000000000001',
-  'i0000002-0000-0000-0000-000000000001',
-  'Tempering valve and compliance',
-  1,
-  200.00,
-  200.00,
-  3
-),
--- Invoice 3 items
-(
-  'il000007-0000-0000-0000-000000000001',
-  'i0000003-0000-0000-0000-000000000001',
-  'Commercial toilet suites (x3)',
-  3,
-  650.00,
-  1950.00,
-  1
-),
-(
-  'il000008-0000-0000-0000-000000000001',
-  'i0000003-0000-0000-0000-000000000001',
-  'Hand basins and taps (x3)',
-  3,
-  380.00,
-  1140.00,
-  2
-),
-(
-  'il000009-0000-0000-0000-000000000001',
-  'i0000003-0000-0000-0000-000000000001',
-  'Accessibility compliance upgrades',
-  1,
-  1200.00,
-  1200.00,
-  3
-),
-(
-  'il000010-0000-0000-0000-000000000001',
-  'i0000003-0000-0000-0000-000000000001',
-  'Labor and installation (2 days)',
-  2,
-  655.00,
-  1310.00,
-  4
-),
--- Invoice 4 items
-(
-  'il000011-0000-0000-0000-000000000001',
-  'i0000004-0000-0000-0000-000000000001',
-  'Water filtration system installation',
-  1,
-  1800.00,
-  1800.00,
-  1
-),
-(
-  'il000012-0000-0000-0000-000000000001',
-  'i0000004-0000-0000-0000-000000000001',
-  'Kitchen plumbing upgrades',
-  1,
-  1200.00,
-  1200.00,
-  2
-),
-(
-  'il000013-0000-0000-0000-000000000001',
-  'i0000004-0000-0000-0000-000000000001',
-  'Bathroom fixture replacements',
-  1,
-  1000.00,
-  1000.00,
-  3
-)
-ON CONFLICT (id) DO NOTHING;
-
--- Insert payment records
-INSERT INTO payments (
-  id,
-  invoice_id,
-  amount,
-  payment_date,
-  payment_method,
-  transaction_id,
-  notes,
-  created_at
-) VALUES
-(
-  'p0000001-0000-0000-0000-000000000001',
-  'i0000002-0000-0000-0000-000000000001',
-  3520.00,
-  CURRENT_DATE - INTERVAL '20 days',
-  'bank_transfer',
-  'TXN-20250110-001',
-  'Full payment received via bank transfer',
-  NOW() - INTERVAL '20 days'
-),
-(
-  'p0000002-0000-0000-0000-000000000001',
-  'i0000004-0000-0000-0000-000000000001',
-  2200.00,
-  CURRENT_DATE - INTERVAL '9 days',
-  'credit_card',
-  'STRIPE-ch_3ABC123',
-  '50% deposit - Stripe payment',
-  NOW() - INTERVAL '9 days'
-)
-ON CONFLICT (id) DO NOTHING;
-
--- Insert test jobs
-INSERT INTO jobs (
-  id,
-  user_id,
-  client_id,
-  title,
-  description,
-  status,
-  priority,
-  scheduled_date,
-  scheduled_time,
-  location,
-  estimated_duration,
-  notes,
-  created_at
-) VALUES
-(
-  'j0000001-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'c0000001-0000-0000-0000-000000000001',
-  'Kitchen Renovation - Plumbing Work',
-  'Complete kitchen plumbing installation including sink, dishwasher, and water filtration system',
-  'in_progress',
-  'high',
-  CURRENT_DATE + INTERVAL '2 days',
-  '09:00',
-  '456 Business Ave, Sydney NSW 2000',
-  4,
-  'Client requested early start. Bring ladder and extra fittings.',
-  NOW() - INTERVAL '3 days'
-),
-(
-  'j0000002-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'c0000002-0000-0000-0000-000000000001',
-  'Bathroom Inspection',
-  'Pre-renovation inspection and assessment',
-  'completed',
-  'medium',
-  CURRENT_DATE - INTERVAL '5 days',
-  '14:00',
-  '789 Residential Rd, Melbourne VIC 3000',
-  1,
-  'Inspection completed. Quote sent.',
-  NOW() - INTERVAL '8 days'
-),
-(
-  'j0000003-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000001',
-  'c0000003-0000-0000-0000-000000000001',
-  'Emergency Leak Repair',
-  'Urgent leak in main water line - immediate response required',
-  'scheduled',
-  'urgent',
-  CURRENT_DATE + INTERVAL '1 day',
-  '08:00',
-  '321 Innovation Hub, Brisbane QLD 4000',
-  2,
-  'Emergency callout - client notified of after-hours rates',
-  NOW() - INTERVAL '1 day'
-)
-ON CONFLICT (id) DO UPDATE SET
-  status = EXCLUDED.status;
-
--- Update usage tracking for the demo profile
-UPDATE profiles
-SET
-  usage_count = 45,
-  usage_reset_date = DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
-WHERE user_id = '00000000-0000-0000-0000-000000000001';
-
--- Success message
 DO $$
+DECLARE
+  demo_user_id  UUID := '00000000-0000-0000-0000-000000000001';
+  demo_team_id  UUID;
+  client_a      UUID := 'c0000001-0000-0000-0000-000000000001';
+  client_b      UUID := 'c0000002-0000-0000-0000-000000000001';
+  client_c      UUID := 'c0000003-0000-0000-0000-000000000001';
+  quote_a       UUID := 'a0000001-0000-0000-0000-000000000001';
+  invoice_a     UUID := 'b0000001-0000-0000-0000-000000000001';
+  job_a         UUID := 'd0000001-0000-0000-0000-000000000001';
 BEGIN
-  RAISE NOTICE 'Seed data inserted successfully!';
-  RAISE NOTICE 'Created:';
-  RAISE NOTICE '  - 1 demo profile (Demo Plumbing Services)';
-  RAISE NOTICE '  - 3 clients (Acme Corp, Smith Residence, Tech Startup)';
-  RAISE NOTICE '  - 2 quotes (1 sent, 1 accepted)';
-  RAISE NOTICE '  - 4 invoices (1 sent, 1 paid, 1 overdue, 1 partially paid)';
-  RAISE NOTICE '  - 3 jobs (1 in progress, 1 completed, 1 scheduled)';
-  RAISE NOTICE '  - 2 payment records';
-  RAISE NOTICE '';
-  RAISE NOTICE 'IMPORTANT: Replace user_id 00000000-0000-0000-0000-000000000001 with your actual auth user ID!';
+
+  -- --------------------------------------------------------------------------
+  -- 1. Auth user
+  --
+  -- handle_new_user() fires on this insert and creates teams -> profiles ->
+  -- team_members in that order. Do not insert those three directly: the trigger
+  -- owns them, and duplicating its work is what made the old seed unrunnable.
+  -- --------------------------------------------------------------------------
+  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = demo_user_id) THEN
+    INSERT INTO auth.users (
+      instance_id, id, aud, role, email,
+      encrypted_password, email_confirmed_at,
+      created_at, updated_at,
+      raw_app_meta_data, raw_user_meta_data,
+      confirmation_token, recovery_token, email_change_token_new, email_change
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000000',
+      demo_user_id,
+      'authenticated', 'authenticated',
+      'demo@example.test',
+      extensions.crypt('demo-seed-only', extensions.gen_salt('bf')),
+      NOW(), NOW(), NOW(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"business_name":"Northside Plumbing"}'::jsonb,
+      '', '', '', ''
+    );
+  END IF;
+
+  SELECT team_id INTO demo_team_id FROM public.profiles WHERE user_id = demo_user_id;
+
+  -- --------------------------------------------------------------------------
+  -- 2. Profile
+  --
+  -- The trigger creates a bare profile (user_id, email, team_id). Fill in the
+  -- business detail here. Locale columns are set explicitly rather than left to
+  -- defaults so the seed exercises the internationalisation path.
+  -- --------------------------------------------------------------------------
+  UPDATE public.profiles SET
+    business_name          = 'Northside Plumbing',
+    trade_type             = 'plumber',
+    business_number        = '12 345 678 901',
+    license_number         = 'PL-48812',
+    phone                  = '+61 412 345 678',
+    address                = '123 Example Street, Sydney NSW 2000',
+    tax_registered         = TRUE,
+    default_hourly_rate    = 110.00,
+    payment_terms          = 14,
+    subscription_tier      = 'pro',
+    onboarding_completed   = TRUE,
+    country_code           = 'AU',
+    currency_code          = 'AUD',
+    -- Fraction, not a percentage: profiles_tax_rate_range enforces 0 <= x <= 1,
+    -- so 10% GST is 0.10. Writing 10.00 here fails the constraint.
+    tax_rate               = 0.10,
+    tax_label              = 'GST',
+    tax_inclusive_pricing  = TRUE,
+    locale                 = 'en-AU'
+  WHERE user_id = demo_user_id;
+
+  -- --------------------------------------------------------------------------
+  -- 3. Clients
+  -- --------------------------------------------------------------------------
+  INSERT INTO public.clients (id, user_id, team_id, name, email, phone, address, suburb, state, postcode, notes)
+  VALUES
+    (client_a, demo_user_id, demo_team_id, 'Sarah Chen',      'sarah.chen@example.test',  '+61 400 111 222', '14 Harbour View Road', 'Mosman',     'NSW', '2088', 'Prefers SMS over calls.'),
+    (client_b, demo_user_id, demo_team_id, 'Mercer Property', 'accounts@example.test',    '+61 2 9000 1234', '88 Commerce Way',       'Parramatta', 'NSW', '2150', 'Commercial. Invoices go to accounts@.'),
+    (client_c, demo_user_id, demo_team_id, 'Tom Whitfield',   'tom.w@example.test',       '+61 400 333 444', '5 Orchard Lane',        'Newtown',    'NSW', '2042', NULL)
+  ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email;
+
+  -- --------------------------------------------------------------------------
+  -- 4. Quote (accepted) with line items
+  --
+  -- Totals are GST-inclusive to match tax_inclusive_pricing above:
+  -- subtotal 2400.00 + 240.00 GST = 2640.00
+  -- --------------------------------------------------------------------------
+  INSERT INTO public.quotes (id, user_id, team_id, client_id, quote_number, title, description, status,
+                             subtotal, tax_amount, total, terms, valid_until, accepted_at)
+  VALUES (quote_a, demo_user_id, demo_team_id, client_a, 'Q-1001',
+          'Bathroom re-pipe', 'Replace failing copper with PEX, reinstate fixtures.',
+          'accepted', 2400.00, 240.00, 2640.00,
+          'Valid 30 days. 50% deposit on acceptance.', NOW() + INTERVAL '30 days', NOW() - INTERVAL '6 days')
+  ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, total = EXCLUDED.total;
+
+  DELETE FROM public.quote_line_items WHERE quote_id = quote_a;
+  INSERT INTO public.quote_line_items (quote_id, description, item_type, quantity, unit, unit_price, total, sort_order)
+  VALUES
+    (quote_a, 'Labour — re-pipe bathroom',      'labour',   16, 'hour', 110.00, 1760.00, 1),
+    (quote_a, 'PEX pipe and fittings',          'material',  1, 'lot',  480.00,  480.00, 2),
+    (quote_a, 'Mixer tap replacement',          'material',  1, 'each', 160.00,  160.00, 3);
+
+  -- --------------------------------------------------------------------------
+  -- 5. Job in progress, converted from the quote
+  -- --------------------------------------------------------------------------
+  INSERT INTO public.jobs (id, user_id, team_id, client_id, quote_id, title, description, status,
+                           site_address, scheduled_date, actual_hours, material_costs)
+  VALUES (job_a, demo_user_id, demo_team_id, client_a, quote_a,
+          'Bathroom re-pipe', 'Converted from Q-1001.', 'in_progress',
+          '14 Harbour View Road, Mosman NSW 2088', CURRENT_DATE + 2, 6.5, 640.00)
+  ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status;
+
+  -- --------------------------------------------------------------------------
+  -- 6. Invoice (sent, partially paid) with line items
+  -- --------------------------------------------------------------------------
+  INSERT INTO public.invoices (id, user_id, team_id, client_id, invoice_number, title, description, status,
+                               subtotal, tax_amount, total, amount_paid, terms, due_date, sent_at)
+  VALUES (invoice_a, demo_user_id, demo_team_id, client_b, 'INV-2001',
+          'Quarterly maintenance', 'Scheduled maintenance across three sites.',
+          'partially_paid', 1800.00, 180.00, 1980.00, 990.00,
+          'Net 14.', CURRENT_DATE + 14, NOW() - INTERVAL '3 days')
+  ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, amount_paid = EXCLUDED.amount_paid;
+
+  DELETE FROM public.invoice_line_items WHERE invoice_id = invoice_a;
+  INSERT INTO public.invoice_line_items (invoice_id, description, item_type, quantity, unit, unit_price, total, sort_order)
+  VALUES
+    (invoice_a, 'Site inspection and service', 'labour',   12, 'hour', 125.00, 1500.00, 1),
+    (invoice_a, 'Replacement seals and valves','material',  1, 'lot',  300.00,  300.00, 2);
+
+  RAISE NOTICE 'Seed complete: user %, team %', demo_user_id, demo_team_id;
+
 END $$;

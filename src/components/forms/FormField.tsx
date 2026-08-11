@@ -30,7 +30,10 @@ export function FormField({
   children,
   helpText,
 }: FormFieldProps) {
-  const showError = touched && error;
+  // Boolean, not `touched && error` — that evaluates to `string | false |
+  // undefined`, and aria-invalid takes a boolean. It is only ever used as a
+  // condition here; the message itself renders `error` directly.
+  const showError = Boolean(touched && error);
 
   return (
     <div className="space-y-2">
@@ -96,7 +99,10 @@ export function ValidatedInput({
   disabled,
   autoComplete,
 }: ValidatedInputProps) {
-  const showError = touched && error;
+  // Boolean, not `touched && error` — that evaluates to `string | false |
+  // undefined`, and aria-invalid takes a boolean. It is only ever used as a
+  // condition here; the message itself renders `error` directly.
+  const showError = Boolean(touched && error);
 
   return (
     <FormField
@@ -158,7 +164,10 @@ export function ValidatedTextarea({
   rows = 3,
   disabled,
 }: ValidatedTextareaProps) {
-  const showError = touched && error;
+  // Boolean, not `touched && error` — that evaluates to `string | false |
+  // undefined`, and aria-invalid takes a boolean. It is only ever used as a
+  // condition here; the message itself renders `error` directly.
+  const showError = Boolean(touched && error);
 
   return (
     <FormField
