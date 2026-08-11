@@ -11,9 +11,23 @@ export interface TierLimits {
 }
 
 export const TIER_LIMITS: Record<SubscriptionTier, TierLimits> = {
+  // The free tier is deliberately asymmetric: generous on quotes, tight on
+  // invoices.
+  //
+  // Usage resets monthly (usage_tracking is keyed by month_year), so any limit
+  // here is a permanent allowance, not a one-off trial. At the previous
+  // 5 invoices/month a solo operator doing four or five jobs a month — exactly
+  // the person the $29 Solo tier is for — could run their whole business on
+  // free indefinitely and never meet a paywall.
+  //
+  // Quotes are how a tradie *wins* work, so being generous there is aligned
+  // with their success and costs us nothing. Invoices are how they *get paid* —
+  // that is where the product proves its value, and where the upgrade belongs.
+  // Two invoices is enough to send a real one to a real customer and see it
+  // work, and not enough to run on.
   free: {
     quotes: 5,
-    invoices: 5,
+    invoices: 2,
     jobs: 3,
     sms: 5,
     emails: 10,

@@ -10,11 +10,19 @@ describe('tierLimits', () => {
 
     it('free tier should have strict limits', () => {
       expect(TIER_LIMITS.free.quotes).toBe(5);
-      expect(TIER_LIMITS.free.invoices).toBe(5);
+      expect(TIER_LIMITS.free.invoices).toBe(2);
       expect(TIER_LIMITS.free.jobs).toBe(3);
       expect(TIER_LIMITS.free.sms).toBe(5);
       expect(TIER_LIMITS.free.emails).toBe(10);
       expect(TIER_LIMITS.free.clients).toBe(10);
+    });
+
+    it('free tier should allow more quotes than invoices', () => {
+      // The asymmetry is the point, not an accident. Quotes are how a tradie
+      // wins work; invoices are how they get paid, which is where the upgrade
+      // belongs. Usage resets monthly, so a generous invoice allowance is a
+      // permanent free plan rather than a taster.
+      expect(TIER_LIMITS.free.quotes).toBeGreaterThan(TIER_LIMITS.free.invoices);
     });
 
     it('solo tier should have unlimited core features', () => {

@@ -53,6 +53,24 @@ const PRODUCTS = [
 const ENTITLEMENT = { lookup_key: 'premium', display_name: 'Premium Access' };
 const OFFERING = { lookup_key: 'default', display_name: 'Default Offering' };
 
+/**
+ * 14-day free trial, monthly plans only.
+ *
+ * 14 rather than 7 because this product's payoff is getting *paid*, not
+ * creating an invoice. Default payment terms are 14 days, so a 7-day trial
+ * expires before the user ever sees an invoice settle — they would never
+ * experience the thing they are being asked to buy.
+ *
+ * Annual plans deliberately get no trial: those buyers are already converted,
+ * so a trial only delays revenue and widens the refund window.
+ *
+ * Scope is anySubscriptionInApp, not thisSubscription — otherwise someone who
+ * had already subscribed to Crew could claim a fresh free trial by starting on
+ * Solo. (Play rejects any other scope value outright.)
+ */
+const TRIAL_OFFER_ID = 'free-trial-14d';
+const TRIAL_DURATION = 'P14D';
+
 const COMMIT = process.argv.includes('--commit');
 const DRY = !COMMIT;
 
@@ -128,7 +146,64 @@ async function setupPlay(token) {
     if (r.ok) { log(`  + created ${p.id} (${p.period}, AUD ${p.price})`); created.push(p.id); }
     else { log(`  ! FAILED ${p.id}: ${r.status} ${r.json?.error?.message || r.text.slice(0, 160)}`); }
   }
+
+  // Play creates base plans in DRAFT. A draft base plan is not purchasable and,
+  // more confusingly, the whole RevenueCat offering stays invisible to clients
+  // until it is activated — with no error anywhere to explain why.
+  for (const p of PRODUCTS) {
+    if (!created.includes(p.id)) continue;
+    if (DRY) { log(`  ~ would activate ${p.id}/${p.plan}`); continue; }
+    const r = await api(
+      `${PLAY_API}/applications/${PACKAGE_NAME}/subscriptions/${p.id}/basePlans/${p.plan}:activate`,
+      { method: 'POST', headers: auth, body: {} },
+    );
+    if (!r.ok && r.status !== 400) log(`  ! activate ${p.id}: ${r.status} ${r.json?.error?.message?.slice(0, 100)}`);
+  }
+
+  await setupTrials(auth, created);
   return created;
+}
+
+/** 14-day free trial on the monthly plans. See TRIAL_OFFER_ID above for the reasoning. */
+async function setupTrials(auth, created) {
+  step('Google Play — free trials (monthly only)');
+
+  for (const p of PRODUCTS.filter((x) => x.plan === 'monthly')) {
+    if (!created.includes(p.id)) { log(`  - skip ${p.id} (not in Play)`); continue; }
+    const offersUrl =
+      `${PLAY_API}/applications/${PACKAGE_NAME}/subscriptions/${p.id}/basePlans/${p.plan}/offers`;
+
+    // 204 means no offers at all; anything else, check for ours.
+    const existing = await api(offersUrl, { headers: auth });
+    const have = (existing.json?.subscriptionOffers || []).some((o) => o.offerId === TRIAL_OFFER_ID);
+    if (have) { log(`  = ${p.id} already has ${TRIAL_OFFER_ID}`); continue; }
+    if (DRY) { log(`  + would add ${TRIAL_DURATION} trial to ${p.id}`); continue; }
+
+    const body = {
+      packageName: PACKAGE_NAME,
+      productId: p.id,
+      basePlanId: p.plan,
+      offerId: TRIAL_OFFER_ID,
+      phases: [{
+        duration: TRIAL_DURATION,
+        recurrenceCount: 1,
+        regionalConfigs: [{ regionCode: 'AU', free: {} }],
+      }],
+      targeting: { acquisitionRule: { scope: { anySubscriptionInApp: {} } } },
+      regionalConfigs: [{ regionCode: 'AU', newSubscriberAvailability: true }],
+    };
+
+    const c = await api(
+      `${offersUrl}?offerId=${TRIAL_OFFER_ID}&regionsVersion.version=2022%2F02`,
+      { method: 'POST', headers: auth, body },
+    );
+    if (!c.ok) { log(`  ! ${p.id} offer failed: ${c.status} ${c.json?.error?.message?.slice(0, 120)}`); continue; }
+
+    // Offers are created DRAFT too, same as base plans.
+    const a = await api(`${offersUrl}/${TRIAL_OFFER_ID}:activate`, { method: 'POST', headers: auth, body: {} });
+    log(a.ok ? `  + ${p.id}: ${TRIAL_DURATION} trial ACTIVE`
+             : `  ! ${p.id} activate failed: ${a.status} ${a.json?.error?.message?.slice(0, 100)}`);
+  }
 }
 
 // ── RevenueCat ─────────────────────────────────────────────────────────────
