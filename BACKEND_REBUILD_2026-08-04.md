@@ -362,7 +362,7 @@ out a branch restores the old value and re-linking is then required.
 | Low | `OPENROUTER_API_KEY` for voice commands |
 | Low | Fix or delete the broken `seed.sql` |
 | Low | Untrack `.mcp.json` before adding a new token |
-| Low | Delete the `demo@tradiemate.com.au` user before production — password is weak and public |
+| ~~Low~~ ✅ | ~~Delete the `demo@tradiemate.com.au` user before production~~ — done 2026-08-11 |
 
 ### Uncommitted
 
@@ -380,6 +380,12 @@ R  supabase/migrations/20240131_add_leave_team_policy.sql
 
 ### Test login
 
-`demo@tradiemate.com.au` / `TradieMate2026!` — pre-confirmed, since email
-confirmation is on and Supabase's built-in mailer is limited to ~2/hour and only
-sends to team members. Delete before production.
+~~`demo@tradiemate.com.au`~~ — **deleted 2026-08-11.** The account and its
+password were published in this file, so it was removed via the Auth Admin API
+before release. The project now has zero users; the next signup creates the
+first real one.
+
+If you need a test account again, create it through normal signup rather than
+documenting a shared credential here. Email confirmation is on and Supabase's
+built-in mailer is limited to ~2/hour and only delivers to team members, so
+either confirm via the dashboard or use the Auth Admin API to pre-confirm.

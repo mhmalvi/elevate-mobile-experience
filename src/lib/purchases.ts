@@ -33,6 +33,36 @@ let isInitialized = false;
  * Get the RevenueCat API key based on native platform (iOS/Android only)
  * Web subscriptions use Stripe directly via edge functions.
  */
+/**
+ * Reject anything that is not a RevenueCat *public* SDK key.
+ *
+ * A presence-only check is not enough. A secret key (`sk_…`) is truthy, so it
+ * passes straight through to NativePurchases.configure(), which then fails to
+ * initialise Play billing — silently, at runtime, on real installs. Nobody can
+ * subscribe and nothing in the build says why. This turns that into an error at
+ * the point of misconfiguration.
+ *
+ * Public SDK key prefixes: goog_ (Android), appl_ (iOS), rcb_ (Web billing).
+ */
+function assertPublicSdkKey(key: string, varName: string, expectedPrefix: string): string {
+  if (key.startsWith('sk_')) {
+    throw new Error(
+      `${varName} holds a RevenueCat SECRET key (sk_…). Two problems: it cannot ` +
+      `initialise billing, and because VITE_ variables are inlined into the client ` +
+      `bundle at build time it is extractable from the shipped app. Replace it with ` +
+      `the public SDK key (${expectedPrefix}…) from RevenueCat → Project Settings → ` +
+      `API Keys, and rotate the leaked secret.`,
+    );
+  }
+  if (!key.startsWith(expectedPrefix)) {
+    throw new Error(
+      `${varName} does not look like a RevenueCat public SDK key — expected it to ` +
+      `start with "${expectedPrefix}".`,
+    );
+  }
+  return key;
+}
+
 function getRevenueCatApiKey(): string {
   const platform = getPlatform();
 
@@ -41,13 +71,13 @@ function getRevenueCatApiKey(): string {
     if (!key) {
       throw new Error('VITE_REVENUECAT_ANDROID_API_KEY not configured. Please add it to your .env file.');
     }
-    return key;
+    return assertPublicSdkKey(key, 'VITE_REVENUECAT_ANDROID_API_KEY', 'goog_');
   } else if (platform === 'ios') {
     const key = import.meta.env.VITE_REVENUECAT_IOS_API_KEY;
     if (!key) {
       throw new Error('VITE_REVENUECAT_IOS_API_KEY not configured. Please add it to your .env file.');
     }
-    return key;
+    return assertPublicSdkKey(key, 'VITE_REVENUECAT_IOS_API_KEY', 'appl_');
   }
 
   throw new Error('RevenueCat is only supported on native platforms (iOS/Android)');
@@ -167,9 +197,17 @@ export async function purchasePackage(productId: string): Promise<{
 
   try {
     const packages = await getAvailablePackages();
-    const packageToPurchase = packages.find(pkg =>
-      pkg.product.identifier === productId
-    );
+
+    // Play subscriptions can surface as either the bare product id
+    // ("solo_monthly") or "productId:basePlanId" ("solo_monthly:monthly"),
+    // depending on the store and SDK version. The REST offerings endpoint
+    // reports the bare form, but the native SDK is not guaranteed to. Match
+    // both, so a suffix does not silently degrade to "Product not found" —
+    // which is indistinguishable from genuinely missing products.
+    const packageToPurchase = packages.find(pkg => {
+      const identifier = pkg.product.identifier;
+      return identifier === productId || identifier.split(':')[0] === productId;
+    });
 
     if (!packageToPurchase) {
       return { success: false, error: 'Product not found' };

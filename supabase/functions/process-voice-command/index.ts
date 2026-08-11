@@ -1,6 +1,9 @@
 // Voice AI - Edge Function
-// Powered by OpenRouter (GPT-4o-mini)
-// SECURITY: Requires authenticated user to prevent API abuse
+// Powered by Google Gemini, with OpenRouter (GPT-4o-mini) as fallback.
+// SECURITY: Requires authenticated user to prevent API abuse.
+// SECURITY: GEMINI_API_KEY is a server-side secret. It must be set via
+// `supabase secrets set` and must NEVER be given a VITE_ prefix — VITE_ vars are
+// inlined into the client bundle at build time and are extractable from the APK.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -12,14 +15,21 @@ const corsHeaders = {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 
-// Validate API key is set
-if (!OPENROUTER_API_KEY) {
-    console.error("OPENROUTER_API_KEY environment variable is not set");
+// Gemini is preferred; OpenRouter is the fallback so a billing problem on one
+// provider does not take voice down entirely.
+const AI_PROVIDER = GEMINI_API_KEY ? "gemini" : (OPENROUTER_API_KEY ? "openrouter" : "none");
+
+if (AI_PROVIDER === "none") {
+    console.error("No AI provider configured: set GEMINI_API_KEY (preferred) or OPENROUTER_API_KEY");
+} else {
+    console.log(`Voice AI provider: ${AI_PROVIDER}`);
 }
 
 // Comprehensive System Prompt with Full App Context
@@ -344,10 +354,10 @@ serve(async (req) => {
         // Fail fast and legibly. Without this the request fell through to an
         // OpenRouter call with an empty bearer token, surfacing to the user as a
         // generic "Something went wrong" that gave no clue the key was missing.
-        if (!OPENROUTER_API_KEY) {
-            console.error("OPENROUTER_API_KEY is not configured — cannot process voice commands");
+        if (AI_PROVIDER === "none") {
+            console.error("No AI provider configured — cannot process voice commands");
             return new Response(JSON.stringify({
-                error: "Voice assistant is not configured on this server (missing OPENROUTER_API_KEY).",
+                error: "Voice assistant is not configured on this server (set GEMINI_API_KEY or OPENROUTER_API_KEY).",
                 speak: "The voice assistant isn't set up yet. Please try again later.",
                 action: "general_reply",
                 data: {}
@@ -382,44 +392,112 @@ serve(async (req) => {
         // Add current user message
         messages.push({ role: 'user', content: query });
 
-        // Call OpenRouter
-        console.log("Calling OpenRouter API...");
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://tradiemate.app",
-                "X-Title": "Voice AI"
-            },
-            body: JSON.stringify({
-                model: "openai/gpt-4o-mini",
-                messages: messages,
-                temperature: 0.7,
-                max_tokens: 500,
-                response_format: { type: "json_object" }
-            })
-        });
+        // Call the configured provider. Both branches return the model's raw
+        // JSON string so the parsing below stays provider-agnostic.
+        let rawContent: string;
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error("OpenRouter Error:", response.status, errorText);
-            throw new Error(`API Error: ${response.status} - ${errorText}`);
-        }
+        if (AI_PROVIDER === "gemini") {
+            // Gemini splits the system prompt out of the turn list entirely, so
+            // every system message (the base prompt plus the accumulated-data
+            // CONTEXT message) is concatenated into system_instruction, and only
+            // user/assistant turns become `contents`. Assistant maps to "model".
+            const systemText = messages
+                .filter((m) => m.role === "system")
+                .map((m) => m.content)
+                .join("\n\n");
 
-        const data = await response.json();
-        console.log("OpenRouter response received");
+            const contents = messages
+                .filter((m) => m.role !== "system")
+                .map((m) => ({
+                    role: m.role === "assistant" ? "model" : "user",
+                    parts: [{ text: m.content }],
+                }));
 
-        if (!data.choices?.[0]?.message?.content) {
-            console.error("Invalid OpenRouter structure:", JSON.stringify(data));
-            throw new Error("Invalid API response structure");
+            console.log(`Calling Gemini API (${GEMINI_MODEL})...`);
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+                {
+                    method: "POST",
+                    headers: {
+                        "x-goog-api-key": GEMINI_API_KEY,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        system_instruction: { parts: [{ text: systemText }] },
+                        contents,
+                        generationConfig: {
+                            temperature: 0.7,
+                            maxOutputTokens: 500,
+                            // Gemini's native JSON mode — equivalent to
+                            // OpenAI's response_format: { type: "json_object" }.
+                            responseMimeType: "application/json",
+                        },
+                    }),
+                },
+            );
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("Gemini Error:", response.status, errorText);
+                throw new Error(`API Error: ${response.status} - ${errorText}`);
+            }
+
+            const data = await response.json();
+            console.log("Gemini response received");
+
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text) {
+                // A safety block or MAX_TOKENS truncation lands here with no text
+                // part, so log finishReason — it is the only thing that tells the
+                // two apart.
+                console.error(
+                    "Invalid Gemini structure. finishReason:",
+                    data.candidates?.[0]?.finishReason,
+                    JSON.stringify(data),
+                );
+                throw new Error("Invalid API response structure");
+            }
+            rawContent = text;
+        } else {
+            console.log("Calling OpenRouter API...");
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://tradiemate.app",
+                    "X-Title": "Voice AI"
+                },
+                body: JSON.stringify({
+                    model: "openai/gpt-4o-mini",
+                    messages: messages,
+                    temperature: 0.7,
+                    max_tokens: 500,
+                    response_format: { type: "json_object" }
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("OpenRouter Error:", response.status, errorText);
+                throw new Error(`API Error: ${response.status} - ${errorText}`);
+            }
+
+            const data = await response.json();
+            console.log("OpenRouter response received");
+
+            if (!data.choices?.[0]?.message?.content) {
+                console.error("Invalid OpenRouter structure:", JSON.stringify(data));
+                throw new Error("Invalid API response structure");
+            }
+            rawContent = data.choices[0].message.content;
         }
 
         // Parse AI response
         let aiResponse;
         try {
-            console.log("Raw AI content:", data.choices[0].message.content);
-            aiResponse = JSON.parse(data.choices[0].message.content);
+            console.log("Raw AI content:", rawContent);
+            aiResponse = JSON.parse(rawContent);
         } catch (e) {
             console.error("JSON Parse Error:", e);
             // If JSON parsing fails, create a safe response

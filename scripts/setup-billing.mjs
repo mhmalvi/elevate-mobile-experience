@@ -1,0 +1,253 @@
+#!/usr/bin/env node
+/**
+ * Billing configuration: Google Play subscriptions + RevenueCat offering.
+ *
+ * Brings three layers into agreement. They currently disagree, which is why
+ * every purchase attempt returns "Product not found":
+ *
+ *   src/lib/purchases.ts  expects solo/crew/pro x monthly/annual
+ *   RevenueCat            had 3 orphaned products (TradieMate_Solo/Crew/Pro)
+ *                         pointing at store IDs that do not exist in Play
+ *   Play Console          had zero subscriptions
+ *
+ * Play is the source of truth: products are created there first, then mirrored
+ * into RevenueCat and bound to an offering and entitlement.
+ *
+ * ⚠️  Play subscription product IDs are PERMANENT. They can be deactivated but
+ *     never deleted or reused. This script is idempotent — it skips anything
+ *     that already exists — but a typo in PRODUCTS burns that ID for the life
+ *     of the app.
+ *
+ * Usage:
+ *   node scripts/setup-billing.mjs --dry-run    # print planned calls, change nothing
+ *   node scripts/setup-billing.mjs --commit     # apply
+ */
+
+import { execFileSync } from 'node:child_process';
+
+const PACKAGE_NAME = 'com.tradiemate.app';
+const PLAY_SERVICE_ACCOUNT = 'tradiemate@tradiemate-488213.iam.gserviceaccount.com';
+
+// The app's default Play listing language. Play rejects any subscription that
+// lacks a listing in this exact language — it is en-GB here, not en-AU.
+const DEFAULT_LANGUAGE = 'en-GB';
+
+const RC_PROJECT_ID = 'proj17fd6a1c';
+const RC_APP_ID = 'app361e589fdf'; // "TradieMate", play_store
+const RC_API = 'https://api.revenuecat.com/v2';
+const RC_KEY = process.env.RC_SECRET_KEY;
+
+const PLAY_API = 'https://androidpublisher.googleapis.com/androidpublisher/v3';
+
+// Prices are AUD, matching the tiers documented in .env.example. AU is set as
+// the seed region; Play can auto-convert the rest from the Play Console.
+const PRODUCTS = [
+  { id: 'solo_monthly', tier: 'Solo', plan: 'monthly', period: 'P1M', price: '29',  desc: 'For solo tradies. Unlimited quotes, invoices and jobs.' },
+  { id: 'solo_annual',  tier: 'Solo', plan: 'annual',  period: 'P1Y', price: '288', desc: 'For solo tradies. Unlimited quotes, invoices and jobs. Billed yearly.' },
+  { id: 'crew_monthly', tier: 'Crew', plan: 'monthly', period: 'P1M', price: '49',  desc: 'For small crews. Team access, scheduling and timesheets.' },
+  { id: 'crew_annual',  tier: 'Crew', plan: 'annual',  period: 'P1Y', price: '468', desc: 'For small crews. Team access, scheduling and timesheets. Billed yearly.' },
+  { id: 'pro_monthly',  tier: 'Pro',  plan: 'monthly', period: 'P1M', price: '79',  desc: 'Everything in Crew, plus accounting sync and priority support.' },
+  { id: 'pro_annual',   tier: 'Pro',  plan: 'annual',  period: 'P1Y', price: '780', desc: 'Everything in Crew, plus accounting sync and priority support. Billed yearly.' },
+];
+
+const ENTITLEMENT = { lookup_key: 'premium', display_name: 'Premium Access' };
+const OFFERING = { lookup_key: 'default', display_name: 'Default Offering' };
+
+const COMMIT = process.argv.includes('--commit');
+const DRY = !COMMIT;
+
+function log(...a) { console.log(...a); }
+function step(s) { console.log(`\n── ${s}`); }
+
+/** Play access token, via the gcloud service account already credentialed locally. */
+function playToken() {
+  return execFileSync(
+    'gcloud',
+    ['auth', 'print-access-token', `--account=${PLAY_SERVICE_ACCOUNT}`,
+     '--scopes=https://www.googleapis.com/auth/androidpublisher'],
+    { encoding: 'utf8', shell: process.platform === 'win32' },
+  ).trim();
+}
+
+async function api(url, { method = 'GET', headers = {}, body } = {}) {
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
+  return { ok: res.ok, status: res.status, json, text };
+}
+
+// ── Google Play ────────────────────────────────────────────────────────────
+
+function subscriptionBody(p) {
+  return {
+    packageName: PACKAGE_NAME,
+    productId: p.id,
+    listings: [{
+      languageCode: DEFAULT_LANGUAGE,
+      title: `${p.tier} ${p.plan === 'annual' ? 'Annual' : 'Monthly'}`,
+      description: p.desc,
+    }],
+    basePlans: [{
+      basePlanId: p.plan,
+      autoRenewingBasePlanType: {
+        billingPeriodDuration: p.period,
+        gracePeriodDuration: 'P7D',
+        accountHoldDuration: 'P30D',
+        resubscribeState: 'RESUBSCRIBE_STATE_ACTIVE',
+      },
+      regionalConfigs: [{
+        regionCode: 'AU',
+        newSubscriberAvailability: true,
+        price: { currencyCode: 'AUD', units: p.price, nanos: 0 },
+      }],
+    }],
+  };
+}
+
+async function setupPlay(token) {
+  step('Google Play — subscriptions');
+  const auth = { Authorization: `Bearer ${token}` };
+
+  const existing = await api(`${PLAY_API}/applications/${PACKAGE_NAME}/subscriptions`, { headers: auth });
+  const have = new Set((existing.json?.subscriptions || []).map((s) => s.productId));
+  log(`  existing: ${have.size ? [...have].join(', ') : 'none'}`);
+
+  const created = [];
+  for (const p of PRODUCTS) {
+    if (have.has(p.id)) { log(`  = ${p.id} already exists, skipping`); created.push(p.id); continue; }
+    if (DRY) { log(`  + would create ${p.id} (${p.period}, AUD ${p.price})`); continue; }
+
+    const url = `${PLAY_API}/applications/${PACKAGE_NAME}/subscriptions`
+      + `?productId=${encodeURIComponent(p.id)}&regionsVersion.version=2022%2F02`;
+    const r = await api(url, { method: 'POST', headers: auth, body: subscriptionBody(p) });
+    if (r.ok) { log(`  + created ${p.id} (${p.period}, AUD ${p.price})`); created.push(p.id); }
+    else { log(`  ! FAILED ${p.id}: ${r.status} ${r.json?.error?.message || r.text.slice(0, 160)}`); }
+  }
+  return created;
+}
+
+// ── RevenueCat ─────────────────────────────────────────────────────────────
+
+async function rc(path, opts = {}) {
+  return api(`${RC_API}${path}`, {
+    ...opts,
+    headers: { Authorization: `Bearer ${RC_KEY}`, ...(opts.headers || {}) },
+  });
+}
+
+async function setupRevenueCat(playProductIds) {
+  step('RevenueCat — products, entitlement, offering');
+  if (!RC_KEY) { log('  ! RC_SECRET_KEY not set in env — skipping RevenueCat'); return; }
+
+  // Products — mirror the Play IDs. RevenueCat's store_identifier for a Play
+  // subscription with a single base plan is "productId:basePlanId".
+  const prodRes = await rc(`/projects/${RC_PROJECT_ID}/products`);
+  const existingProducts = prodRes.json?.items || [];
+  log(`  existing products: ${existingProducts.map((x) => x.store_identifier).join(', ') || 'none'}`);
+
+  const productIdByStoreId = {};
+  for (const x of existingProducts) productIdByStoreId[x.store_identifier] = x.id;
+
+  for (const p of PRODUCTS) {
+    if (!playProductIds.includes(p.id)) { log(`  - skip ${p.id} (not in Play)`); continue; }
+    const storeId = `${p.id}:${p.plan}`;
+    if (productIdByStoreId[storeId]) { log(`  = product ${storeId} exists`); continue; }
+    if (DRY) { log(`  + would create product ${storeId}`); continue; }
+
+    const r = await rc(`/projects/${RC_PROJECT_ID}/products`, {
+      method: 'POST',
+      body: { store_identifier: storeId, app_id: RC_APP_ID, type: 'subscription', display_name: `${p.tier} ${p.plan}` },
+    });
+    if (r.ok) { productIdByStoreId[storeId] = r.json.id; log(`  + product ${storeId} -> ${r.json.id}`); }
+    else log(`  ! product ${storeId} failed: ${r.status} ${(r.json?.message || r.text).slice(0, 140)}`);
+  }
+
+  // Entitlement
+  const entRes = await rc(`/projects/${RC_PROJECT_ID}/entitlements`);
+  let ent = (entRes.json?.items || []).find((e) => e.lookup_key === ENTITLEMENT.lookup_key);
+  if (ent) log(`  = entitlement "${ENTITLEMENT.lookup_key}" exists`);
+  else if (DRY) log(`  + would create entitlement "${ENTITLEMENT.lookup_key}"`);
+  else {
+    const r = await rc(`/projects/${RC_PROJECT_ID}/entitlements`, { method: 'POST', body: ENTITLEMENT });
+    if (r.ok) { ent = r.json; log(`  + entitlement -> ${ent.id}`); }
+    else log(`  ! entitlement failed: ${r.status} ${(r.json?.message || r.text).slice(0, 140)}`);
+  }
+
+  // Attach every product to the entitlement
+  if (ent && !DRY) {
+    const ids = Object.values(productIdByStoreId);
+    if (ids.length) {
+      const r = await rc(`/projects/${RC_PROJECT_ID}/entitlements/${ent.id}/actions/attach_products`, {
+        method: 'POST', body: { product_ids: ids },
+      });
+      log(r.ok ? `  + attached ${ids.length} products to entitlement`
+               : `  ! attach failed: ${r.status} ${(r.json?.message || r.text).slice(0, 140)}`);
+    }
+  }
+
+  // Offering
+  const offRes = await rc(`/projects/${RC_PROJECT_ID}/offerings`);
+  let off = (offRes.json?.items || []).find((o) => o.lookup_key === OFFERING.lookup_key);
+  if (off) log(`  = offering "${OFFERING.lookup_key}" exists`);
+  else if (DRY) log(`  + would create offering "${OFFERING.lookup_key}" (current)`);
+  else {
+    // `is_current` is read-only on create — passing it is a 400. RevenueCat
+    // marks the project's first offering current automatically; additional ones
+    // are promoted from the dashboard.
+    const r = await rc(`/projects/${RC_PROJECT_ID}/offerings`, {
+      method: 'POST', body: OFFERING,
+    });
+    if (r.ok) { off = r.json; log(`  + offering -> ${off.id}`); }
+    else log(`  ! offering failed: ${r.status} ${(r.json?.message || r.text).slice(0, 140)}`);
+  }
+
+  // Packages, one per product, attached to the offering
+  if (off && !DRY) {
+    const pkgRes = await rc(`/projects/${RC_PROJECT_ID}/offerings/${off.id}/packages`);
+    const havePkg = new Set((pkgRes.json?.items || []).map((x) => x.lookup_key));
+
+    for (const p of PRODUCTS) {
+      const storeId = `${p.id}:${p.plan}`;
+      const prodId = productIdByStoreId[storeId];
+      if (!prodId) continue;
+      if (havePkg.has(p.id)) { log(`  = package ${p.id} exists`); continue; }
+
+      const r = await rc(`/projects/${RC_PROJECT_ID}/offerings/${off.id}/packages`, {
+        method: 'POST', body: { lookup_key: p.id, display_name: `${p.tier} ${p.plan}` },
+      });
+      if (!r.ok) { log(`  ! package ${p.id} failed: ${r.status} ${(r.json?.message || r.text).slice(0, 140)}`); continue; }
+
+      const a = await rc(`/projects/${RC_PROJECT_ID}/packages/${r.json.id}/actions/attach_products`, {
+        method: 'POST', body: { products: [{ product_id: prodId, eligibility_criteria: 'all' }] },
+      });
+      log(a.ok ? `  + package ${p.id} -> ${storeId}`
+               : `  ! package ${p.id} attach failed: ${a.status} ${(a.json?.message || a.text).slice(0, 140)}`);
+    }
+  }
+}
+
+// ── main ───────────────────────────────────────────────────────────────────
+
+log(DRY ? '=== DRY RUN — nothing will be changed ===' : '=== COMMIT — creating permanent product IDs ===');
+
+const token = playToken();
+const playIds = await setupPlay(token);
+await setupRevenueCat(playIds);
+
+step('Verify');
+const check = await api(
+  `https://api.revenuecat.com/v1/subscribers/billing-setup-probe/offerings`,
+  { headers: { Authorization: `Bearer ${process.env.RC_PUBLIC_KEY || ''}`, 'X-Platform': 'android' } },
+);
+if (check.ok) {
+  log(`  current_offering_id: ${JSON.stringify(check.json?.current_offering_id)}`);
+  log(`  offerings returned:  ${(check.json?.offerings || []).length}`);
+} else {
+  log(`  (skipped — set RC_PUBLIC_KEY to verify: ${check.status})`);
+}
+log('');

@@ -12,6 +12,16 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 
+// QuickBooks ships behind a flag because the Intuit credentials
+// (QUICKBOOKS_CLIENT_ID / _SECRET / _REDIRECT_URI) are not set on the backend.
+// With them unset, "Connect QuickBooks" calls quickbooks-oauth and fails in
+// front of the user — and in front of a Play Store reviewer. Set
+// VITE_ENABLE_QUICKBOOKS=true once the credentials exist.
+//
+// This is a feature flag, not a secret, so VITE_ is correct here. Never give a
+// VITE_ prefix to a key or token: those are inlined into the client bundle.
+const QUICKBOOKS_ENABLED = import.meta.env.VITE_ENABLE_QUICKBOOKS === 'true';
+
 interface IntegrationStatus {
   connected: boolean;
   tenant_id?: string | null;
@@ -473,9 +483,13 @@ export default function IntegrationsSettings() {
                     {qbLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Disconnect'}
                   </Button>
                 </div>
-              ) : (
+              ) : QUICKBOOKS_ENABLED ? (
                 <Button className="w-full bg-[#2CA01C] hover:bg-[#2CA01C]/90 text-white" onClick={() => connectService('quickbooks')} disabled={qbLoading}>
                   {qbLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : 'Connect QuickBooks'}
+                </Button>
+              ) : (
+                <Button className="w-full" variant="outline" disabled>
+                  Coming Soon
                 </Button>
               )}
             </div>
