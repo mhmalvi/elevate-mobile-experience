@@ -39,16 +39,35 @@ const RC_KEY = process.env.RC_SECRET_KEY;
 
 const PLAY_API = 'https://androidpublisher.googleapis.com/androidpublisher/v3';
 
-// Prices are AUD, matching the tiers documented in .env.example. AU is set as
-// the seed region; Play can auto-convert the rest from the Play Console.
+// AUD is the seed price; usd/eur are the anchors Play converts every other
+// market from, so the app sells worldwide rather than in Australia only.
 const PRODUCTS = [
-  { id: 'solo_monthly', tier: 'Solo', plan: 'monthly', period: 'P1M', price: '29',  desc: 'For solo tradies. Unlimited quotes, invoices and jobs.' },
-  { id: 'solo_annual',  tier: 'Solo', plan: 'annual',  period: 'P1Y', price: '288', desc: 'For solo tradies. Unlimited quotes, invoices and jobs. Billed yearly.' },
-  { id: 'crew_monthly', tier: 'Crew', plan: 'monthly', period: 'P1M', price: '49',  desc: 'For small crews. Team access, scheduling and timesheets.' },
-  { id: 'crew_annual',  tier: 'Crew', plan: 'annual',  period: 'P1Y', price: '468', desc: 'For small crews. Team access, scheduling and timesheets. Billed yearly.' },
-  { id: 'pro_monthly',  tier: 'Pro',  plan: 'monthly', period: 'P1M', price: '79',  desc: 'Everything in Crew, plus accounting sync and priority support.' },
-  { id: 'pro_annual',   tier: 'Pro',  plan: 'annual',  period: 'P1Y', price: '780', desc: 'Everything in Crew, plus accounting sync and priority support. Billed yearly.' },
+  { id: 'solo_monthly', tier: 'Solo', plan: 'monthly', period: 'P1M', price: '29',  usd: '19',  eur: '18',  desc: 'For solo tradies. Unlimited quotes, invoices and jobs.' },
+  { id: 'solo_annual',  tier: 'Solo', plan: 'annual',  period: 'P1Y', price: '288', usd: '190', eur: '179', desc: 'For solo tradies. Unlimited quotes, invoices and jobs. Billed yearly.' },
+  { id: 'crew_monthly', tier: 'Crew', plan: 'monthly', period: 'P1M', price: '49',  usd: '39',  eur: '36',  desc: 'For small crews. Team access, scheduling and timesheets.' },
+  { id: 'crew_annual',  tier: 'Crew', plan: 'annual',  period: 'P1Y', price: '468', usd: '390', eur: '365', desc: 'For small crews. Team access, scheduling and timesheets. Billed yearly.' },
+  { id: 'pro_monthly',  tier: 'Pro',  plan: 'monthly', period: 'P1M', price: '79',  usd: '59',  eur: '55',  desc: 'Everything in Crew, plus accounting sync and priority support.' },
+  { id: 'pro_annual',   tier: 'Pro',  plan: 'annual',  period: 'P1Y', price: '780', usd: '590', eur: '549', desc: 'Everything in Crew, plus accounting sync and priority support. Billed yearly.' },
 ];
+
+/**
+ * Regions where the trial runs.
+ *
+ * An offer can only target regions its parent base plan lists EXPLICITLY —
+ * regions covered implicitly by otherRegionsConfig are not inheritable. So the
+ * base plan gets explicit configs for these, and the offer mirrors them.
+ * Subscriptions still sell everywhere via the USD/EUR anchors; only the free
+ * trial is limited to this list.
+ *
+ * ⚠ Play quirk: setting otherRegionsConfig makes Play auto-materialise MN
+ *   (Mongolia) as an explicit region with an MNT price, because MNT cannot be
+ *   derived from the anchors. It then REJECTS MN on every subsequent write
+ *   ("not billable at regions version …") at both 2022/02 and 2025/01, and
+ *   rejects offers targeting it outright. Strip MN from any base-plan payload
+ *   before patching — Play re-adds it server-side — and never include it in an
+ *   offer. This is an inconsistency in Play's API, not a config error.
+ */
+const TRIAL_REGIONS = ['AU', 'US', 'GB', 'CA', 'NZ', 'IE'];
 
 const ENTITLEMENT = { lookup_key: 'premium', display_name: 'Premium Access' };
 const OFFERING = { lookup_key: 'default', display_name: 'Default Offering' };
@@ -123,6 +142,14 @@ function subscriptionBody(p) {
         newSubscriberAvailability: true,
         price: { currencyCode: 'AUD', units: p.price, nanos: 0 },
       }],
+      // Without this the plan is purchasable in Australia and nowhere else —
+      // users elsewhere reach the paywall and find no products at all, with no
+      // error to explain it.
+      otherRegionsConfig: {
+        usdPrice: { currencyCode: 'USD', units: p.usd, nanos: 0 },
+        eurPrice: { currencyCode: 'EUR', units: p.eur, nanos: 0 },
+        newSubscriberAvailability: true,
+      },
     }],
   };
 }
@@ -179,6 +206,9 @@ async function setupTrials(auth, created) {
     if (have) { log(`  = ${p.id} already has ${TRIAL_OFFER_ID}`); continue; }
     if (DRY) { log(`  + would add ${TRIAL_DURATION} trial to ${p.id}`); continue; }
 
+    // Mirror TRIAL_REGIONS, which the base plan must already list explicitly.
+    // MN is excluded deliberately — see the note on TRIAL_REGIONS.
+    const regions = TRIAL_REGIONS.filter((r) => r !== 'MN');
     const body = {
       packageName: PACKAGE_NAME,
       productId: p.id,
@@ -187,10 +217,10 @@ async function setupTrials(auth, created) {
       phases: [{
         duration: TRIAL_DURATION,
         recurrenceCount: 1,
-        regionalConfigs: [{ regionCode: 'AU', free: {} }],
+        regionalConfigs: regions.map((regionCode) => ({ regionCode, free: {} })),
       }],
       targeting: { acquisitionRule: { scope: { anySubscriptionInApp: {} } } },
-      regionalConfigs: [{ regionCode: 'AU', newSubscriberAvailability: true }],
+      regionalConfigs: regions.map((regionCode) => ({ regionCode, newSubscriberAvailability: true })),
     };
 
     const c = await api(
