@@ -1,0 +1,30 @@
+# ============================================================================
+# Signing material — NEVER commit
+#
+# _preserved_2026-08-04/android/app/tradiemate-release.keystore is the live
+# Play upload key. Its SHA-256 matches upload_certificate.pem exactly
+# (B8:A7:E7:3F:...:14:B8), so it is the only key Play will accept for an update
+# to com.tradiemate.app. If it leaks, anyone can sign an upload as you; if it is
+# lost, this listing can never be updated again. Keep it backed up outside the
+# repo, in a password manager or secrets vault.
+# ============================================================================
+*.keystore
+*.jks
+*.p12
+*.pfx
+
+# Working snapshot taken 2026-08-04 — 88MB, and contains the release keystore
+# above. Local reference only.
+_preserved_*/
+
+# Dependencies
+node_modules/
+
+# Deployment / environment
+.vercel
+.env
+.env*.local
+
+# OS / editor noise
+.DS_Store
+Thumbs.db

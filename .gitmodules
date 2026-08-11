@@ -1,0 +1,4 @@
+[submodule "elevate-mobile-experience"]
+	path = elevate-mobile-experience
+	url = https://github.com/mhmalvi/elevate-mobile-experience.git
+	branch = feat/gemini-voice-billing-hardening
