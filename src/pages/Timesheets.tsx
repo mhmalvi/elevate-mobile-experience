@@ -21,7 +21,6 @@ import {
   Clock,
   Plus,
   ArrowLeft,
-  Calendar,
   User,
   ChevronRight,
   CheckCircle2,

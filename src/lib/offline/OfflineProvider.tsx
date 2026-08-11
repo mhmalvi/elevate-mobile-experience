@@ -57,8 +57,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     };
 
     // ✅ FIX #2: Handle quota exceeded errors
-    const handleQuotaExceeded = (event: Event) => {
-      const customEvent = event as CustomEvent;
+    const handleQuotaExceeded = () => {
       toast({
         title: 'Storage Full',
         description: 'Your device storage is full. Please free up space or clear old data.',
@@ -68,8 +67,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     };
 
     // ✅ FIX #3: Handle auth errors during sync
-    const handleAuthError = (event: Event) => {
-      const customEvent = event as CustomEvent;
+    const handleAuthError = () => {
       toast({
         title: 'Authentication Error',
         description: 'Your session expired. Please log in again to sync your data.',
@@ -92,7 +90,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     // ✅ MEDIUM PRIORITY FIX #1: Handle conflict notifications
     const handleConflictDetected = (event: Event) => {
       const customEvent = event as CustomEvent;
-      const { entityType, entityId, conflictingFields } = customEvent.detail;
+      const { entityType, conflictingFields } = customEvent.detail;
 
       const fieldsList = conflictingFields
         .map((f: any) => f.field)

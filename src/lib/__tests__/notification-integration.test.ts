@@ -392,7 +392,7 @@ describe('SMS Notification Tests', () => {
         pro: Infinity,
       };
 
-      Object.entries(subscriptionLimits).forEach(([tier, limit]) => {
+      Object.values(subscriptionLimits).forEach((limit) => {
         expect(limit).toBeGreaterThanOrEqual(0);
       });
     });

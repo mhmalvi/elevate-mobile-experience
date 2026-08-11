@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Upload, X, Palette, FileText, Mail, ArrowLeft, Image as ImageIcon, Eye, Check } from 'lucide-react';
+import { Upload, X, Palette, FileText, Mail, ArrowLeft, Eye, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -31,7 +31,7 @@ export default function BrandingSettings() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [, setUploading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('logo');
 

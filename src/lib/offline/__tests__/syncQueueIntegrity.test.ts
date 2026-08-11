@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { validateSyncQueueItem } from '../syncQueueValidator';
 import { resolveConflict, hasConflict } from '../conflictResolver';
 import { safeNumber } from '@/lib/utils';

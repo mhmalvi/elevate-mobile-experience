@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TIER_LIMITS, TIER_NAMES, getLimit, isUnlimited, formatLimit } from './tierLimits';
-import type { SubscriptionTier, UsageType } from './tierLimits';
+import type { SubscriptionTier } from './tierLimits';
 
 describe('tierLimits', () => {
   describe('TIER_LIMITS', () => {

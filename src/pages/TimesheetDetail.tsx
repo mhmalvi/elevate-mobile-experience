@@ -39,10 +39,7 @@ import {
   Trash2,
   Loader2,
   Briefcase,
-  Calendar,
   Coffee,
-  Plus,
-  Minus,
 } from 'lucide-react';
 import { format, parseISO, addDays, isSameDay } from 'date-fns';
 

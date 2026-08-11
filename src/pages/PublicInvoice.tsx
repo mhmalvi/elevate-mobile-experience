@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Button } from '@/components/ui/button';
 import { Receipt, Loader2, CreditCard, CheckCircle, PartyPopper, ArrowLeft } from 'lucide-react';
 import { format, isPast, parseISO } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -12,7 +11,6 @@ import { getCountry } from '@/lib/countries';
 export default function PublicInvoice() {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { toast } = useToast();
   const [invoice, setInvoice] = useState<any>(null);
   const [lineItems, setLineItems] = useState<any[]>([]);

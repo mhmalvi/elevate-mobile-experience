@@ -114,7 +114,7 @@ export default function TeamSettings() {
     setInviting(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('send-team-invitation', {
+      const { error } = await supabase.functions.invoke('send-team-invitation', {
         body: { email: inviteEmail, role: inviteRole },
       });
 

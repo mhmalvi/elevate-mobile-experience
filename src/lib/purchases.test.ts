@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { REVENUECAT_PRODUCTS } from './purchases';
 
 // Mock Capacitor and RevenueCat before importing functions that use them

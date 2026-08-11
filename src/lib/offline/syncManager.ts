@@ -99,6 +99,7 @@ export class SyncManager {
   constructor() {
     // Initialize schema migration check
     this.checkAndMigrateSchema();
+    this.initCrossTabSyncLock();
   }
 
   /**
@@ -175,7 +176,20 @@ export class SyncManager {
     console.log(`[SyncManager] Migrated ${items.length} sync queue items to v2`);
   }
 
-  private constructor_original() {
+  /**
+   * Open the BroadcastChannel used to stop two tabs syncing at once.
+   *
+   * This was previously named `constructor_original` and was never called —
+   * apparently left behind by a refactor that split the constructor. The effect
+   * was not cosmetic: `syncLockChannel` stayed null forever, so
+   * `acquireSyncLock()` hit its `if (!this.syncLockChannel) return true` guard
+   * and reported the lock as acquired every time. Cross-tab protection was
+   * silently off, and two open tabs would sync the same queue concurrently.
+   *
+   * The guard is still correct for browsers without BroadcastChannel; it just
+   * should not have been the only path.
+   */
+  private initCrossTabSyncLock() {
     // Initialize cross-tab sync lock
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       this.syncLockChannel = new BroadcastChannel('tradiemate-sync-lock');
@@ -377,7 +391,7 @@ export class SyncManager {
 
     console.log(`[SyncManager] Flushing ${this.pendingQueueUpdates.size} coalesced updates`);
 
-    for (const [key, item] of this.pendingQueueUpdates.entries()) {
+    for (const item of this.pendingQueueUpdates.values()) {
       try {
         // Check if item already in queue
         const existing = await db.syncQueue

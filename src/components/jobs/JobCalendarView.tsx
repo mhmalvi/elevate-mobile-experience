@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar } from '@/components/ui/calendar';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -59,13 +59,6 @@ export function JobCalendarView({ jobs, selectedDate, onSelectDate, filterMember
       }
     });
     return map;
-  }, [filteredJobs]);
-
-  // Get dates that have jobs scheduled
-  const scheduledDates = useMemo(() => {
-    return filteredJobs
-      .filter(job => job.scheduled_date)
-      .map(job => new Date(job.scheduled_date!));
   }, [filteredJobs]);
 
   // Get jobs for selected date

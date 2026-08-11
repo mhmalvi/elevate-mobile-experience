@@ -1,15 +1,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { MobileLayout } from '@/components/layout/MobileLayout';
-import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
-import { CheckCircle2, XCircle, Loader2, RefreshCw, ExternalLink, AlertCircle, ArrowLeft, Link2, Zap } from 'lucide-react';
+import { CheckCircle2, Loader2, RefreshCw, AlertCircle, ArrowLeft, Link2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 
 // QuickBooks ships behind a flag because the Intuit credentials
@@ -41,7 +39,6 @@ interface SyncHistory {
 
 export default function IntegrationsSettings() {
   const navigate = useNavigate();
-  const { profile } = useProfile();
   const { toast } = useToast();
 
   // Xero State
@@ -64,10 +61,10 @@ export default function IntegrationsSettings() {
 
   const [syncingClients, setSyncingClients] = useState(false);
   const [syncingInvoices, setSyncingInvoices] = useState(false);
-  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [, setLoadingHistory] = useState(true);
 
   const [syncHistory, setSyncHistory] = useState<SyncHistory[]>([]);
-  const [processingCallback, setProcessingCallback] = useState(false);
+  const [, setProcessingCallback] = useState(false);
 
   const hasProcessedCallback = useRef(false);
 

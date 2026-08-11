@@ -329,7 +329,7 @@ describe('Payment Integration Tests', () => {
         { from: 'refunded', to: 'paid' },
       ];
 
-      invalidTransitions.forEach(({ from, to }) => {
+      invalidTransitions.forEach(({ from }) => {
         // In real implementation, these should throw errors
         expect(from).not.toBe('draft'); // Can't go back to draft
       });

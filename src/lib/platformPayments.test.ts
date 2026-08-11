@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getPlatform, getPaymentProvider, isNativeApp } from './platformPayments';
 
 describe('platformPayments', () => {
-  const originalWindow = { ...window };
-
+  
   beforeEach(() => {
     // Reset Capacitor mock
     delete (window as any).Capacitor;

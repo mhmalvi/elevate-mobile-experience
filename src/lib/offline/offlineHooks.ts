@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, OfflineJob, OfflineQuote, OfflineInvoice, OfflineClient } from './db';
 import { syncManager } from './syncManager';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { generateUUID } from '@/lib/utils/uuid';
 import { decryptClientFields, decryptInvoiceFields, decryptQuoteFields } from './encryption';

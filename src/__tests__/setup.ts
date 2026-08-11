@@ -1,9 +1,14 @@
-import { expect, afterEach, vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
-import * as matchers from '@testing-library/jest-dom/matchers';
 
-// Extend Vitest's expect with jest-dom matchers
-expect.extend(matchers);
+// Registers the jest-dom matchers AND their TypeScript declarations.
+//
+// The previous form — importing the matchers object and calling
+// expect.extend(matchers) — worked at runtime but carried no type
+// augmentation, so every toBeInTheDocument / toHaveClass / toBeDisabled was a
+// type error even though the assertion itself ran fine. The /vitest entrypoint
+// does both.
+import '@testing-library/jest-dom/vitest';
 
 // Cleanup after each test
 afterEach(() => {

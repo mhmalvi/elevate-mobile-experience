@@ -38,7 +38,7 @@ import {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { team, allTeams, switchTeam, loading: teamLoading, teamMembers } = useTeam();
+  const { team, allTeams, switchTeam, teamMembers } = useTeam();
   const { profile } = useProfile();
   const { toast } = useToast();
   const [stats, setStats] = useState({
