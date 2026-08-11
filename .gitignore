@@ -28,3 +28,7 @@ node_modules/
 # OS / editor noise
 .DS_Store
 Thumbs.db
+
+# Consolidated credential reference — plaintext secrets, never commit
+CREDENTIALS.txt
+*.secrets
