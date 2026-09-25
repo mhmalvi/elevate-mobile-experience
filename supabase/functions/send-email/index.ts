@@ -278,7 +278,7 @@ serve(async (req) => {
     }
 
     const businessName = profile?.business_name || "Your Business";
-    const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
+    const baseUrl = Deno.env.get('APP_URL') || 'https://tradiemate.aethonautomation.com';
     const viewUrl = `${baseUrl}/${type === 'quote' ? 'q' : 'i'}/${id}`;
 
     // Extract branding values with fallbacks

@@ -15,10 +15,6 @@ const ALLOWED_ORIGINS = [
   'https://tradiemate.aethonautomation.com',
   // Capacitor Android serves the app from https://localhost (androidScheme: 'https')
   'https://localhost',
-  // Vercel deployment URLs
-  'https://elevate-mobile-experience.vercel.app',
-  'https://dist-six-fawn.vercel.app',
-  'https://dist-oyrj5nl90-info-quadquetechs-projects.vercel.app',
   // Add staging/preview URLs if needed
 ];
 

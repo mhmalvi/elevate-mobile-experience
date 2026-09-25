@@ -116,7 +116,7 @@ serve(async (req) => {
     const unitAmount = ZERO_DECIMAL.has(currency)
       ? Math.round(balance)
       : Math.round(balance * 100);
-    const baseUrl = success_url?.split('/i/')[0] || Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
+    const baseUrl = success_url?.split('/i/')[0] || Deno.env.get('APP_URL') || 'https://tradiemate.aethonautomation.com';
 
     console.log(`Creating Checkout session for platform account, invoice: ${invoice.invoice_number}, balance: $${balance}`);
 

@@ -63,7 +63,7 @@ serve(async (req) => {
     logStep('Found Stripe customer', { customerId });
 
     // Stripe return URLs need the web app; APP_URL overrides the default deployment
-    const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
+    const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'https://tradiemate.aethonautomation.com';
 
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,

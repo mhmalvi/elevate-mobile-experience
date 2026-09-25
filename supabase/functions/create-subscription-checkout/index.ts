@@ -103,7 +103,7 @@ serve(async (req) => {
     }
 
     // Stripe return URLs need the web app; APP_URL overrides the default deployment
-    const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
+    const origin = req.headers.get('origin') || Deno.env.get('APP_URL') || 'https://tradiemate.aethonautomation.com';
 
     logStep('Creating checkout session', { priceId, customerId, origin });
 

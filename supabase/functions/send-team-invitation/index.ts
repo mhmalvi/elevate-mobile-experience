@@ -213,7 +213,7 @@ serve(async (req) => {
     console.log('Invitation ready:', invitation?.id);
 
     // Build invitation URL
-    const baseUrl = Deno.env.get('APP_URL') || 'https://elevate-mobile-experience.vercel.app';
+    const baseUrl = Deno.env.get('APP_URL') || 'https://tradiemate.aethonautomation.com';
     const invitationUrl = `${baseUrl}/join-team?token=${inviteToken}`;
 
     console.log(`Invitation URL: ${invitationUrl}`);

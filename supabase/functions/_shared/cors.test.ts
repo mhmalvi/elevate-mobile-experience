@@ -15,7 +15,6 @@ describe('getCorsHeaders', () => {
     'https://tradiemate.aethonautomation.com',
     'https://localhost', // Capacitor Android (androidScheme: 'https')
     'capacitor://localhost', // Capacitor iOS
-    'https://elevate-mobile-experience.vercel.app',
   ])('allows the production origin %s', (origin) => {
     // Arrange
     const req = requestFrom(origin);
@@ -27,15 +26,18 @@ describe('getCorsHeaders', () => {
     expect(headers['Access-Control-Allow-Origin']).toBe(origin);
   });
 
-  it('no longer lists the unowned tradiemate.com.au domain', async () => {
-    // Arrange
-    const { readFileSync } = await import('fs');
-    const source = readFileSync(`${__dirname}/cors.ts`, 'utf8');
+  it.each([/tradiemate\.com\.au/, /vercel\.app/])(
+    'no longer lists retired or unowned origins (%s)',
+    async (retired) => {
+      // Arrange
+      const { readFileSync } = await import('fs');
+      const source = readFileSync(`${__dirname}/cors.ts`, 'utf8');
 
-    // Act
-    const mentionsDeadDomain = /tradiemate\.com\.au/.test(source);
+      // Act
+      const listsRetiredOrigin = retired.test(source);
 
-    // Assert
-    expect(mentionsDeadDomain).toBe(false);
-  });
+      // Assert
+      expect(listsRetiredOrigin).toBe(false);
+    },
+  );
 });
