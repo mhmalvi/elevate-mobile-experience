@@ -12,15 +12,14 @@
 
 // Whitelisted origins for production
 const ALLOWED_ORIGINS = [
-  'https://tradiemate.com.au',
-  'https://www.tradiemate.com.au',
-  'https://app.tradiemate.com.au',
+  'https://tradiemate.aethonautomation.com',
+  // Capacitor Android serves the app from https://localhost (androidScheme: 'https')
+  'https://localhost',
   // Vercel deployment URLs
   'https://elevate-mobile-experience.vercel.app',
   'https://dist-six-fawn.vercel.app',
   'https://dist-oyrj5nl90-info-quadquetechs-projects.vercel.app',
   // Add staging/preview URLs if needed
-  // 'https://staging.tradiemate.com.au',
 ];
 
 // Development origins (only allowed in non-production)

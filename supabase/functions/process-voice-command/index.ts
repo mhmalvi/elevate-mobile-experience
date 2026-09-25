@@ -465,7 +465,7 @@ serve(async (req) => {
                 headers: {
                     "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://tradiemate.app",
+                    "HTTP-Referer": "https://tradiemate.aethonautomation.com",
                     "X-Title": "Voice AI"
                 },
                 body: JSON.stringify({
