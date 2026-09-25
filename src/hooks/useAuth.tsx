@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, createContext, useContext, ReactNode } fro
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { initializePurchases, setRevenueCatUserId, logOutRevenueCat } from '@/lib/purchases';
+import { publicAppUrl } from '@/lib/publicUrl';
 
 interface AuthContextType {
   user: User | null;
@@ -68,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = async (email: string, password: string) => {
-    const redirectUrl = `${window.location.origin}/`;
+    const redirectUrl = `${publicAppUrl()}/`;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,

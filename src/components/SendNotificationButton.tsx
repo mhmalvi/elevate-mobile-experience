@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, MessageSquare, Loader2, Send } from 'lucide-react';
+import { publicAppUrl } from '@/lib/publicUrl';
 
 interface SendNotificationButtonProps {
   type: 'quote' | 'invoice';
@@ -189,7 +190,7 @@ export function SendNotificationButton({
 
       // If direct email fails, fall back to mailto
       const subject = encodeURIComponent(`Your ${type === 'quote' ? 'Quote' : 'Invoice'}`);
-      const body = encodeURIComponent(`Hi ${recipient.name || 'there'},\n\nPlease find your ${type} attached.\n\nView it online: ${window.location.origin}/${type === 'quote' ? 'q' : 'i'}/${id}\n\nThank you!`);
+      const body = encodeURIComponent(`Hi ${recipient.name || 'there'},\n\nPlease find your ${type} attached.\n\nView it online: ${publicAppUrl()}/${type === 'quote' ? 'q' : 'i'}/${id}\n\nThank you!`);
       window.location.href = `mailto:${recipient.email}?subject=${subject}&body=${body}`;
       toast({
         title: 'Opening email app',

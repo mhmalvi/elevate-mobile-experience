@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Wrench, ArrowLeft } from 'lucide-react';
 import { PasswordStrengthIndicator } from '@/components/PasswordStrengthIndicator';
 import { validatePassword } from '@/lib/passwordSecurity';
+import { publicAppUrl } from '@/lib/publicUrl';
 
 type AuthMode = 'login' | 'signup' | 'forgot-password';
 
@@ -41,7 +42,7 @@ export default function Auth() {
 
     if (mode === 'forgot-password') {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth`,
+        redirectTo: `${publicAppUrl()}/auth`,
       });
 
       if (error) {

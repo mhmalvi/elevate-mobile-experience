@@ -13,6 +13,7 @@ import { User, FileText, Send, Receipt, Download, Share2, Loader2, Briefcase, Ar
 import { copyToClipboard } from '@/lib/utils/clipboard';
 import { safeNumber, taxLineLabel, formatCurrency } from '@/lib/utils';
 import { compressImages } from '@/lib/utils/imageCompression';
+import { publicAppUrl } from '@/lib/publicUrl';
 
 const QUOTE_STATUSES = ['draft', 'sent', 'viewed', 'accepted', 'declined'] as const;
 
@@ -372,7 +373,7 @@ export default function QuoteDetail() {
               variant="outline"
               className="col-span-2 h-14 rounded-2xl border-border/40 bg-card/40 backdrop-blur-sm"
               onClick={async () => {
-                const url = `${window.location.origin}/q/${id}`;
+                const url = `${publicAppUrl()}/q/${id}`;
                 const success = await copyToClipboard(url);
                 if (success) {
                   toast({ title: 'Link copied!', description: 'Share this link with your client.' });

@@ -24,6 +24,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
+import { publicAppUrl } from '@/lib/publicUrl';
 
 type Invoice = Tables<'invoices'>;
 type Client = Tables<'clients'>;
@@ -472,7 +473,7 @@ export default function InvoiceDetail() {
               variant="outline"
               className="col-span-2 h-14 rounded-2xl border-border/40 bg-card/40 backdrop-blur-sm"
               onClick={async () => {
-                const url = `${window.location.origin}/i/${id}`;
+                const url = `${publicAppUrl()}/i/${id}`;
                 const success = await copyToClipboard(url);
                 if (success) {
                   toast({ title: 'Link copied!', description: 'Share this link with your client.' });
