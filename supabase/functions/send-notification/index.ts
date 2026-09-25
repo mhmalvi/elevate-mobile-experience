@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { fromHeader } from "../_shared/email-sender.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface NotificationRequest {
@@ -279,13 +280,14 @@ serve(async (req) => {
       if (resendApiKey && recipient.email) {
         try {
           const resend = new Resend(resendApiKey);
-          const fromEmail = `${businessName} <onboarding@resend.dev>`;
+          const fromEmail = fromHeader(businessName);
 
           console.log(`Sending email via Resend from ${fromEmail} to ${recipient.email}`);
 
           const emailResponse = await resend.emails.send({
             from: fromEmail,
             to: [recipient.email],
+            ...(profile?.email ? { reply_to: profile.email } : {}),
             subject: subject,
             html: htmlBody,
           });

@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { fromHeader } from "../_shared/email-sender.ts";
 import { checkWebhookIdempotency, markWebhookProcessed } from "../_shared/webhook-idempotency.ts";
 
 serve(async (req) => {
@@ -186,7 +187,7 @@ serve(async (req) => {
 
               // Send notification email directly via Resend
               await resend.emails.send({
-                from: `${businessName} <onboarding@resend.dev>`,
+                from: fromHeader(businessName),
                 to: [ownerEmail],
                 subject: `💰 Payment Received - Invoice ${invoiceNumber}`,
                 html: `

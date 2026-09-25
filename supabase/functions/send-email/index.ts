@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders, createCorsResponse, createErrorResponse } from "../_shared/cors.ts";
+import { fromHeader } from "../_shared/email-sender.ts";
 import { checkRateLimit } from "../_shared/rate-limit.ts";
 
 interface EmailRequest {
@@ -227,7 +228,7 @@ serve(async (req) => {
     } else if (type === "team_invitation") {
       // Simple handling for team invitations
       const invitationSender = "Team Invitation";
-      const fromEmail = `${invitationSender} <onboarding@resend.dev>`;
+      const fromEmail = fromHeader(invitationSender);
 
       console.log(`Sending invitation email to ${recipient_email}`);
 
@@ -473,27 +474,15 @@ serve(async (req) => {
 </html>
     `;
 
-    // Get sender email - use custom domain if configured, otherwise use Resend's default
-    const customEmailDomain = Deno.env.get("EMAIL_FROM_DOMAIN");
-    const appUrl = Deno.env.get("APP_URL") || "";
-    const isProduction = appUrl.includes("production") || !appUrl.includes("vercel.app");
-
-    // Use custom domain or default to Resend's onboarding domain (no verification needed)
-    let fromEmail: string;
-    if (customEmailDomain) {
-      fromEmail = customEmailDomain;
-    } else {
-      // Use Resend's default onboarding domain (pre-verified, works immediately)
-      // Can upgrade to custom domain later: https://resend.com/docs/dashboard/domains/introduction
-      fromEmail = `${businessName} <onboarding@resend.dev>`;
-    }
-
-    console.log(`[${isProduction ? 'PRODUCTION' : 'DEV'}] Sending email from: ${fromEmail} to: ${recipient_email}`);
+    // Sent from the verified TradieMate domain; replies go to the tradie
+    const fromEmail = fromHeader(businessName);
+    console.log(`Sending email from: ${fromEmail} to: ${recipient_email}`);
 
     // Send email via Resend
     const emailResponse = await resend.emails.send({
       from: fromEmail,
       to: [recipient_email],
+      ...(profile?.email ? { reply_to: profile.email } : {}),
       subject: emailSubject,
       html: emailHtml,
     });
