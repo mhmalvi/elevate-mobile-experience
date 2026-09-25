@@ -583,7 +583,8 @@ export default function SubscriptionSettings() {
               All prices in AUD. Cancel anytime. No lock-in contracts.
             </p>
             <p className="text-xs text-muted-foreground">
-              Questions? Contact support@tradiemate.app
+              Questions? Contact{' '}
+              <a href="mailto:info@aethonautomation.com" className="underline">info@aethonautomation.com</a>
             </p>
           </div>
         </div>
